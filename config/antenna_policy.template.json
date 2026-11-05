@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "description": "Template only. Copy to antenna_policy.json locally and replace every placeholder; never commit the copy.",
+  "resources": {
+    "source_git": {
+      "root": "<LOCAL_DYNSYSLAB_REPOSITORY_PATH>",
+      "allowed_actions": ["git:read", "git:commit", "git:push"]
+    },
+    "artifact_store": {
+      "binding": "<LOCAL_ARTIFACT_STORE_BINDING>",
+      "allowed_actions": ["artifact:read", "artifact:write"]
+    },
+    "compute": {
+      "binding": "<LOCAL_COMPUTE_BINDING>",
+      "allowed_actions": ["compute:read"]
+    }
+  },
+  "pricingAuthorization": {
+    "authorized": false,
+    "reference": "Explicit user authorization is required before any capacity-changing or billable operation."
+  }
+}

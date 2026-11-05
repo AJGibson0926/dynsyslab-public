@@ -1,0 +1,8 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "RPE forced EDMDc mode 10 with free validation references",
+  "sources": ["archives/experiments/rpe-forced-edmdc-validation-20261028-v1/all-modes.npz"],
+  "methods": [{"name": "krom_extract", "settings": {"selected_modes": [10]}}],
+  "archive": {"enabled": true}
+}

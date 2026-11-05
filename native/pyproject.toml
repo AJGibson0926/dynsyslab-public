@@ -1,0 +1,42 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.13"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "dynsyslab-native"
+version = "0.5.0"
+description = "Optional Python bindings for the standalone DynSysLab native core"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "dynsyslab contributors"}]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: C++",
+  "Topic :: Scientific/Engineering",
+]
+
+[tool.scikit-build]
+cmake.version = ">=3.20"
+build-dir = "build/{wheel_tag}"
+sdist.include = ["CMakeLists.txt", "include/**", "src/**", "README.md"]
+
+[tool.scikit-build.cmake.define]
+DYNSYSLAB_BUILD_PYTHON = "ON"
+DYNSYSLAB_BUILD_CLI = "OFF"
+DYNSYSLAB_BUILD_TESTS = "OFF"
+DYNSYSLAB_ENABLE_ARCHIVE_IO = "OFF"
+DYNSYSLAB_ENABLE_LINALG = "OFF"
+
+[tool.cibuildwheel]
+build = "cp310-* cp311-* cp312-* cp313-*"
+skip = "pp* *-musllinux_*"
+test-command = "python -c \"import _dynsyslab_native as n; c=n.capabilities(); assert c['fixed_step_ode'] and c['krom_rollout'] and c['ising2d'] and 'rpe_dimensionless' in c['fixed_step_models']; t, x = n.integrate_fixed('duffing', [0.2, 1.0, 1.0, 0.0, 0.0, 0.0], [0.1, 0.0], 0.0, 0.01, 0.001, 'RK4'); assert x.shape == (11, 2)\""
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64"]
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]

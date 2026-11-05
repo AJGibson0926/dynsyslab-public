@@ -1,0 +1,15 @@
+{
+  "schema": "antenna.policy/v1",
+  "policyId": "dynsyslab-s3-extension/v1",
+  "resources": [
+    {
+      "id": "dynsyslab-history-store",
+      "kind": "s3-bucket",
+      "bucket": "REPLACE-WITH-BUCKET-NAME",
+      "prefix": "dynsyslab/chat-history/",
+      "profile": "REPLACE-WITH-AWS-PROFILE",
+      "allowedActions": ["inspect", "list"],
+      "reviewRule": "Add write-capable handling only after the bucket, retention policy, and user authorization are verified."
+    }
+  ]
+}

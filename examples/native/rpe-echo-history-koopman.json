@@ -1,0 +1,49 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "RPE echo-only causal-history Koopman",
+  "sources": [
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z.npz",
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-1__20261002T001350Z.npz",
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-2__20261002T001350Z.npz",
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-3__20261002T001350Z.npz",
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-4__20261002T001350Z.npz"
+  ],
+  "methods": [
+    {
+      "name": "echo_history_koopman",
+      "enabled": true,
+      "settings": {
+        "observable": "far_field_acoustic_echo",
+        "decimation": 5,
+        "delays": 8644,
+        "hankel_rank": 4,
+        "coordinate_rank": 2,
+        "hankel_oversampling": 4,
+        "hankel_subspace_iterations": 12,
+        "seed": 20261002,
+        "fit_start": 50.0,
+        "fit_end": 80.0,
+        "polynomial_degree": 5,
+        "pair_stride": 20,
+        "relative_ridge": 1e-10,
+        "minimum_discrete_magnitude": 0.90,
+        "maximum_discrete_magnitude": 1.005,
+        "minimum_continuous_real": -1.0,
+        "maximum_continuous_real": 0.1,
+        "minimum_continuous_imaginary": 4.0,
+        "maximum_continuous_imaginary": 7.0,
+        "validation_sources": [
+          "archives/solutions/rpe/rpe-viscous-echo-long-validation-five-ics-trajectory-0__20261002T001403Z.npz",
+          "archives/solutions/rpe/rpe-viscous-echo-long-validation-five-ics-trajectory-1__20261002T001403Z.npz",
+          "archives/solutions/rpe/rpe-viscous-echo-long-validation-five-ics-trajectory-2__20261002T001403Z.npz",
+          "archives/solutions/rpe/rpe-viscous-echo-long-validation-five-ics-trajectory-3__20261002T001403Z.npz",
+          "archives/solutions/rpe/rpe-viscous-echo-long-validation-five-ics-trajectory-4__20261002T001403Z.npz"
+        ]
+      }
+    }
+  ],
+  "archive": {
+    "enabled": true
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "schema": "dynsyslab.observable-query/v1",
+  "system": {"name": "duffing", "preset": "double_well_reference"},
+  "state": [0.5, -0.25],
+  "observable": "force",
+  "flow_order": 0
+}

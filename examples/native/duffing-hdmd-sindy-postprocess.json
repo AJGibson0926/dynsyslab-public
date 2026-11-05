@@ -1,0 +1,31 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "duffing-hdmd-sindy-example",
+  "sources": ["REPLACE_WITH_SOLUTION_ARCHIVE.npz"],
+  "methods": [
+    {
+      "name": "hdmd",
+      "enabled": true,
+      "settings": {
+        "observable": 0,
+        "matrix_size": 200,
+        "sampling_window": 1000,
+        "svd_tolerance": 1e-10,
+        "mode_sort": "terminal-amplitude-energy"
+      }
+    },
+    {
+      "name": "sindy",
+      "enabled": true,
+      "settings": {
+        "polynomial_degree": 4,
+        "threshold": 0.05,
+        "archive_storage": "coefficient-first",
+        "coordinate_observable": "state",
+        "reconstruction_observables": ["state"]
+      }
+    }
+  ],
+  "archive": {"enabled": true}
+}

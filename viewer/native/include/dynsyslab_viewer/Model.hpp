@@ -1,0 +1,143 @@
+#pragma once
+
+#include "dynsyslab_viewer/Json.hpp"
+
+#include <filesystem>
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace dsl {
+
+struct Relation {
+    std::string target;
+    std::string kind;
+    std::string label;
+};
+
+struct CatalogItem {
+    std::string id;
+    std::string kind;
+    std::string category;
+    std::string label;
+    std::string source;
+    std::string system;
+    std::string subtitle;
+    double modified = 0.0;
+    double bytes = 0.0;
+    std::vector<std::string> views;
+    std::vector<std::string> tags;
+    std::map<std::string, std::string> properties;
+    std::vector<Relation> relations;
+    std::string role;
+    std::string parentId;
+    std::string lineageId;
+    bool primary = true;
+    int variantCount = 0;
+};
+
+struct Catalog {
+    std::string projectName;
+    std::string projectRoot;
+    std::string focusLabel;
+    std::size_t hiddenItemCount = 0;
+    std::vector<CatalogItem> items;
+    std::map<std::string, std::string> viewLabels;
+
+    static Catalog load(const std::wstring& path);
+    static Catalog fromJson(const std::string& text);
+    [[nodiscard]] std::string toJson() const;
+    static Catalog scan(const std::filesystem::path& projectRoot,
+                        const std::filesystem::path& archiveRoot);
+    static Catalog indexed(const std::filesystem::path& projectRoot,
+                           const std::filesystem::path& archiveRoot);
+    int indexOf(const std::string& id) const;
+};
+
+struct Trace {
+    std::string label;
+    std::string role;
+    std::string color;
+    std::string lineStyle;
+    std::string encoding;
+    bool marker = false;
+    bool heatmap = false;
+    std::vector<double> x;
+    std::vector<double> y;
+    std::vector<double> z;
+    std::vector<double> colorValues;
+    std::vector<double> magnitudes;
+    std::vector<int> zShape;
+    int selectionId = -1;
+    bool selected = false;
+    // Keep newly added presentation fields at the end so existing aggregate
+    // initializers retain their long-standing field order.
+    double opacity = 1.0;
+};
+
+struct DetailInset {
+    double xMin = 0.0;
+    double xMax = 0.0;
+    double yMin = 0.0;
+    double yMax = 0.0;
+    std::vector<std::size_t> traceIndices;
+    bool automatic = false;
+};
+
+struct Figure {
+    std::string kind;
+    std::string title;
+    std::string xLabel;
+    std::string yLabel;
+    bool square = false;
+    std::string titleColor;
+    int dashboardPage = -1;
+    int gridSpan = 1;
+    int rowSpan = 1;
+    std::vector<Trace> traces;
+    std::optional<DetailInset> inset;
+    struct CoordinateAxes {
+        std::string name, xLabel, yLabel;
+        double xScale = 1, yScale = 1, zScale = 1, timeScale = 1;
+        std::vector<std::string> traceLabels;
+        std::string colorLabel;
+        std::string zLabel;
+    };
+    struct ReferencePoint {
+        double x = 0, y = 0;
+        std::string label;
+        bool equilibrium = false;
+    };
+    std::string coordinates;
+    std::string colorLabel;
+    std::optional<CoordinateAxes> alternateCoordinates;
+    std::vector<ReferencePoint> references;
+    std::string valueScale = "auto";
+    std::string observableIdentity;
+    std::string zLabel;
+};
+
+struct Payload {
+    std::string source;
+    std::string view;
+    std::string tileName;
+    int columns = 1;
+    std::vector<std::string> pageLabels;
+    std::vector<std::string> warnings;
+    std::vector<Figure> figures;
+    std::string layout;
+    std::string complexDisplay;
+    std::vector<std::size_t> selectedModes;
+
+    static Payload load(const std::wstring& path);
+};
+
+std::optional<DetailInset> automaticDetailInset(
+    const Figure& figure, double disparityThreshold = 20.0);
+
+std::wstring wide(const std::string& value);
+std::string narrow(const std::wstring& value);
+std::string canonicalSystemLabel(const std::string& value);
+
+}  // namespace dsl

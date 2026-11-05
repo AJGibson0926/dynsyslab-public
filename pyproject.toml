@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dynsyslab"
+version = "0.5.0"
+description = "Optional dependency-free Python client for compiled DynSysLab"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+authors = [{name = "dynsyslab contributors"}]
+license = "MIT"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering",
+]
+
+[project.scripts]
+dynsyslab = "dynsyslab_client.cli:main"
+dynsyslab-compute = "dynsyslab_client.cli:compute_main"
+dynsyslab-viewer = "dynsyslab_client.cli:viewer_main"
+
+[tool.setuptools]
+packages = ["dynsyslab_client"]
+py-modules = []
+include-package-data = false
+
+[tool.unittest]
+start-directory = "tester/tests"
+pattern = "test_*.py"

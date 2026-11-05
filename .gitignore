@@ -1,0 +1,64 @@
+# Generated package/build output is never source.
+/build/
+/dist/
+/_CPack_Packages/
+/DynSysLab-*-windows-x64.zip
+native/build/
+native/dist/
+native/*.egg-info/
+/*.egg-info/
+/**/__pycache__/
+/viewer_compute_archive/
+/viewer_outputs/
+/output/pdf/
+/native_ui/assets/*.png
+/docs/DYNSYSLAB_BACON_REPORT_2026-07-22.pdf
+/docs/dynsyslab-architecture-mermaid.png
+/docs/reports/DISK_SPACE_AUDIT_*.html
+/test_reports/
+/testing/
+/tmp/
+/.test-deps/
+
+# Rendered reports, screenshots, plots, and generated scientific sidecars stay
+# local. Version the report sources and lightweight pointers, not their media.
+/docs/reports/**/assets/
+/archives/system_metadata/
+
+# Private, potentially large conversation exports are stored locally and may be
+# mirrored to S3 by scripts/snapshot_chat_context.py. Keep their index and
+# policy under version control, never the raw exports.
+/history/chat/*.zip
+/history/chat/*/*
+/config/s3_snapshot.json
+
+# Account-specific Antenna bindings are local operational configuration.  The
+# corresponding *.template.json files are the only versioned forms.
+/config/antenna_policy.json
+/config/antenna_suite.json
+/access-key.json
+*.account-metadata.json
+*.credentials.json
+/.aws/
+
+
+# Numerical data, live coordination state, and campaign outputs are managed by
+# Archiver and are intentionally not source-controlled.
+/archives/campaigns/
+/archives/derived/
+/archives/experiments/
+/archives/hierarchies/
+/archives/history/
+/archives/IsingModel/
+/archives/job_manager/
+/archives/mackey-glass/
+/archives/management/
+/archives/solutions/
+/archives/solver_logs/
+/archives/time_grids/
+/logs/
+/manifests/
+/original_manifests/
+/restructures/
+/side_tray/
+/state.json

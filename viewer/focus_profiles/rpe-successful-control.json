@@ -1,0 +1,19 @@
+{
+  "schema": "dynsyslab.viewer.archive-focus/v1",
+  "active": true,
+  "label": "RPE successful minimal-KROM control study",
+  "allowed_sources": [
+    "archives/derived/koopman-krom-extract/rpe-reference-training-bdf-tau25-dtau0p001__20260826T220948.289776Z__koopman-krom-extract__20260827T183646.410439Z__0dea0923.npz",
+    "archives/solutions/rayleigh-plesset/rpe-reference-training-bdf-tau25-dtau0p001__20260826T220948.289776Z.npz",
+    "archives/experiments/rpe_control_identification_designed/rpe-persistent-excitation.npz",
+    "archives/experiments/rpe_control_identification_designed/rpe-symmetric-pulses.npz",
+    "archives/solutions/rayleigh-plesset/rpe-clean-isolation-dimensionless-klqr-offset4__20260827T183646.749498Z.npz",
+    "archives/solutions/rayleigh-plesset/rpe-approximate-bpsi-klqr-exact-analytic-b-psi__20260830T025136.301366Z.npz",
+    "archives/solutions/rayleigh-plesset/rpe-approximate-bpsi-klqr-pulse-data-constant__20260830T025149.773352Z.npz",
+    "archives/solutions/rayleigh-plesset/rpe-approximate-bpsi-klqr-pulse-data-complex-bilinear__20260830T025200.040851Z.npz",
+    "archives/solutions/rayleigh-plesset/rpe-approximate-bpsi-klqr-pulse-data-conjugate-complete-bilinear__20260830T025211.910097Z.npz",
+    "archives/solutions/rayleigh-plesset/rpe-approximate-bpsi-klqr-persistent-data-constant__20260830T025224.149270Z.npz",
+    "archives/solutions/rayleigh-plesset/rpe-approximate-bpsi-klqr-persistent-data-bilinear__20260830T025235.061799Z.npz",
+    "archives/solutions/rpe/rpe-periodic-100khz-20kpa-phase-portrait__20260911T214426Z.npz"
+  ]
+}

@@ -1,0 +1,299 @@
+{
+  "baseline_archive": "archives/solutions/rayleigh-plesset/rpe-clean-isolation-dimensionless-klqr-offset4__20260827T183646.749498Z.npz",
+  "caps": false,
+  "workflow_decision": {
+    "default": "unshaped transient-producing clean-isolation baseline",
+    "display": "full signal plus automatic Viewer detail inset",
+    "initial_transient": "retained and accepted for current comparisons",
+    "production_sequence": "deferred optional add-on; explicit opt-in required"
+  },
+  "experiments": {
+    "baseline": {
+      "archive": "archives/solutions/rayleigh-plesset/rpe-clean-isolation-dimensionless-klqr-offset4__20260827T183646.749498Z.npz",
+      "control_effort_integral": 2002219.5558237925,
+      "control_rms": 632.7089820942089,
+      "control_units": "p_control/p0",
+      "controller_calls": 13960,
+      "coordinate_system": "dimensionless",
+      "effort_fraction_tau_0_to_1": 0.9996351100911772,
+      "final_state": [
+        4.129654285313339,
+        -3.5391457001510966
+      ],
+      "minimum_radius": 1.0,
+      "peak_abs_control": 63267.48492769027,
+      "peak_abs_pressure_pa": 6326748492.769027,
+      "peak_control": -63267.48492769027,
+      "peak_tau": 0.0,
+      "post_engagement_peak_abs_control": 63267.48492769027,
+      "radius_rmse": 0.9984670368497696,
+      "radius_rmse_second_half": 0.004326339633823381,
+      "status": "complete",
+      "velocity_rmse": 2.1038367513463925,
+      "velocity_rmse_second_half": 0.022951819037681984
+    },
+    "smooth_engagement_0.5_tau": {
+      "archive": "archives/solutions/rayleigh-plesset/rpe-clean-isolation-klqr-smooth-engagement-0-5tau__20260827T184630.378881Z.npz",
+      "control_effort_integral": 2594.380151963896,
+      "control_rms": 16.106275985494822,
+      "control_units": "p_control/p0",
+      "controller_calls": 10160,
+      "coordinate_system": "dimensionless",
+      "effort_fraction_tau_0_to_1": 0.7172112437523082,
+      "final_state": [
+        4.129654285435426,
+        -3.539145704958716
+      ],
+      "minimum_radius": 1.0,
+      "peak_abs_control": 96.92384266493016,
+      "peak_abs_pressure_pa": 9692384.266493017,
+      "peak_control": 96.92384266493016,
+      "peak_tau": 0.427,
+      "post_engagement_peak_abs_control": 21.97138682198488,
+      "radius_rmse": 0.00377048514995242,
+      "radius_rmse_second_half": 0.004326387392126497,
+      "solve_seconds": 31.450353499967605,
+      "status": "complete",
+      "velocity_rmse": 0.027881847752953708,
+      "velocity_rmse_second_half": 0.022951383129845716
+    },
+    "smooth_engagement_1_tau": {
+      "archive": "archives/solutions/rayleigh-plesset/rpe-clean-isolation-klqr-smooth-engagement-1tau__20260827T184701.881059Z.npz",
+      "control_effort_integral": 944.7235564662411,
+      "control_rms": 9.719205805400073,
+      "control_units": "p_control/p0",
+      "controller_calls": 10825,
+      "coordinate_system": "dimensionless",
+      "effort_fraction_tau_0_to_1": 0.22340170509648385,
+      "final_state": [
+        4.129654285287625,
+        -3.539145699154249
+      ],
+      "minimum_radius": 1.0,
+      "peak_abs_control": 27.178801919307077,
+      "peak_abs_pressure_pa": 2717880.1919307075,
+      "peak_control": 27.178801919307077,
+      "peak_tau": 0.684,
+      "post_engagement_peak_abs_control": 21.97027507663211,
+      "radius_rmse": 0.003619880818432306,
+      "radius_rmse_second_half": 0.004326365511341332,
+      "solve_seconds": 30.44747949996963,
+      "status": "complete",
+      "velocity_rmse": 0.0199972001623806,
+      "velocity_rmse_second_half": 0.02295174792857161
+    },
+    "smooth_engagement_2_tau": {
+      "archive": "archives/solutions/rayleigh-plesset/rpe-clean-isolation-klqr-smooth-engagement-2tau__20260827T184732.563906Z.npz",
+      "control_effort_integral": 713.4151017919091,
+      "control_rms": 8.445971162250686,
+      "control_units": "p_control/p0",
+      "controller_calls": 10517,
+      "coordinate_system": "dimensionless",
+      "effort_fraction_tau_0_to_1": 0.0033910874571118814,
+      "final_state": [
+        4.129654285944665,
+        -3.5391457235273234
+      ],
+      "minimum_radius": 1.0,
+      "peak_abs_control": 21.971413114950625,
+      "peak_abs_pressure_pa": 2197141.3114950624,
+      "peak_control": 21.971413114950625,
+      "peak_tau": 6.706,
+      "post_engagement_peak_abs_control": 21.971413114950625,
+      "radius_rmse": 0.003544018443314559,
+      "radius_rmse_second_half": 0.004326341965012959,
+      "solve_seconds": 30.80159150005784,
+      "status": "complete",
+      "velocity_rmse": 0.01801998694354763,
+      "velocity_rmse_second_half": 0.022951455740763932
+    },
+    "smooth_engagement_3_tau": {
+      "archive": "archives/solutions/rayleigh-plesset/rpe-clean-isolation-klqr-smooth-engagement-3tau__20260827T184803.642873Z.npz",
+      "control_effort_integral": 671.8940621129648,
+      "control_rms": 8.196507797500654,
+      "control_units": "p_control/p0",
+      "controller_calls": 9506,
+      "coordinate_system": "dimensionless",
+      "effort_fraction_tau_0_to_1": 0.0003590388302514012,
+      "final_state": [
+        4.129654285386086,
+        -3.5391457029649387
+      ],
+      "minimum_radius": 1.0,
+      "peak_abs_control": 21.97123886764084,
+      "peak_abs_pressure_pa": 2197123.886764084,
+      "peak_control": 21.97123886764084,
+      "peak_tau": 6.705,
+      "post_engagement_peak_abs_control": 21.97123886764084,
+      "radius_rmse": 0.02050664014619935,
+      "radius_rmse_second_half": 0.004326363920741324,
+      "solve_seconds": 25.76469400001224,
+      "status": "complete",
+      "velocity_rmse": 0.0926644063642628,
+      "velocity_rmse_second_half": 0.02295187589281857
+    },
+    "unshaped_R_0.001": {
+      "R": 0.001,
+      "archive": "archives/solutions/rayleigh-plesset/rpe-clean-isolation-klqr-R0-001-unshaped-target__20260827T184829.659840Z.npz",
+      "control_effort_integral": 190445.3458198865,
+      "control_rms": 194.94484278135974,
+      "control_units": "p_control/p0",
+      "controller_calls": 11248,
+      "coordinate_system": "dimensionless",
+      "effort_fraction_tau_0_to_1": 0.9961527933059124,
+      "final_state": [
+        4.129689352074982,
+        -3.53973341025565
+      ],
+      "minimum_radius": 1.0,
+      "peak_abs_control": 19474.474289172864,
+      "peak_abs_pressure_pa": 1947447428.9172864,
+      "peak_control": -19474.474289172864,
+      "peak_tau": 0.0,
+      "post_engagement_peak_abs_control": 19474.474289172864,
+      "radius_rmse": 1.0158806256520836,
+      "radius_rmse_second_half": 0.014605589036863268,
+      "solve_seconds": 33.63850530004129,
+      "status": "complete",
+      "velocity_rmse": 2.1200969034903356,
+      "velocity_rmse_second_half": 0.08097517805177276
+    },
+    "unshaped_R_0.01": {
+      "R": 0.01,
+      "archive": "archives/solutions/rayleigh-plesset/rpe-clean-isolation-klqr-R0-01-unshaped-target__20260827T184903.517611Z.npz",
+      "control_effort_integral": 17259.279908147848,
+      "control_rms": 57.55724921232009,
+      "control_units": "p_control/p0",
+      "controller_calls": 12946,
+      "coordinate_system": "dimensionless",
+      "effort_fraction_tau_0_to_1": 0.9221614702234786,
+      "final_state": [
+        4.1298011859880495,
+        -3.5415940594832445
+      ],
+      "minimum_radius": 0.14729959616357588,
+      "peak_abs_control": 5634.25270494774,
+      "peak_abs_pressure_pa": 563425270.494774,
+      "peak_control": -5634.25270494774,
+      "peak_tau": 0.0,
+      "post_engagement_peak_abs_control": 5634.25270494774,
+      "radius_rmse": 1.0819354311040092,
+      "radius_rmse_second_half": 0.21404938543236168,
+      "solve_seconds": 36.30697200004943,
+      "status": "complete",
+      "velocity_rmse": 3.3610982614356475,
+      "velocity_rmse_second_half": 3.642959712844112
+    }
+  },
+  "feedforward": false,
+  "krom_archive": "archives/derived/koopman-krom-extract/rpe-reference-training-bdf-tau25-dtau0p001__20260826T220948.289776Z__koopman-krom-extract__20260827T183646.410439Z__0dea0923.npz",
+  "law": "u=-K(Psi(x)-Psi(x_ref))",
+  "schema": "dynsyslab.rpe-clean-isolation-transient-diagnostics/v1",
+  "static_diagnostics": {
+    "controllability_condition": 4.828253794241559,
+    "controllability_rank": 2,
+    "eigenfunction_training_peak": 0.141967151011063,
+    "eigenfunction_training_rms": 0.03191179421064013,
+    "initial_Bpsi": [
+      [
+        -0.0008587315307242753
+      ],
+      [
+        0.02092234397311622
+      ]
+    ],
+    "initial_closed_loop_poles": [
+      {
+        "imaginary": 0.0,
+        "real": -4.833484202162509
+      },
+      {
+        "imaginary": 0.0,
+        "real": -147.83227837495053
+      }
+    ],
+    "initial_control": -63267.48492769027,
+    "initial_gain_K": [
+      [
+        -6825.894006334767,
+        6996.487557274498
+      ]
+    ],
+    "initial_gain_norm": 9774.644091976637,
+    "initial_lifted_error": [
+      -6.144566688780728,
+      3.048004276523715
+    ],
+    "initial_lifted_state": [
+      0.0010792004489910828,
+      -0.0019821816350659785
+    ],
+    "initial_lifted_target": [
+      6.145645889229719,
+      -3.049986458158781
+    ],
+    "initial_pressure_pa": -6326748492.769027,
+    "initial_state": [
+      1.0,
+      0.0
+    ],
+    "initial_state_error": [
+      -3.0,
+      -9.0
+    ],
+    "initial_target": [
+      4.0,
+      9.0
+    ],
+    "initial_target_domain_report": {
+      "available": true,
+      "inside": false,
+      "maximum": [
+        2.333386598601735,
+        26.94802281811782
+      ],
+      "maximum_relative_excursion": 0.7933738648570409,
+      "minimum": [
+        0.2327207269088546,
+        -27.09322012592197
+      ],
+      "relative_excursion": [
+        0.7933738648570409,
+        0.0
+      ],
+      "state": [
+        4.0,
+        9.0
+      ],
+      "state_coordinates": "model",
+      "violating_axes": [
+        0
+      ]
+    },
+    "on_target_inverse_pressure": {
+      "peak_abs_dimensionless": 21.970052121176067,
+      "peak_abs_pa": 2197005.212117607,
+      "rms_dimensionless": 9.566183920013826
+    },
+    "target_envelope": {
+      "maximum": [
+        6.5,
+        9.0
+      ],
+      "minimum": [
+        1.5,
+        -9.0
+      ]
+    },
+    "training_domain": {
+      "maximum": [
+        2.333386598601735,
+        26.94802281811782
+      ],
+      "minimum": [
+        0.2327207269088546,
+        -27.09322012592197
+      ]
+    }
+  }
+}

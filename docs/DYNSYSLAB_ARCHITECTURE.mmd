@@ -1,0 +1,35 @@
+flowchart TB
+    Lib["dynsyslib\nsystems, presets, drivers"]
+    Campaigner["Campaigner\ncreates campaign + Job manifests"]
+    JM["JobManager\nSQLite state, claims, scheduling, backends"]
+    Solver["Solver\none job / solve at a time"]
+    Archiver["Archiver Gateway\ncapability-controlled archive access"]
+    Archive["Archives\narrays + manifests + indexes"]
+    PP["Postprocessing\nKoopman / POD / LCS / SSM"]
+    ROM["ROM\nKROM / POD-Galerkin"]
+    Control["Control"]
+    Estimation["Estimation"]
+    Viewer["Viewer\nread/display only"]
+    Compute["Viewer private compute\nsecondary disposable artifacts"]
+    Tester["Tester\n118 regression tests"]
+
+    Lib --> Campaigner
+    Campaigner --> JM
+    JM --> Solver
+    Solver --> Archiver
+    PP --> Archiver
+    JM --> Archiver
+    Viewer --> Archiver
+    Archiver <--> Archive
+    Archive --> PP
+    PP --> ROM
+    ROM --> Control
+    ROM --> Estimation
+    Control --> Solver
+    Estimation --> Solver
+    Viewer --> Compute
+    Compute --> Archiver
+    Tester -. validates .-> JM
+    Tester -. validates .-> Solver
+    Tester -. validates .-> Viewer
+    Tester -. validates .-> Archiver

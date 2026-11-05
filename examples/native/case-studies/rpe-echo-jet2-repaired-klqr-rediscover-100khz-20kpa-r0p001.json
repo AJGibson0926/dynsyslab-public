@@ -1,0 +1,15 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "solve",
+  "label": "rpe-echo-jet2-repaired-klqr-rediscover-100khz-20kpa-r0p001",
+  "system": {"name": "rpe", "preset": "air_water_20c", "parameters": {"equilibrium_radius_m": 0.00001, "kappa": 1.3333333333333333, "ambient_pressure_pa": 100000, "vapor_pressure_pa": 2330, "rho_kg_m3": 998, "sigma_n_m": 0.0725, "mu_pa_s": 0.001, "pressure_input_sign": -1}},
+  "time": {"start": 0, "stop": 30, "output_step": 0.005, "coordinate_system": "dimensionless"},
+  "initial_conditions": {"mode": "explicit", "count": 1, "clusters": 1, "seed": 0, "values": [[1, 0]], "ranges": []},
+  "controller": {
+    "kind": "klqr",
+    "settings": {"krom": "archives/derived/koopman-with-sindy/rpe-echo-study-state-basis-baseline__20260911T104742Z__koopman-with-sindy__20260914T165124Z.npz", "selected_modes": [0], "control_representation": "exact", "Q": 5000, "R": 0.001},
+    "target": {"space": "observable", "kind": "from_state", "state_target": {"kind": "trajectory", "source": "archives/solutions/rpe/rpe-periodic-100khz-20kpa-phase-portrait__20260911T214426Z.npz", "time_array": "time", "value_array": "values"}}
+  },
+  "solver": {"method": "BDF", "rtol": 1e-9, "atol": 1e-9, "max_step": 0.001, "control_evaluation": "continuous_rhs"},
+  "archive": {"enabled": true, "data_role": "echo_derivative_driver_rediscovery"}
+}

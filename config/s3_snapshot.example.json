@@ -1,0 +1,4 @@
+{
+  "s3_uri": "s3://REPLACE-WITH-YOUR-BUCKET/dynsyslab/chat-history",
+  "storage_class": "STANDARD_IA"
+}

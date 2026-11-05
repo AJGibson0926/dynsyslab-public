@@ -1,0 +1,26 @@
+{
+  "schema": "dynsyslab.observable-query/v1",
+  "system": {
+    "name": "rpe",
+    "preset": "air_water_reference",
+    "parameters": {
+      "equilibrium_radius_m": 0.00001,
+      "kappa": 1.3333333333333333,
+      "ambient_pressure_pa": 100000,
+      "vapor_pressure_pa": 2330,
+      "rho_kg_m3": 998,
+      "sigma_n_m": 0.0725,
+      "mu_pa_s": 0.001,
+      "pressure_input_sign": -1
+    }
+  },
+  "state": [
+    1.2,
+    0.3
+  ],
+  "observable": "echo",
+  "flow_order": 2,
+  "include_input_terms": true,
+  "input": 0.3,
+  "input_time_derivative": -0.4
+}

@@ -1,0 +1,12 @@
+{
+  "schema": "dynsyslab.special-function-query/v1",
+  "function": "lauricella_fd",
+  "a": 1,
+  "b": [
+    1
+  ],
+  "c": 2,
+  "x": [
+    0.5
+  ]
+}
