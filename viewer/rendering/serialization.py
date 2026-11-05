@@ -133,7 +133,13 @@ def _write_interactive_html(report: ViewerReport, path: Path) -> Path:
     payload=json.dumps({"format":"dynsyslab.viewer-plotly/v2","shared_arrays":shared_arrays,"figures":figures},
                        ensure_ascii=False,default=lambda item: item.tolist() if isinstance(item,np.ndarray) else str(item))
     columns=report.tile_plan.columns
-    body="".join(f"<section id='{item['id']}' style='{f'width:min(100%,{item["height"]}px);aspect-ratio:1/1;justify-self:center;' if item['square'] else f'height:{item["height"]}px;'}grid-column:span {item['grid_span']}'></section>" for item in figures)
+    sections=[]
+    for item in figures:
+        sizing=(f"width:min(100%,{item['height']}px);aspect-ratio:1/1;justify-self:center;"
+                if item["square"] else f"height:{item['height']}px;")
+        sections.append(f"<section id='{item['id']}' style='{sizing}"
+                        f"grid-column:span {item['grid_span']}'></section>")
+    body="".join(sections)
     path.write_text(f"<!doctype html><html><head><meta charset='utf-8'><style>body{{margin:0;padding:1rem}}.grid{{width:100%;display:grid;grid-template-columns:repeat({columns},minmax(0,1fr));gap:1.25rem;align-items:start}}section{{width:100%;min-width:0;min-height:0;overflow:visible}}@media(max-width:700px){{.grid{{grid-template-columns:1fr}}section{{grid-column:span 1!important}}}}</style></head><body><div class='grid'>{body}</div><script src='https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js'></script><script>const bundle={payload};const figures=bundle.figures;const resolveArray=v=>(v&&v.__dynsyslab_array__!==undefined)?bundle.shared_arrays[v.__dynsyslab_array__]:v;figures.forEach(f=>{{f.data.forEach(t=>{{t.x=resolveArray(t.x);t.y=resolveArray(t.y);if(t.z!==undefined)t.z=resolveArray(t.z)}});const sizing=f.square?{{autosize:true}}:{{height:f.height,autosize:true}};Plotly.newPlot(f.id,f.data,{{...f.layout,...sizing,margin:{{l:72,r:28,t:88,b:64}}}},{{responsive:true,scrollZoom:true}})}});</script></body></html>",encoding="utf-8")
     return path
 

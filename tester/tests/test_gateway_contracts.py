@@ -56,7 +56,7 @@ class ArchiveGatewayContractTests(unittest.TestCase):
 
     def test_metadata_and_solution_discovery_do_not_materialize_solution_arrays(self):
         with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory); target=root/"solutions"/"finished.npz"; target.parent.mkdir()
+            root=Path(directory).resolve(); target=root/"solutions"/"finished.npz"; target.parent.mkdir()
             np.savez(target,metadata_json=np.array('{"label":"finished","status":"complete"}'),values=np.arange(100))
             partial=root/"solutions"/"active.partial.npz"
             np.savez(partial,metadata_json=np.array('{"label":"active"}'),values=np.arange(2))

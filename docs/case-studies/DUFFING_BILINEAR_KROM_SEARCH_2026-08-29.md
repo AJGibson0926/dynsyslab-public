@@ -6,7 +6,7 @@ The bounded campaign completed **24 durable attempts** and found **no successful
 
 This is a negative result about the retained approximation families, not about KLQR or the selected KROMs in general. Exact analytic `B_psi` passed the unchanged transfer/release gate in attempts 1, 2, 5, 8, 10, 19, 20, 21, 22, 23, 24. The same KROMs failed when their input maps were replaced by a constant matrix, a controlled-dynamics bilinear fit, a global pointwise bilinear map, a corridor-local map, a conjugate-complete real-linear map, or the path-conditioned candidates.
 
-The final native Viewer dashboard is [duffing-bilinear-krom-search-final.html](viewer_outputs/duffing-bilinear-krom-search-final.html). All 24 per-attempt error-map dashboards were generated under `viewer_outputs/duffing-bilinear-krom-search`.
+The final native Viewer dashboard is [duffing-bilinear-krom-search-final.html](../../viewer_outputs/duffing-bilinear-krom-search-final.html). This is a local-only asset recorded in [the asset manifest](../LOCAL_ASSET_POINTERS.json). All 24 per-attempt error-map dashboards were generated under `viewer_outputs/duffing-bilinear-krom-search`.
 
 ## Frozen experiment contract
 

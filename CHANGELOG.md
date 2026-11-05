@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.2 — 2026-11-04
+
+- Restored Python 3.10 compatibility in the optional reference HTML renderer.
+- Made archive-discovery tests compare resolved Windows paths, including hosted
+  runner short-path aliases.
+- Replaced a machine-specific report link with its declared local-asset pointer,
+  preserving the source-only public distribution.
+
 ## 0.5.1 — 2026-11-04
 
 - Fixed the extension test build dependency so clean native release builds include
