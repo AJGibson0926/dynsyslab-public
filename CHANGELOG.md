@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 — 2026-11-04
+
+- Fixed the extension test build dependency so clean native release builds include
+  the runtime-loaded test DLL instead of relying on a previous local build.
+- Publish release downloads only after the ZIP, checksum, and installer have all
+  uploaded, and avoid duplicating the suite build for the same tagged commit.
+
 ## 0.5.0 — 2026-11-04
 
 - Added native DMDc and fourth-order-default EDMDc, manual polynomial

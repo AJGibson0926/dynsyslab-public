@@ -27,11 +27,11 @@ a different data workspace; `-InstallRoot` chooses the application location.
 The installer does not delete scientific data. Verified downloads are retained
 in the temporary directory reported at completion.
 
-Pin a version with `-Version v0.5.0`. For offline installation, download the
+Pin a version with `-Version v0.5.1`. For offline installation, download the
 Windows ZIP and `SHA256SUMS.txt` from the same release, then run:
 
 ```powershell
-.\install.ps1 -PackagePath .\DynSysLab-0.5.0-windows-x64.zip -ChecksumPath .\SHA256SUMS.txt
+.\install.ps1 -PackagePath .\DynSysLab-0.5.1-windows-x64.zip -ChecksumPath .\SHA256SUMS.txt
 ```
 
 Alternatively extract the release ZIP and launch `bin\DynSysLab.exe` directly.

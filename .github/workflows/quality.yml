@@ -2,6 +2,7 @@ name: Suite quality
 
 on:
   push:
+    branches: ['**']
   pull_request:
 
 jobs:

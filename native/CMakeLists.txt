@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(dynsyslab_native VERSION 0.5.0 LANGUAGES CXX)
+project(dynsyslab_native VERSION 0.5.1 LANGUAGES CXX)
 
 include(CTest)
 option(DYNSYSLAB_BUILD_PYTHON "Build optional Python bindings" OFF)
@@ -408,6 +408,8 @@ if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
   endif()
   add_executable(dynsyslab_extension_tests tests/extension_tests.cpp)
   target_link_libraries(dynsyslab_extension_tests PRIVATE dynsyslab_foundation)
+  # The DLL is loaded at runtime, so linking does not establish this dependency.
+  add_dependencies(dynsyslab_extension_tests dynsyslab_test_extension)
   add_test(NAME dynsyslab_extension_tests COMMAND dynsyslab_extension_tests
     $<TARGET_FILE:dynsyslab_test_extension>)
 endif()
