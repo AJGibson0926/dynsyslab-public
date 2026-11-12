@@ -1,0 +1,66 @@
+{
+  "schema": "dynsyslab.method-consultation/v1",
+  "peer": "Grothendieck Labs (DynSys Class Hub)",
+  "access": "read-only",
+  "consulted_utc": "2026-09-11T21:47:25.913Z",
+  "transfer_authorization": "The user explicitly authorized adaptation into the DynSysLab solver sidecar on 2026-09-11.",
+  "records": [
+    {
+      "path": "methods/dynamical-systems/basin-and-separatrix-computation-audit.md",
+      "sha256": "20f74e9616b905a61dee844e3aea707fff3ed262f99a32e499713c6a86982b0f"
+    },
+    {
+      "path": "methods/dynamical-systems/poincare-return-map-stability-audit.md",
+      "sha256": "a0d3a7ac1d0f1c55833049c106d4c3c72c64cc99dcd5b3da7f5d1d5ecbb6bef2"
+    },
+    {
+      "path": "methods/dynamical-systems/periodic-forcing-phase-lift-and-viewer-audit.md",
+      "sha256": "4d43658d4c7508ae0a2b5231ee3b8cbe8e6987aba6c3643e2b18839428c7172e"
+    },
+    {
+      "path": "methods/dynamical-systems/scalar-bifurcation-normal-form-audit.md",
+      "sha256": "592449fe61ef3d9621834ddb41d66fb96640a15677199158620b5b11a115a420"
+    },
+    {
+      "path": "methods/dynamical-systems/invariant-manifold-parameterization-and-invariance-equation.md",
+      "sha256": "4173519f59a81c3470dd54f7573f385ee2ae0353da6c2995d922164b7c5e7c84"
+    },
+    {
+      "path": "code/dynamical-systems/basin-manifold-toolkit/PACK.md",
+      "sha256": "a2eac9a636319a60ed9fa7d356073e85859ebcce09c56da6e8a28233e8972a2b"
+    },
+    {
+      "path": "code/dynamical-systems/basin-manifold-toolkit/src/basin_manifold.py",
+      "sha256": "a38d0ce09aadd3b16b7b55496acb775605004f6746f29a984dbe2f4771e6a549"
+    },
+    {
+      "path": "code/dynamical-systems/dynamical-systems-model-library/PACK.md",
+      "sha256": "708c9737f0c4f4a3e1b177c7050feb54f47029213202a73bcacc231b353f5b73"
+    },
+    {
+      "path": "code/dynamical-systems/dynamical-systems-model-library/src/periodic_forcing.py",
+      "sha256": "eed62360adc474ba77831635f1881ae9fc5d8e166852fceb0694139b6ba514e9"
+    },
+    {
+      "path": "code/dynamical-systems/dynamical-systems-model-library/src/dynamical_systems_model_library.py",
+      "sha256": "92db8ac9ddb4f6ec102dfc2304967f93f23bb077909de6a4efce962400129054"
+    }
+  ],
+  "native_reformulation": [
+    "adaptive state and variational integration with explicit refinement comparisons",
+    "oriented affine-hyperplane first returns with departure-before-return semantics",
+    "return-time correction, projected Poincare derivative, tangent basis and reduced spectrum",
+    "phase-conditioned shooting with a direct neutral tangent-identity check",
+    "fixed-forcing-phase stroboscopic maps retaining the full physical-state spectrum",
+    "scaled pseudo-arclength continuation for equilibrium, autonomous-cycle and forced-cycle branches",
+    "bracketed spectral candidates and scalar structural fold, transcritical and pitchfork diagnostics",
+    "exact public radial-cycle, quadratic-fold and cubic-bifurcation regression models"
+  ],
+  "limitations": [
+    "Finite numerical searches do not establish completeness",
+    "State-defined sections are affine hyperplanes; curved state sections are not yet a public query form",
+    "Hopf, period-doubling and Neimark-Sacker labels are spectral candidates rather than nonlinear classification proofs",
+    "Parameter derivatives use centered finite differences and near-grazing or near-unit results require refinement diagnostics"
+  ],
+  "unchanged_peer_files": true
+}

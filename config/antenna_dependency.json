@@ -1,0 +1,8 @@
+{
+  "schema": "dynsyslab.external-dependency/v1",
+  "name": "the-antenna",
+  "repository": "https://github.com/AJGibson0926/the-antenna.git",
+  "commit": "4c472a1a0433fe3d0b9ac99ef412be6b7b77a12a",
+  "resolution": "ANTENNA_HOME",
+  "updatePolicy": "Update this pin only after reviewing the upstream diff and validating the dynsyslab policy."
+}

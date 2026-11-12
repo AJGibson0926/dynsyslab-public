@@ -1,0 +1,47 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "Shared Hankel spectral comparison",
+  "sources": [
+    "archives/rotation-source.npz"
+  ],
+  "methods": [
+    {
+      "name": "hankel_matrix",
+      "settings": {
+        "observables": [
+          0,
+          1
+        ],
+        "window": {
+          "delays": 10,
+          "columns": 200
+        }
+      }
+    },
+    {
+      "name": "resdmd",
+      "settings": {
+        "use_previous_hankel": true,
+        "rank": 2,
+        "dictionary": {
+          "kind": "linear",
+          "constant": false
+        }
+      }
+    },
+    {
+      "name": "koopman_spectral",
+      "settings": {
+        "method": "edmd",
+        "use_previous_hankel": true,
+        "rank": 2,
+        "weight_policy": "smooth-birkhoff",
+        "dictionary": {
+          "kind": "linear",
+          "constant": false
+        }
+      }
+    }
+  ]
+}

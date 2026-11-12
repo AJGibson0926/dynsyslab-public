@@ -1,0 +1,33 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "rpe-r-hdmd-spectrum-echo-only-sindy-degree4",
+  "sources": [
+    "archives/solutions/rayleigh-plesset/rpe-reference-training-bdf-tau25-dtau0p001__20260826T220948.289776Z.npz"
+  ],
+  "methods": [
+    {
+      "name": "sindy",
+      "enabled": true,
+      "settings": {
+        "coordinate_observable": "far_field_acoustic_echo",
+        "polynomial_degree": 4,
+        "include_constant": false,
+        "threshold": 0.000001,
+        "max_iterations": 1,
+        "normalize": false,
+        "reuse_conjugate_fits": true,
+        "compute_training_values": false,
+        "gamma_method": "system_rhs",
+        "reconstruction_observables": [
+          "far_field_acoustic_echo"
+        ],
+        "spectrum_archive": "archives/derived/koopman-krom-extract/rpe-reference-training-bdf-tau25-dtau0p001__20260826T220948.289776Z__koopman-krom-extract__20260827T183646.410439Z__0dea0923.npz"
+      }
+    }
+  ],
+  "archive": {
+    "enabled": true,
+    "data_role": "echo_coordinate_control_study"
+  }
+}

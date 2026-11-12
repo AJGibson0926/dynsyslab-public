@@ -1,0 +1,144 @@
+name: Suite quality
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  reference-parity:
+    # This lane preserves migration evidence for the historical Python
+    # implementation. It is not a product-runtime or packaging requirement.
+    runs-on: windows-latest
+    needs: native-product
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - uses: actions/download-artifact@v4
+        with:
+          name: dynsyslab-native-product-windows-x64
+          path: build/native-package
+      - name: Use this commit's compiled product for integration tests
+        shell: pwsh
+        run: |
+          $zip = @(Get-ChildItem build/native-package/*.zip)
+          if ($zip.Count -ne 1) { throw 'Expected one native product artifact' }
+          Expand-Archive -LiteralPath $zip[0].FullName -DestinationPath build/native-installed
+          $cli = @(Get-ChildItem build/native-installed -Filter dynsyslab-cli.exe -Recurse -File)
+          if ($cli.Count -ne 1) { throw 'Expected one compiled CLI' }
+          $install = Split-Path -Parent (Split-Path -Parent $cli[0].FullName)
+          "DYNSYSLAB_INSTALL_DIR=$install" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Install the thin client and migration-only reference dependencies
+        run: |
+          python -m pip install -e .
+          python -m pip install -r requirements/reference-parity.txt
+      - name: Run complete tests
+        run: |
+          python -m tester --all
+          $testExit = $LASTEXITCODE
+          if ($testExit -ne 0) {
+            Get-ChildItem test_reports/*.md | Sort-Object LastWriteTime | Select-Object -Last 1 | Get-Content
+            exit $testExit
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reference-test-reports-${{ matrix.python-version }}
+          path: test_reports/
+      - name: Enforce architecture, documentation, and boundary policy
+        if: matrix.python-version == '3.12'
+        run: >-
+          python -m quality --format json
+          --output architecture-audit.json --strict
+          --baseline quality/architecture_baseline.json
+      - uses: actions/upload-artifact@v4
+        if: matrix.python-version == '3.12'
+        with:
+          name: architecture-audit
+          path: architecture-audit.json
+
+  package-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Build source and wheel distributions
+        run: |
+          python -m pip install build
+          python -m build
+      - name: Install and exercise the wheel outside the source tree
+        shell: pwsh
+        run: |
+          $venv = Join-Path $env:RUNNER_TEMP "dynsyslab-wheel-venv"
+          $work = Join-Path $env:RUNNER_TEMP "dynsyslab-wheel-smoke"
+          $archive = Join-Path $work "archives"
+          python -m venv $venv
+          $python = Join-Path $venv "Scripts/python.exe"
+          $wheel = Get-ChildItem "dist/*.whl" | Select-Object -First 1
+          python -c "from zipfile import ZipFile; p=r'$($wheel.FullName)'; n=ZipFile(p).namelist(); assert any(x.startswith('dynsyslab_client/') for x in n); assert not any('__pycache__' in x or x.endswith('.pyc') or x.startswith(('solver/','control/','postprocessing/','rom/','viewer/','compute_workbench/')) for x in n)"
+          if ($LASTEXITCODE -ne 0) { throw "Wheel content validation failed" }
+          function Run-WheelPython {
+            & $python @args
+            if ($LASTEXITCODE -ne 0) { throw "Wheel smoke command failed with exit code $LASTEXITCODE" }
+          }
+          Run-WheelPython -m pip install $wheel.FullName
+          New-Item -ItemType Directory -Force -Path $work, $archive | Out-Null
+          $env:DYNSYSLAB_ARCHIVE_DIR = $archive
+          Push-Location $work
+          try {
+            Run-WheelPython -m dynsyslab_client --help
+            Run-WheelPython -m dynsyslab_client doctor
+            Run-WheelPython -c "import json,sys,dynsyslab_client; assert 'numpy' not in sys.modules and 'scipy' not in sys.modules; print(json.dumps({'thin_client':True}))"
+          } finally {
+            Pop-Location
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/*
+
+  native-product:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Locate the hosted vcpkg installation
+        shell: pwsh
+        run: |
+          $root = $env:VCPKG_INSTALLATION_ROOT
+          if (-not $root) {
+            $command = Get-Command vcpkg -ErrorAction Stop
+            $root = Split-Path -Parent $command.Source
+          }
+          "VCPKG_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Configure the unified native product
+        run: cmake --preset windows-fast-release
+      - name: Build applications and runtime modules
+        run: cmake --build --preset windows-fast-release --parallel
+      - name: Build native release gates
+        run: cmake --build --preset windows-fast-release-gates --parallel
+      - name: Run native scientific, workflow, and UI tests
+        run: ctest --preset windows-fast-release
+      - name: Enforce the retained-workflow UI parity contract
+        run: python -m unittest tester.tests.test_native_ui_parity_contract -v
+      - name: Test the isolated no-Python installation
+        run: cmake --build build/native-suite-fast --target dynsyslab_package_smoke
+      - name: Create the portable native distribution
+        run: cmake --build build/native-suite-fast --target package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dynsyslab-native-product-windows-x64
+          path: build/native-suite-fast/DynSysLab-*-windows-x64.zip

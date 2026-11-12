@@ -1,0 +1,32 @@
+{
+  "schema": "dynsyslab.phase-space-query/v1",
+  "mode": "compute",
+  "system": {
+    "identifier": "quadratic_saddle_node",
+    "parameters": {"mu": 0.5, "eta": 0.0}
+  },
+  "options": {
+    "dynamics": "autonomous-zero-input",
+    "lower": [-2.0],
+    "upper": [2.0],
+    "fixed_points": false,
+    "manifolds": false,
+    "periodic_orbits": false,
+    "poincare_map": false,
+    "vector_field": false,
+    "bifurcation": {
+      "enabled": true,
+      "branch": "equilibrium",
+      "parameter": "mu",
+      "minimum": -0.1,
+      "maximum": 0.8,
+      "initial": 0.5,
+      "step": -0.04,
+      "minimum_step": 0.0001,
+      "maximum_step": 0.08,
+      "maximum_points": 55,
+      "maximum_corrector_iterations": 20,
+      "seed_state": [0.7071067811865476]
+    }
+  }
+}

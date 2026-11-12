@@ -1,0 +1,3 @@
+#include "dynsyslab_resource.h"
+
+IDI_DYNSYSLAB_APP ICON "../assets/dynsyslab-viewer.ico"

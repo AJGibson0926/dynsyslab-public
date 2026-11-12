@@ -1,0 +1,25 @@
+{
+  "schema": "dynsyslab.phase-space-query/v1",
+  "mode": "compute",
+  "system": {
+    "identifier": "radial_limit_cycle",
+    "parameters": {"mu": 1.0, "alpha": 1.0, "omega": 1.0}
+  },
+  "options": {
+    "dynamics": "autonomous-zero-input",
+    "lower": [-1.5, -1.5],
+    "upper": [1.5, 1.5],
+    "fixed_points": false,
+    "manifolds": false,
+    "vector_field": false,
+    "section_axis": 0,
+    "section_value": 0.0,
+    "section_direction": 1,
+    "section_seeds": [[0.0, -1.0]],
+    "periodic_seeds": [{"state": [0.0, -1.05], "period": 6.1}],
+    "horizon": 8.0,
+    "transient_time": 0.0,
+    "output_step": 0.02,
+    "maximum_step": 0.02
+  }
+}

@@ -1,0 +1,582 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "RPE state inverse-radius library",
+  "sources": [
+    "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201310Z.npz"
+  ],
+  "methods": [
+    {
+      "name": "sindy_dynamics",
+      "settings": {
+        "derivatives": "finite_difference",
+        "polynomial_degree": 4,
+        "threshold": 0.001,
+        "fit_stride": 4,
+        "diagnostic_stride": 4,
+        "normalize": false,
+        "validation_sources": [
+          "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-1__20261002T001350Z__coordinate-transform__20261105T201326Z.npz",
+          "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-4__20261002T001350Z__coordinate-transform__20261105T201346Z.npz"
+        ],
+        "evaluation_intervals": [
+          [
+            0,
+            5
+          ],
+          [
+            5,
+            25
+          ],
+          [
+            25,
+            80
+          ]
+        ],
+        "rollout_starts": [
+          1.28,
+          5,
+          15,
+          40
+        ],
+        "rollout_duration": 1,
+        "library": {
+          "schema": "dynsyslab.observable-expression/v1",
+          "name": "inverse_radius_candidates",
+          "label": "Inverse-radius diagnostic library",
+          "units": "",
+          "coordinates": "model",
+          "output_names": [
+            "1",
+            "r",
+            "v",
+            "r^2",
+            "r*v",
+            "v^2",
+            "r^-1",
+            "r^-2",
+            "r^-3",
+            "r^-4",
+            "r^-5",
+            "v/r",
+            "v/r^2",
+            "v^2/r"
+          ],
+          "expressions": [
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "constant",
+              "state_dimension": 2,
+              "scalar": 1
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "state",
+              "state_dimension": 2,
+              "state_index": 0
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "state",
+              "state_dimension": 2,
+              "state_index": 1
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": 2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "multiply",
+              "state_dimension": 2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                },
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 1
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": 2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 1
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": -1,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": -2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": -3,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": -4,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": -5,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "multiply",
+              "state_dimension": 2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 1
+                },
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "power",
+                  "state_dimension": 2,
+                  "scalar": -1,
+                  "arguments": [
+                    {
+                      "encoding": "analytic-state-expression/v1",
+                      "operation": "state",
+                      "state_dimension": 2,
+                      "state_index": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "multiply",
+              "state_dimension": 2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 1
+                },
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "power",
+                  "state_dimension": 2,
+                  "scalar": -2,
+                  "arguments": [
+                    {
+                      "encoding": "analytic-state-expression/v1",
+                      "operation": "state",
+                      "state_dimension": 2,
+                      "state_index": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "multiply",
+              "state_dimension": 2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "power",
+                  "state_dimension": 2,
+                  "scalar": 2,
+                  "arguments": [
+                    {
+                      "encoding": "analytic-state-expression/v1",
+                      "operation": "state",
+                      "state_dimension": 2,
+                      "state_index": 1
+                    }
+                  ]
+                },
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "power",
+                  "state_dimension": 2,
+                  "scalar": -1,
+                  "arguments": [
+                    {
+                      "encoding": "analytic-state-expression/v1",
+                      "operation": "state",
+                      "state_dimension": 2,
+                      "state_index": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "library_family": "polynomial"
+      }
+    },
+    {
+      "name": "sindy_dynamics",
+      "settings": {
+        "derivatives": "stored",
+        "polynomial_degree": 4,
+        "threshold": 0.001,
+        "fit_stride": 4,
+        "diagnostic_stride": 4,
+        "normalize": false,
+        "validation_sources": [
+          "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-1__20261002T001350Z__coordinate-transform__20261105T201326Z.npz",
+          "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-4__20261002T001350Z__coordinate-transform__20261105T201346Z.npz"
+        ],
+        "evaluation_intervals": [
+          [
+            0,
+            5
+          ],
+          [
+            5,
+            25
+          ],
+          [
+            25,
+            80
+          ]
+        ],
+        "rollout_starts": [
+          1.28,
+          5,
+          15,
+          40
+        ],
+        "rollout_duration": 1,
+        "library": {
+          "schema": "dynsyslab.observable-expression/v1",
+          "name": "inverse_radius_candidates",
+          "label": "Inverse-radius diagnostic library",
+          "units": "",
+          "coordinates": "model",
+          "output_names": [
+            "1",
+            "r",
+            "v",
+            "r^2",
+            "r*v",
+            "v^2",
+            "r^-1",
+            "r^-2",
+            "r^-3",
+            "r^-4",
+            "r^-5",
+            "v/r",
+            "v/r^2",
+            "v^2/r"
+          ],
+          "expressions": [
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "constant",
+              "state_dimension": 2,
+              "scalar": 1
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "state",
+              "state_dimension": 2,
+              "state_index": 0
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "state",
+              "state_dimension": 2,
+              "state_index": 1
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": 2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "multiply",
+              "state_dimension": 2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                },
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 1
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": 2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 1
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": -1,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": -2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": -3,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": -4,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "power",
+              "state_dimension": 2,
+              "scalar": -5,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 0
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "multiply",
+              "state_dimension": 2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 1
+                },
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "power",
+                  "state_dimension": 2,
+                  "scalar": -1,
+                  "arguments": [
+                    {
+                      "encoding": "analytic-state-expression/v1",
+                      "operation": "state",
+                      "state_dimension": 2,
+                      "state_index": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "multiply",
+              "state_dimension": 2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "state",
+                  "state_dimension": 2,
+                  "state_index": 1
+                },
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "power",
+                  "state_dimension": 2,
+                  "scalar": -2,
+                  "arguments": [
+                    {
+                      "encoding": "analytic-state-expression/v1",
+                      "operation": "state",
+                      "state_dimension": 2,
+                      "state_index": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "encoding": "analytic-state-expression/v1",
+              "operation": "multiply",
+              "state_dimension": 2,
+              "arguments": [
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "power",
+                  "state_dimension": 2,
+                  "scalar": 2,
+                  "arguments": [
+                    {
+                      "encoding": "analytic-state-expression/v1",
+                      "operation": "state",
+                      "state_dimension": 2,
+                      "state_index": 1
+                    }
+                  ]
+                },
+                {
+                  "encoding": "analytic-state-expression/v1",
+                  "operation": "power",
+                  "state_dimension": 2,
+                  "scalar": -1,
+                  "arguments": [
+                    {
+                      "encoding": "analytic-state-expression/v1",
+                      "operation": "state",
+                      "state_dimension": 2,
+                      "state_index": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "library_family": "polynomial"
+      }
+    }
+  ]
+}

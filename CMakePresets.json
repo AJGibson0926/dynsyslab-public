@@ -1,0 +1,64 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {"major": 3, "minor": 24, "patch": 0},
+  "configurePresets": [
+    {
+      "name": "windows-fast-release",
+      "displayName": "DynSysLab Windows Fast Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/native-suite-fast",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/build/vcpkg_installed",
+        "VCPKG_MANIFEST_DIR": "${sourceDir}/native",
+        "DYNSYSLAB_BUILD_PYTHON": "OFF",
+        "DYNSYSLAB_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "windows-release",
+      "displayName": "DynSysLab Windows Release",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/native-suite",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/build/vcpkg_installed",
+        "VCPKG_MANIFEST_DIR": "${sourceDir}/native",
+        "DYNSYSLAB_BUILD_PYTHON": "OFF",
+        "DYNSYSLAB_BUILD_TESTS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-fast-release",
+      "configurePreset": "windows-fast-release",
+      "targets": ["dynsyslab_compute", "dynsyslab_viewer", "dynsyslab_cli", "dynsyslab_linalg"]
+    },
+    {
+      "name": "windows-fast-release-gates",
+      "configurePreset": "windows-fast-release",
+      "targets": ["dynsyslab_test_binaries"]
+    },
+    {
+      "name": "windows-release",
+      "configurePreset": "windows-release",
+      "configuration": "Release",
+      "targets": ["dynsyslab_compute", "dynsyslab_viewer", "dynsyslab_cli", "dynsyslab_linalg"]
+    },
+    {
+      "name": "windows-release-gates",
+      "configurePreset": "windows-release",
+      "configuration": "Release",
+      "targets": ["dynsyslab_test_binaries"]
+    }
+  ],
+  "testPresets": [
+    {"name": "windows-fast-release", "configurePreset": "windows-fast-release", "output": {"outputOnFailure": true}},
+    {"name": "windows-release", "configurePreset": "windows-release", "configuration": "Release", "output": {"outputOnFailure": true}}
+  ]
+}

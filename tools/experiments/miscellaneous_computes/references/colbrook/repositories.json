@@ -1,0 +1,454 @@
+{
+  "schema": "dynsyslab.reference-sources/v1",
+  "checked_date": "2026-11-11",
+  "scope": "Public author/coauthor implementations relevant to Colbrook DMD, Koopman spectra, measures, dictionary selection and verification. Not all mathematics repositories or third-party reimplementations.",
+  "acquisition": "All 14 accessible pinned repositories downloaded to build/reference_sources/colbrook on 2026-11-11. Native adaptation and analytic/reference validation documented in docs/architecture/SPECTRAL_KROM.md. Only selected synthetic reference routines executed; no external datasets installed.",
+  "repositories": [
+    {
+      "repository": "MColbrook/Residual-Dynamic-Mode-Decomposition",
+      "url": "https://github.com/MColbrook/Residual-Dynamic-Mode-Decomposition",
+      "method": "Residual, kernel, dual and stochastic ResDMD; spectral measures",
+      "papers": [
+        "https://arxiv.org/abs/2111.14889",
+        "https://arxiv.org/abs/2308.10697",
+        "https://arxiv.org/abs/2403.05891"
+      ],
+      "priority": "first",
+      "clone_url": "https://github.com/MColbrook/Residual-Dynamic-Mode-Decomposition.git",
+      "commit": "0f7f1bf678325417e02489604d3490658a867c9a",
+      "default_branch": "main",
+      "language": "MATLAB",
+      "license": "BSD-2-Clause",
+      "github_size_kib": 2180,
+      "pushed_at": "2024-03-13T12:21:59Z",
+      "status": "verified",
+      "entry_points": [
+        "main_routines/KoopPseudoSpecQR.m",
+        "main_routines/kernel_ResDMD.m",
+        "main_routines/IsomMeas.m",
+        "main_routines/ErgodicMoments.m",
+        "main_routines/MomentMeas.m"
+      ],
+      "tree_blob_bytes": 2632638,
+      "license_files": [
+        "Examples_gallery_1/supplementary_files/PP_Ver_2_3/license.txt",
+        "Examples_gallery_1/supplementary_files/sparse-grids/LICENSE.txt",
+        "LICENSE"
+      ],
+      "reuse_status": "retain attribution and inspect bundled third-party licenses",
+      "external_data_links": [
+        "https://www.dropbox.com/sh/xj59e5in7dfsobi/AAAfkxqa1x9WFSTgrvqoqqRqa?dl=0"
+      ]
+    },
+    {
+      "repository": "MColbrook/Measure-preserving-Extended-Dynamic-Mode-Decomposition",
+      "url": "https://github.com/MColbrook/Measure-preserving-Extended-Dynamic-Mode-Decomposition",
+      "method": "mpEDMD",
+      "papers": [
+        "https://doi.org/10.1137/22M1521407"
+      ],
+      "priority": "second",
+      "clone_url": "https://github.com/MColbrook/Measure-preserving-Extended-Dynamic-Mode-Decomposition.git",
+      "commit": "e473dee7b32d4e88a9e2cdec7ca5e3601482a551",
+      "default_branch": "main",
+      "language": "MATLAB",
+      "license": "BSD-2-Clause",
+      "github_size_kib": 43,
+      "pushed_at": "2023-11-16T12:49:48Z",
+      "status": "verified",
+      "entry_points": [
+        "mpEDMDqr.m",
+        "Lorenz_simple_example.m"
+      ],
+      "tree_blob_bytes": 28692,
+      "license_files": [
+        "LICENSE"
+      ],
+      "reuse_status": "retain attribution and inspect bundled third-party licenses",
+      "external_data_links": [
+        "https://www.dropbox.com/sh/xj59e5in7dfsobi/AAAfkxqa1x9WFSTgrvqoqqRqa?dl=0"
+      ]
+    },
+    {
+      "repository": "MColbrook/Rigged-Dynamic-Mode-Decomposition",
+      "url": "https://github.com/MColbrook/Rigged-Dynamic-Mode-Decomposition",
+      "method": "Rigged DMD",
+      "papers": [
+        "https://arxiv.org/abs/2405.00782"
+      ],
+      "priority": "second",
+      "clone_url": "https://github.com/MColbrook/Rigged-Dynamic-Mode-Decomposition.git",
+      "commit": "013f5a429868c106491efdd655f4167addc2b610",
+      "default_branch": "main",
+      "language": "MATLAB",
+      "license": "BSD-2-Clause",
+      "github_size_kib": 31,
+      "pushed_at": "2024-06-10T10:11:25Z",
+      "status": "verified",
+      "entry_points": [
+        "main_routines/riggedDMD.m",
+        "main_routines/riggedDMD_MODES.m",
+        "main_routines/rational_kernel.m"
+      ],
+      "tree_blob_bytes": 51334,
+      "license_files": [
+        "LICENSE"
+      ],
+      "reuse_status": "retain attribution and inspect bundled third-party licenses",
+      "external_data_links": []
+    },
+    {
+      "repository": "MColbrook/DMD-Multiverse",
+      "url": "https://github.com/MColbrook/DMD-Multiverse",
+      "method": "Review implementations and baseline algorithms",
+      "papers": [
+        "https://arxiv.org/abs/2312.00137"
+      ],
+      "priority": "first",
+      "clone_url": "https://github.com/MColbrook/DMD-Multiverse.git",
+      "commit": "7d493ae0d6a0b595a9c085985d92f16e585dd12c",
+      "default_branch": "main",
+      "language": "MATLAB",
+      "license": "BSD-2-Clause",
+      "github_size_kib": 4550,
+      "pushed_at": "2024-05-01T10:47:33Z",
+      "status": "verified",
+      "entry_points": [
+        "routines/exactDMD.m",
+        "routines/fbDMD.m",
+        "routines/tlsDMD.m",
+        "routines/rDMD.m",
+        "routines/DMDc.m",
+        "Hankel_DMD_example.m"
+      ],
+      "tree_blob_bytes": 4690581,
+      "license_files": [
+        "LICENSE"
+      ],
+      "reuse_status": "retain attribution and inspect bundled third-party licenses",
+      "external_data_links": [
+        "https://www.dropbox.com/sh/xj59e5in7dfsobi/AAAfkxqa1x9WFSTgrvqoqqRqa?st=fr97gjhk&dl=0"
+      ]
+    },
+    {
+      "repository": "NBoulle/MultDMD",
+      "url": "https://github.com/NBoulle/MultDMD",
+      "method": "Multiplicative DMD",
+      "papers": [
+        "https://arxiv.org/abs/2405.05334"
+      ],
+      "priority": "later",
+      "clone_url": "https://github.com/NBoulle/MultDMD.git",
+      "commit": "85277b046a9aebd8266aeb6d0b2ea9d6a7379084",
+      "default_branch": "main",
+      "language": "MATLAB",
+      "license": "MIT",
+      "github_size_kib": 10266,
+      "pushed_at": "2024-06-03T08:47:34Z",
+      "status": "verified",
+      "entry_points": [
+        "src/construct_basis.m",
+        "examples/pendulum/pendulum.m"
+      ],
+      "tree_blob_bytes": 10725754,
+      "license_files": [
+        "LICENSE"
+      ],
+      "reuse_status": "retain attribution and inspect bundled third-party licenses",
+      "external_data_links": []
+    },
+    {
+      "repository": "NBoulle/ConvergenceHermitianDMD",
+      "url": "https://github.com/NBoulle/ConvergenceHermitianDMD",
+      "method": "Hermitian DMD convergence example",
+      "papers": [
+        "https://arxiv.org/abs/2401.03192"
+      ],
+      "priority": "later",
+      "clone_url": "https://github.com/NBoulle/ConvergenceHermitianDMD.git",
+      "commit": "35b5b03801fc632707d866acf2a3e54293237f0c",
+      "default_branch": "main",
+      "language": "MATLAB",
+      "license": "MIT",
+      "github_size_kib": 59,
+      "pushed_at": "2024-09-05T16:48:20Z",
+      "status": "verified",
+      "entry_points": [
+        "schrodinger_2d.m"
+      ],
+      "tree_blob_bytes": 65264,
+      "license_files": [
+        "LICENSE"
+      ],
+      "reuse_status": "retain attribution and inspect bundled third-party licenses",
+      "external_data_links": []
+    },
+    {
+      "repository": "jbramburger/weighted_methods",
+      "url": "https://github.com/jbramburger/weighted_methods",
+      "method": "Weighted DMD/EDMD/SINDy, measures and diffusion forecasting",
+      "papers": [
+        "https://arxiv.org/abs/2511.17772"
+      ],
+      "priority": "first",
+      "clone_url": "https://github.com/jbramburger/weighted_methods.git",
+      "commit": "b7b0ab9f04fea22a2ffa1b0098d35547da8cc34c",
+      "default_branch": "main",
+      "language": "MATLAB",
+      "license": "MIT",
+      "github_size_kib": 6059,
+      "pushed_at": "2026-01-08T15:04:27Z",
+      "status": "verified",
+      "entry_points": [
+        "Dynamic Mode Decomposition/cylinder_DMD.m",
+        "Spectral Measures/spectral_measures.m"
+      ],
+      "tree_blob_bytes": 6194948,
+      "license_files": [
+        "LICENSE"
+      ],
+      "reuse_status": "retain attribution and inspect bundled third-party licenses",
+      "external_data_links": [
+        "https://drive.google.com/drive/folders/1mz0lm0a49nZQ8MsghGh7-qHAc45uLu6V?usp=sharing"
+      ]
+    },
+    {
+      "repository": "SpecSolve/SpecSolve",
+      "url": "https://github.com/SpecSolve/SpecSolve",
+      "method": "Resolvent spectral-measure methods for self-adjoint operators",
+      "papers": [
+        "https://arxiv.org/abs/2006.01766",
+        "https://arxiv.org/abs/2201.01314"
+      ],
+      "priority": "second",
+      "clone_url": "https://github.com/SpecSolve/SpecSolve.git",
+      "commit": "176faf984f8fee472c435e78e6284cbee5f30e5e",
+      "default_branch": "master",
+      "language": "MATLAB",
+      "license": "BSD-2-Clause",
+      "github_size_kib": 19963,
+      "pushed_at": "2022-12-08T15:17:15Z",
+      "status": "verified",
+      "entry_points": [
+        "genMeas.m",
+        "rational_kernel.m"
+      ],
+      "tree_blob_bytes": 20731246,
+      "license_files": [
+        "LICENSE"
+      ],
+      "reuse_status": "retain attribution and inspect bundled third-party licenses",
+      "external_data_links": []
+    },
+    {
+      "repository": "GustavConradie1/TrustKoopman",
+      "url": "https://github.com/GustavConradie1/TrustKoopman",
+      "method": "Principal angles, Principal Angle Decomposition and forecast-error bounds",
+      "papers": [
+        "https://arxiv.org/abs/2603.15091"
+      ],
+      "priority": "first",
+      "clone_url": "https://github.com/GustavConradie1/TrustKoopman.git",
+      "commit": "ee5769f3b44d6495fd5cd3d90a2c9bf769f8a47f",
+      "default_branch": "main",
+      "language": "MATLAB",
+      "license": null,
+      "github_size_kib": 10669,
+      "pushed_at": "2026-04-05T12:25:39Z",
+      "status": "verified",
+      "entry_points": [
+        "src/KoopAngles.m",
+        "src/kmd_error_bound_first_order.m",
+        "examples/duffing_pad_vs_svd.m"
+      ],
+      "tree_blob_bytes": 10663413,
+      "license_files": [],
+      "reuse_status": "No license file found. Reference inspection only until reuse terms are established.",
+      "external_data_links": [
+        "https://zenodo.org/records/19402733"
+      ]
+    },
+    {
+      "repository": "kelangray/DeepMDMD",
+      "url": "https://github.com/kelangray/DeepMDMD",
+      "method": "Deep Embedded Multiplicative DMD",
+      "papers": [
+        "https://arxiv.org/abs/2606.05131"
+      ],
+      "priority": "later",
+      "status": "unavailable",
+      "reason": "Published paper and indexed GitHub page identify this URL, but live GitHub page and API returned HTTP 404 on 2026-11-11. No public replacement found.",
+      "commit": null
+    },
+    {
+      "repository": "MColbrook/Adversarial-Dynamical-Systems",
+      "url": "https://github.com/MColbrook/Adversarial-Dynamical-Systems",
+      "method": "Convergent spectral algorithms and limits of learning",
+      "papers": [
+        "https://www.nature.com/articles/s41467-026-74220-8"
+      ],
+      "priority": "first",
+      "clone_url": "https://github.com/MColbrook/Adversarial-Dynamical-Systems.git",
+      "commit": "c6a1100049ddf449606f9c0ccbb9883814ead3c8",
+      "default_branch": "main",
+      "language": "MATLAB",
+      "license": null,
+      "github_size_kib": 18022,
+      "pushed_at": "2026-02-14T14:44:03Z",
+      "status": "verified",
+      "entry_points": [
+        "algorithms/KoopPseudoSpecQR.m",
+        "duffing_example.m",
+        "cavity_example.m"
+      ],
+      "tree_blob_bytes": 21334744,
+      "license_files": [],
+      "reuse_status": "No license file found. Reference inspection only until reuse terms are established.",
+      "external_data_links": [
+        "https://www.dropbox.com/scl/fi/ibt8xn8znmjs6c849ci5d/ICE_DATA.mat?rlkey=3764rvuhvjti3kyjy5mx9kl0q&st=8q9q481w&dl=0",
+        "https://www.dropbox.com/scl/fi/pdnriz6n75fefhyrhvrag/Vorticity_data.mat?rlkey=1w1oydubfkgybs9p0gcx4btsl&st=43ukvjgd&dl=0",
+        "https://www.dropbox.com/scl/fi/vg4tgzos6gt56ooe2l8u0/DATA_north.mat?rlkey=5voj6in71t1n0vbv41fr0jkio&st=5ew4zrkg&dl=0"
+      ]
+    },
+    {
+      "repository": "Paulalo95/ENSO-Fundamental-Modes",
+      "url": "https://github.com/Paulalo95/ENSO-Fundamental-Modes",
+      "method": "Application of kernel/residual pseudospectral mode selection",
+      "papers": [
+        "https://arxiv.org/abs/2606.09369"
+      ],
+      "priority": "later",
+      "clone_url": "https://github.com/Paulalo95/ENSO-Fundamental-Modes.git",
+      "commit": "13446259863e5ef2009b90058b254b576ae7061a",
+      "default_branch": "main",
+      "language": "Jupyter Notebook",
+      "license": null,
+      "github_size_kib": 60710,
+      "pushed_at": "2026-05-26T14:19:01Z",
+      "status": "verified",
+      "entry_points": [
+        "N-Psudoeigenfunc-0.005-Reg1x6-1940-2025.ipynb"
+      ],
+      "tree_blob_bytes": 84818530,
+      "license_files": [],
+      "reuse_status": "No license file found. Reference inspection only until reuse terms are established.",
+      "external_data_links": []
+    },
+    {
+      "repository": "MColbrook/spectralcomputations",
+      "url": "https://github.com/MColbrook/spectralcomputations",
+      "method": "2026 book companion including integrated Koopman algorithms",
+      "papers": [
+        "https://doi.org/10.1017/9781009382502.013"
+      ],
+      "priority": "first",
+      "clone_url": "https://github.com/MColbrook/spectralcomputations.git",
+      "commit": "8e7d5e469168b79eaae07c67f7a9ae7a8cb81470",
+      "default_branch": "main",
+      "language": "MATLAB",
+      "license": "MIT",
+      "github_size_kib": 29794,
+      "pushed_at": "2026-04-24T17:15:14Z",
+      "status": "verified",
+      "entry_points": [
+        "Koopman_algorithms/kResDMD.m",
+        "Koopman_algorithms/mpEDMDqr.m",
+        "Koopman_algorithms/riggedDMD.m"
+      ],
+      "tree_blob_bytes": 71776707,
+      "license_files": [
+        "LICENSE",
+        "utils/SpecSolve/LICENSE",
+        "utils/ultraSEM-master/LICENSE"
+      ],
+      "reuse_status": "retain attribution and inspect bundled third-party licenses",
+      "external_data_links": [
+        "https://www.dropbox.com/scl/fo/w8j7pmegivi37ngi6c4u9/AO1rgz5HBct8_3-qnEtA6EE?rlkey=zjcycyn2u7s02pin6lrh6usil&st=45v8z4d3&dl=0"
+      ]
+    },
+    {
+      "repository": "HyukpyoHong/Koopman-PageRank",
+      "url": "https://github.com/HyukpyoHong/Koopman-PageRank",
+      "method": "EDMD and personalized PageRank dictionary selection",
+      "papers": [
+        "https://arxiv.org/abs/2605.24666"
+      ],
+      "priority": "first",
+      "clone_url": "https://github.com/HyukpyoHong/Koopman-PageRank.git",
+      "commit": "6408ef364d6046cd13858d1eebb4802339b2940f",
+      "default_branch": "main",
+      "language": "Jupyter Notebook",
+      "license": "MIT",
+      "github_size_kib": 672,
+      "pushed_at": "2026-10-29T14:12:13Z",
+      "status": "verified",
+      "entry_points": [
+        "src/koopman_source.py",
+        "src/pagerank_utils.py",
+        "requirements.txt"
+      ],
+      "tree_blob_bytes": 1040863,
+      "license_files": [
+        "LICENSE"
+      ],
+      "reuse_status": "retain attribution and inspect bundled third-party licenses",
+      "external_data_links": []
+    },
+    {
+      "repository": "GustavConradie1/SpecRKHS",
+      "url": "https://github.com/GustavConradie1/SpecRKHS",
+      "method": "Convergent Koopman and adjoint spectral algorithms on RKHSs",
+      "papers": [
+        "https://arxiv.org/abs/2506.15782"
+      ],
+      "priority": "second",
+      "clone_url": "https://github.com/GustavConradie1/SpecRKHS.git",
+      "commit": "8b888786c3e7bb67d29075f3b44e09c56453e1aa",
+      "default_branch": "main",
+      "language": "MATLAB",
+      "license": "MIT",
+      "github_size_kib": 1282,
+      "pushed_at": "2025-07-15T14:30:29Z",
+      "status": "verified",
+      "entry_points": [
+        "src/verified_eigenvalues.m",
+        "src/pseudospectra.m",
+        "src/pseudoeigenfunction.m",
+        "src/unitary_spectral_measure.m",
+        "src/self_adjoint_spectral_measure.m"
+      ],
+      "tree_blob_bytes": 809640,
+      "license_files": [
+        "LICENSE"
+      ],
+      "reuse_status": "retain attribution and inspect bundled third-party licenses",
+      "external_data_links": [
+        "https://zenodo.org/records/15719839"
+      ]
+    }
+  ],
+  "unresolved": [
+    {
+      "method": "Kernelized Rigged DMD (Hales, Colbrook, Jiang, 2025)",
+      "paper": "https://doi.org/10.1063/5.0271497",
+      "status": "No separate public GitHub implementation verified. Related building blocks in Rigged DMD and ResDMD repositories."
+    }
+  ],
+  "optional_dependencies": [
+    {
+      "name": "Chebfun",
+      "url": "https://github.com/chebfun/chebfun",
+      "role": "Some MATLAB examples and spectral-measure routines. Not needed for the planned native runtime. Not included in this pinned fetch list."
+    }
+  ],
+  "bibliographic_corrections": [
+    {
+      "repository": "jbramburger/weighted_methods",
+      "issue": "README links arXiv:2504.00729, an unrelated paper. Correct weighted Birkhoff paper is arXiv:2511.17772."
+    },
+    {
+      "repository": "GustavConradie1/TrustKoopman",
+      "issue": "README BibTeX has arXiv:2601.15091; paper and README title link identify arXiv:2603.15091."
+    }
+  ]
+}

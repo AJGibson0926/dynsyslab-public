@@ -1,0 +1,13 @@
+{
+  "schema": "dynsyslab.observable-closure-query/v2",
+  "system": {
+    "name": "duffing",
+    "parameters": {
+      "delta": 0.5,
+      "alpha": 1,
+      "beta": 4
+    }
+  },
+  "observable": "position",
+  "highest_derivative_order": 3
+}

@@ -1,0 +1,16 @@
+{
+  "schema": "dynsyslab.analytic-query/v1",
+  "system": {
+    "name": "marmottant"
+  },
+  "initial_state": [
+    1,
+    0
+  ],
+  "initial_time": 0,
+  "time": [
+    0,
+    1,
+    2
+  ]
+}

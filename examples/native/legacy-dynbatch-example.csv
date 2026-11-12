@@ -1,0 +1,11 @@
+Var1,Var2_1,Var2_2,Var2_3
+dynbatch,1,,
+dynsys,1,Duffing,0.1,2,2
+time,0,0.1,0.2
+ctrl,random,uniform,
+u,0,1,1.5
+dynclst,1,,
+inst,1,,
+time,0,0.1,0.2
+sol,0.2,0.3,0.4
+,0.9,0.8,0.7

@@ -1,0 +1,8 @@
+services:
+  dynsyslab-mcp:
+    build:
+      context: ..
+      dockerfile: codex_harness/Dockerfile
+    stdin_open: true
+    tty: false
+    profiles: ["container"]

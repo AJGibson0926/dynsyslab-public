@@ -1,0 +1,37 @@
+{
+  "schema": "dynsyslab.observable-closure-query/v2",
+  "system": {
+    "equations": [
+      {
+        "encoding": "analytic-state-expression/v1",
+        "operation": "constant",
+        "state_dimension": 1,
+        "scalar": 1
+      }
+    ]
+  },
+  "expression": {
+    "schema": "dynsyslab.observable-expression/v1",
+    "name": "cubic",
+    "expressions": [
+      {
+        "encoding": "analytic-state-expression/v1",
+        "operation": "power",
+        "state_dimension": 1,
+        "scalar": 3,
+        "arguments": [
+          {
+            "encoding": "analytic-state-expression/v1",
+            "operation": "state",
+            "state_dimension": 1,
+            "state_index": 0
+          }
+        ]
+      }
+    ]
+  },
+  "highest_derivative_order": 2,
+  "search_all_orders": true,
+  "evaluate_at_jet": [-8],
+  "solver_timeout_ms": 3000
+}

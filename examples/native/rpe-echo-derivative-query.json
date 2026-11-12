@@ -1,0 +1,15 @@
+{
+  "schema": "dynsyslab.observable-query/v1",
+  "system": {
+    "name": "rpe",
+    "parameters": {
+      "kappa": 1.3333333333333333
+    }
+  },
+  "state": [
+    1.2,
+    0.3
+  ],
+  "observable": "far_field_acoustic_echo",
+  "flow_order": 2
+}

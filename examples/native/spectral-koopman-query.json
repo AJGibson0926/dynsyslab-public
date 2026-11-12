@@ -1,0 +1,53 @@
+{
+  "schema": "dynsyslab.koopman-spectral-query/v1",
+  "action": "fit",
+  "data": {
+    "dimension": 2,
+    "x": [
+      1,
+      0,
+      0,
+      1,
+      -1,
+      0,
+      0,
+      -1
+    ],
+    "y": [
+      0,
+      1,
+      -1,
+      0,
+      0,
+      -1,
+      1,
+      0
+    ]
+  },
+  "settings": {
+    "method": "resdmd",
+    "sample_interval": 0.1,
+    "dictionary": {
+      "kind": "linear",
+      "constant": false
+    },
+    "residual_grid": [
+      [
+        0,
+        1
+      ],
+      [
+        0,
+        -1
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ]
+    ]
+  }
+}

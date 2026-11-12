@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Private dynsyslab storage and SSM-managed Linux runner.
+Parameters:
+  BucketName: {Type: String}
+  VpcId: {Type: AWS::EC2::VPC::Id}
+  SubnetId: {Type: AWS::EC2::Subnet::Id}
+  RunnerName: {Type: String}
+  InstanceType: {Type: String, Default: t2.micro}
+Resources:
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      BucketEncryption: {ServerSideEncryptionConfiguration: [{ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}}]}
+      PublicAccessBlockConfiguration: {BlockPublicAcls: true, IgnorePublicAcls: true, BlockPublicPolicy: true, RestrictPublicBuckets: true}
+      OwnershipControls: {Rules: [{ObjectOwnership: BucketOwnerEnforced}]}
+      VersioningConfiguration: {Status: Enabled}
+      Tags: [{Key: Project, Value: dynsyslab}]
+  RunnerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: {Version: '2012-10-17', Statement: [{Effect: Allow, Principal: {Service: ec2.amazonaws.com}, Action: 'sts:AssumeRole'}]}
+      ManagedPolicyArns: ['arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore']
+      Policies:
+        - PolicyName: ArchiveAccess
+          PolicyDocument: {Version: '2012-10-17', Statement: [{Effect: Allow, Action: ['s3:ListBucket'], Resource: !GetAtt ArtifactBucket.Arn}, {Effect: Allow, Action: ['s3:GetObject','s3:PutObject'], Resource: !Sub '${ArtifactBucket.Arn}/dynsyslab/*'}]}
+  RunnerProfile: {Type: AWS::IAM::InstanceProfile, Properties: {Roles: [!Ref RunnerRole]}}
+  RunnerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "dynsyslab runner: no inbound access"
+      VpcId: !Ref VpcId
+  Runner:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref RunnerProfile
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds: [!GetAtt RunnerSecurityGroup.GroupId]
+      MetadataOptions: {HttpTokens: required, HttpEndpoint: enabled}
+      BlockDeviceMappings: [{DeviceName: /dev/xvda, Ebs: {Encrypted: true, VolumeType: gp3, VolumeSize: 20}}]
+      Tags: [{Key: Name, Value: !Ref RunnerName}, {Key: Project, Value: dynsyslab}]
+Outputs:
+  BucketName: {Value: !Ref ArtifactBucket}
+  RunnerInstanceId: {Value: !Ref Runner}

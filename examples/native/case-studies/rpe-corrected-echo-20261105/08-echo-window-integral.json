@@ -1,0 +1,17 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "Viscous ring-down in echo and trailing echo integral",
+  "sources": [
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z.npz"
+  ],
+  "methods": [{
+    "name": "coordinate_transform",
+    "settings": {
+      "kind": "window_integral",
+      "observable": "far_field_acoustic_echo",
+      "window_duration": 1.275,
+      "names": ["echo", "trailing echo integral"]
+    }
+  }]
+}

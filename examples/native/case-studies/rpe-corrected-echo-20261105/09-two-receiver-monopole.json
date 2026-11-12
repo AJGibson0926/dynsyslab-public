@@ -1,0 +1,29 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "Leading monopole pressure at two receivers, training and held-out 4",
+  "sources": [
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z.npz",
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-4__20261002T001350Z.npz"
+  ],
+  "methods": [
+    {
+      "name": "coordinate_transform",
+      "settings": {
+        "kind": "observable",
+        "observable": "monopole_pressure",
+        "names": ["5 mm monopole pressure (Pa)"],
+        "receiver": {"position_m": [0.005, 0, 0], "sound_speed_m_s": 1480}
+      }
+    },
+    {
+      "name": "coordinate_transform",
+      "settings": {
+        "kind": "observable",
+        "observable": "monopole_pressure",
+        "names": ["6 mm monopole pressure (Pa)"],
+        "receiver": {"position_m": [0, 0.006, 0], "sound_speed_m_s": 1480}
+      }
+    }
+  ]
+}

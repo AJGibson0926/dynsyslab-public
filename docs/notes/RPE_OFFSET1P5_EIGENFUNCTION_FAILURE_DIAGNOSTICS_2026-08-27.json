@@ -1,0 +1,500 @@
+{
+  "alternative_krom": {
+    "archive": "archives/derived/koopman-krom-extract/rpe-reference-training-bdf-tau25-dtau0p001__20260826T220948.289776Z__koopman-krom-extract__20260827T193558.860380Z__fbc2035f.npz",
+    "controller_at_equilibrium": {
+      "A": [
+        [
+          -0.1257962639907903,
+          -5.5962746503729495
+        ],
+        [
+          5.5962746503729495,
+          -0.1257962639907903
+        ]
+      ],
+      "Bpsi": [
+        [
+          -0.0007046340352750154
+        ],
+        [
+          0.022141943760358967
+        ]
+      ],
+      "K": [
+        [
+          -6889.348608242201,
+          7083.920553783019
+        ]
+      ],
+      "closed_loop_poles": [
+        {
+          "imaginary": 0.0,
+          "real": -5.612032167771304
+        },
+        {
+          "imaginary": 0.0,
+          "real": -156.34580037516687
+        }
+      ],
+      "controllability_condition": 5.599195588327938,
+      "controllability_rank": 2,
+      "gain_norm": 9881.551227322472
+    },
+    "full_spectrum_pair": [
+      3,
+      4
+    ],
+    "observation_map": null,
+    "polynomial_degree": 4,
+    "retained_energy_order_position": 1000,
+    "sha256": "6ed276dd97e843d977d3272bdf1ee7aa6e8147e1d0c163f42313a8c28b3699d6",
+    "solution": {
+      "actual_input_at_tau0": -4.60824123247576e-15,
+      "actual_vs_required_input_correlation": 0.3958182801550577,
+      "actual_vs_required_input_rmse": 0.9799700408356163,
+      "archive": "archives/solutions/rayleigh-plesset/rpe-offset1p5-alternative-minimal-krom-index3__20260827T193559.632192Z.npz",
+      "control_peak_abs": 7.022409005792412,
+      "control_rms": 1.0917446194901568,
+      "final_lifted_error_norm": 0.006208751240340432,
+      "final_lifted_state": [
+        -0.005132722235271305,
+        -0.0015712493583079404
+      ],
+      "final_lifted_target": [
+        -0.0009378717170309299,
+        0.003006066568525962
+      ],
+      "final_physical_error_norm": 0.7291901339243201,
+      "final_state": [
+        0.8811782512819277,
+        -0.11044818695764567
+      ],
+      "final_target": [
+        1.5871121773641774,
+        -0.29313793330009574
+      ],
+      "minimum_radius": 0.8726050713080263,
+      "radius_rmse": 0.3384466826106534,
+      "radius_rmse_second_half": 0.3114813923497898,
+      "required_input_at_tau0": -0.6488765648289958,
+      "sha256": "ec17516e85b2d9328c5a48dd9ffa00e1910d89ec3d61839c2cfe4f272753c27c",
+      "velocity_rmse": 0.6229489386769117,
+      "velocity_rmse_second_half": 0.5804725134515928
+    },
+    "spectrum": [
+      {
+        "continuous": {
+          "imaginary": 5.5962746503729495,
+          "real": -0.1257962639907903
+        },
+        "delta_tau": 0.001,
+        "discrete": {
+          "imaginary": 0.005595541496968926,
+          "real": 0.9998585545136472
+        }
+      }
+    ],
+    "state_representation": "eigenfunction-only",
+    "target_path": {
+      "Bpsi_norm": {
+        "maximum": 0.10568454224122387,
+        "median": 0.06259498676474406,
+        "minimum": 0.022131071785173227
+      },
+      "jacobian": {
+        "maximum_condition": 6953.912479058017,
+        "maximum_condition_state": [
+          1.7196154838048374,
+          1.4083996991351226
+        ],
+        "maximum_condition_tau": 6.886,
+        "median_condition": 4.554513914055991,
+        "minimum_abs_determinant": 2.934405358139992e-08,
+        "minimum_determinant_state": [
+          1.2400830156812144,
+          -0.6298344418520658
+        ],
+        "minimum_determinant_tau": 7.932
+      },
+      "lifted_controllability_condition": {
+        "maximum": 5.599195588327945,
+        "median": 5.59919558832794,
+        "minimum": 5.599195588327936
+      },
+      "physical_required_input_at_tau0": -0.6488765648289958,
+      "reference_forcing": {
+        "lifted_forcing_norm_rms": 0.08342323806390527,
+        "lifted_invariance_residual_maximum": 0.9999999075226574,
+        "lifted_invariance_residual_median": 0.4766085655718216,
+        "lifted_least_squares_input_rms": 1.3161455531549708,
+        "lifted_vs_physical_input_correlation": 0.811761794110077,
+        "lifted_vs_physical_input_rmse": 0.8222813612566636,
+        "physical_inverse_input_rms": 0.9009126301686431
+      },
+      "target_acceleration_at_tau0": 5.9,
+      "target_at_tau0": [
+        1.0,
+        1.0409497792752501e-16
+      ]
+    }
+  },
+  "case_definition": {
+    "Q_diagonal": [
+      5000.0,
+      5000.0
+    ],
+    "R": 0.0001,
+    "control_evaluation": "continuous_rhs",
+    "control_limit": null,
+    "feedforward": false,
+    "horizon_tau": 10.0,
+    "output_dtau": 0.001,
+    "plant_initial_state": [
+      1.0,
+      0.0
+    ],
+    "solver": "BDF",
+    "target": {
+      "amplitudes": [
+        0.2,
+        0.3
+      ],
+      "angular_frequencies": [
+        4.0,
+        3.0
+      ],
+      "equation": "r_ref=1.5-0.2*cos(4*tau)-0.3*cos(3*tau)",
+      "initial_acceleration": 5.9,
+      "initial_state": [
+        1.0,
+        0.0
+      ],
+      "offset": 1.5,
+      "phases": [
+        -1.5707963267948966,
+        -1.5707963267948966
+      ]
+    },
+    "target_unchanged": true
+  },
+  "conclusions": {
+    "primary": [
+      "zero lifted/state error at tau=0 hides nonzero required acceleration and pressure",
+      "quartic eigenfunction map becomes nearly singular along this in-domain orbit and compresses physical error",
+      "actual control has sufficient RMS magnitude but poor phase correlation with inverse-dynamics pressure",
+      "adjacent low-frequency eigenfunction pair shares the defect and performs slightly worse"
+    ],
+    "rejected": [
+      "training-box extrapolation",
+      "loss of Bpsi magnitude",
+      "loss of lifted controllability",
+      "CARE failure",
+      "insufficient total control RMS"
+    ]
+  },
+  "current_krom": {
+    "archive": "archives/derived/koopman-krom-extract/rpe-reference-training-bdf-tau25-dtau0p001__20260826T220948.289776Z__koopman-krom-extract__20260827T183646.410439Z__0dea0923.npz",
+    "controller_at_equilibrium": {
+      "A": [
+        [
+          -0.21061644578341268,
+          -4.818634561556464
+        ],
+        [
+          4.818634561556464,
+          -0.21061644578341268
+        ]
+      ],
+      "Bpsi": [
+        [
+          -0.0008587315307242753
+        ],
+        [
+          0.02092234397311622
+        ]
+      ],
+      "K": [
+        [
+          -6825.894006334767,
+          6996.487557274498
+        ]
+      ],
+      "closed_loop_poles": [
+        {
+          "imaginary": 0.0,
+          "real": -4.833484202162509
+        },
+        {
+          "imaginary": 0.0,
+          "real": -147.83227837495053
+        }
+      ],
+      "controllability_condition": 4.828253794241559,
+      "controllability_rank": 2,
+      "gain_norm": 9774.644091976637
+    },
+    "full_spectrum_pair": [
+      1,
+      2
+    ],
+    "observation_map": null,
+    "polynomial_degree": 4,
+    "retained_energy_order_position": 999,
+    "sha256": "8c3f221f563a82271e2995c8cc7e627b37f28b54f9feb93c59ae28050ae4ef86",
+    "solution": {
+      "actual_input_at_tau0": 0.0,
+      "actual_vs_required_input_correlation": 0.4194476865546191,
+      "actual_vs_required_input_rmse": 0.9377826862465659,
+      "archive": "archives/solutions/rayleigh-plesset/rpe-prior-control-clean-rerun-offset-1p5-feedback-only__20260827T191637.359624Z.npz",
+      "control_peak_abs": 6.2081558891365844,
+      "control_rms": 1.051137125150975,
+      "final_lifted_error_norm": 0.006741648503675349,
+      "final_lifted_state": [
+        -0.00815747033762589,
+        -0.0016903523042757947
+      ],
+      "final_lifted_target": [
+        -0.003703083355754485,
+        0.003370108263977122
+      ],
+      "final_physical_error_norm": 0.7400828520107633,
+      "final_state": [
+        0.8635307540028201,
+        -0.13772702117762758
+      ],
+      "final_target": [
+        1.5871121773641774,
+        -0.29313793330009574
+      ],
+      "minimum_radius": 0.8505951777648648,
+      "radius_rmse": 0.33342493997880635,
+      "radius_rmse_second_half": 0.3032905089934668,
+      "required_input_at_tau0": -0.6488765648289958,
+      "sha256": "8666cf0f172b974d3c1b8f51d6b015c68590e48d97f60b40a109f1678c6552bf",
+      "velocity_rmse": 0.6032158308524181,
+      "velocity_rmse_second_half": 0.5579318609738196
+    },
+    "spectrum": [
+      {
+        "continuous": {
+          "imaginary": 4.818634561556464,
+          "real": -0.21061644578341268
+        },
+        "delta_tau": 0.001,
+        "discrete": {
+          "imaginary": 0.004817601141183756,
+          "real": 0.9997777985801627
+        }
+      }
+    ],
+    "state_representation": "eigenfunction-only",
+    "target_path": {
+      "Bpsi_norm": {
+        "maximum": 0.12132813428738388,
+        "median": 0.0692396100455172,
+        "minimum": 0.02090601724411492
+      },
+      "jacobian": {
+        "maximum_condition": 17896.61253737107,
+        "maximum_condition_state": [
+          1.6370824354117994,
+          -1.5498044829361595
+        ],
+        "maximum_condition_tau": 5.736,
+        "median_condition": 4.636171970372055,
+        "minimum_abs_determinant": 4.5130881211933534e-08,
+        "minimum_determinant_state": [
+          1.2254684526899053,
+          -0.4696205151083999
+        ],
+        "minimum_determinant_tau": 4.314
+      },
+      "lifted_controllability_condition": {
+        "maximum": 4.828253794241561,
+        "median": 4.828253794241557,
+        "minimum": 4.828253794241553
+      },
+      "physical_required_input_at_tau0": -0.6488765648289958,
+      "reference_forcing": {
+        "lifted_forcing_norm_rms": 0.07672797361377114,
+        "lifted_invariance_residual_maximum": 0.9999997721048116,
+        "lifted_invariance_residual_median": 0.35925114230356886,
+        "lifted_least_squares_input_rms": 1.0320877473722947,
+        "lifted_vs_physical_input_correlation": 0.8274891977595065,
+        "lifted_vs_physical_input_rmse": 0.7450388220930327,
+        "physical_inverse_input_rms": 0.9009126301686431
+      },
+      "target_acceleration_at_tau0": 5.9,
+      "target_at_tau0": [
+        1.0,
+        1.0409497792752501e-16
+      ]
+    }
+  },
+  "historical_specialized_krom_comparator": {
+    "notes": "Different KROM, scaling/tuning, sampled policy, and pressure limiting; not an apples-to-apples result.",
+    "radius_rmse": 0.01096827,
+    "source": "RPE_MINIMAL_KROM_KLQR_STABILITY_CASE_STUDY_2026-08-26.md",
+    "velocity_rmse": 0.01239878
+  },
+  "plant": {
+    "dimensionless_groups": {
+      "ambient_pressure": 9.092638445888207,
+      "capillarity": 1.31843257465379,
+      "gas_pressure": 10.199212544752802,
+      "vapor_pressure": 0.21185847578919523,
+      "viscosity": 0.12073680576341679
+    },
+    "physical": {
+      "R0_m": 1e-05,
+      "kappa": 1.3333333333333333,
+      "muL_pa_s": 0.001,
+      "p0_pa": 100000.0,
+      "pG0_pa": 112170.0,
+      "pV_pa": 2330,
+      "rhoL_kg_m3": 998.0,
+      "sigma_n_m": 0.0725
+    },
+    "scaling": {
+      "control_coordinate": "p_control/p0",
+      "control_scale_pa": 100000.0,
+      "convention": "rpe-natural-period/v1",
+      "natural_frequency_hz": 331963.06683132035,
+      "pressure_input_convention": "external-acoustic-pressure/v2",
+      "pressure_scale_pa": 10997.907878457558,
+      "time_scale_s": 3.0123833037972497e-06
+    }
+  },
+  "schema": "dynsyslab.rpe-offset1p5-eigenfunction-failure-diagnostics/v1",
+  "successful_small_target_control": {
+    "purpose": "dynamically compatible and well-conditioned comparison",
+    "solution": {
+      "actual_input_at_tau0": 0.0,
+      "actual_vs_required_input_correlation": 0.9999941332375821,
+      "actual_vs_required_input_rmse": 0.003226837520639955,
+      "archive": "archives/solutions/rayleigh-plesset/rpe-prior-control-clean-rerun-multisine-equilibrium-small__20260827T191621.311096Z.npz",
+      "control_peak_abs": 0.7072906513314952,
+      "control_rms": 0.2575540870041132,
+      "final_lifted_error_norm": 3.479300643181774e-05,
+      "final_lifted_state": [
+        0.005631881476789432,
+        -0.0012452083045456242
+      ],
+      "final_lifted_target": [
+        0.0056661892470112295,
+        -0.001239417777887984
+      ],
+      "final_physical_error_norm": 0.0015573655504146856,
+      "final_state": [
+        1.1222076151226472,
+        -0.19686517639831358
+      ],
+      "final_target": [
+        1.1237493195561898,
+        -0.19708548276956384
+      ],
+      "minimum_radius": 0.8647726617218146,
+      "radius_rmse": 0.0007240509117581957,
+      "radius_rmse_second_half": 0.0006728259380193468,
+      "required_input_at_tau0": 1.0737840232504267e-16,
+      "sha256": "0131962feca824e3446ff8b80cec0a3c82e48607fe8a69708dcde05a60016fa7",
+      "velocity_rmse": 0.0023795034361599,
+      "velocity_rmse_second_half": 0.002174737649300271
+    },
+    "target_path": {
+      "Bpsi_norm": {
+        "maximum": 0.02774137805404239,
+        "median": 0.020940128382809436,
+        "minimum": 0.016399777843614446
+      },
+      "jacobian": {
+        "maximum_condition": 52.02104375961688,
+        "maximum_condition_state": [
+          0.8635233370197897,
+          0.006588685565552067
+        ],
+        "maximum_condition_tau": 8.98,
+        "median_condition": 23.038170306466476,
+        "minimum_abs_determinant": 6.67523807687783e-05,
+        "minimum_determinant_state": [
+          1.1364644271518707,
+          0.009139502871999196
+        ],
+        "minimum_determinant_tau": 9.868
+      },
+      "lifted_controllability_condition": {
+        "maximum": 4.828253794241561,
+        "median": 4.828253794241557,
+        "minimum": 4.828253794241553
+      },
+      "physical_required_input_at_tau0": 1.0737840232504267e-16,
+      "reference_forcing": {
+        "lifted_forcing_norm_rms": 0.02185678681731172,
+        "lifted_invariance_residual_maximum": 0.9999999953014942,
+        "lifted_invariance_residual_median": 0.6256809334779321,
+        "lifted_least_squares_input_rms": 0.8643112386387505,
+        "lifted_vs_physical_input_correlation": 0.9865557863431292,
+        "lifted_vs_physical_input_rmse": 0.6118077235531303,
+        "physical_inverse_input_rms": 0.2606521327388249
+      },
+      "target_acceleration_at_tau0": -8.817456953860943e-17,
+      "target_at_tau0": [
+        1.0,
+        0.0
+      ]
+    }
+  },
+  "training_and_pipeline": {
+    "hdmd": {
+      "absolute_tolerance": 1e-10,
+      "archive": "archives/derived/koopman-hankel-dmd/rpe-reference-training-bdf-tau25-dtau0p001__20260826T220948.289776Z__koopman-hankel-dmd__20260826T221322.756123Z__604a65f1.npz",
+      "energy_sort": "descending terminal amplitude",
+      "hankel_shape": [
+        20000,
+        2000
+      ],
+      "rank_cap": null,
+      "sha256": "c2fabe83b37b94ace1abb5b7d4fdd11cad14dee97c476d2fbb00e5e63eb0bf4b",
+      "svd_driver": "gesvd"
+    },
+    "sindy": {
+      "archive": "archives/derived/koopman-with-sindy/rpe-reference-training-bdf-tau25-dtau0p001__20260826T220948.289776Z__koopman-with-sindy__20260827T183645.394109Z__c4dde209.npz",
+      "gamma_method": "system_rhs",
+      "generator_conversion": "lambda=log(mu)/delta_tau",
+      "include_constant": false,
+      "max_iterations": 1,
+      "normalize": false,
+      "polynomial_degree": 4,
+      "sha256": "6e3725beac327fa749eeb0b0250cefa816d158cbbbc2d6fdea0d1b6bfa979119",
+      "threshold": 1e-06
+    },
+    "training_domain": {
+      "coordinate_system": "dimensionless",
+      "maximum": [
+        2.333386598601735,
+        26.94802281811782
+      ],
+      "minimum": [
+        0.2327207269088546,
+        -27.09322012592197
+      ]
+    },
+    "trajectory": {
+      "archive": "archives/solutions/rayleigh-plesset/rpe-reference-training-bdf-tau25-dtau0p001__20260826T220948.289776Z.npz",
+      "atol": 1e-09,
+      "delta_tau": 0.001,
+      "initial_state_dimensionless": [
+        2.333386598601735,
+        0.0
+      ],
+      "rtol": 1e-09,
+      "sample_count": 25001,
+      "sha256": "e4529d55dd549e12c66dbb78c9521c6bc273aa8bb135637319568a2edfdc9eba",
+      "solver": "BDF",
+      "tau_span": [
+        0.0,
+        25.0
+      ]
+    }
+  }
+}

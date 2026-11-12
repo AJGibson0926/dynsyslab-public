@@ -1,0 +1,27 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "RPE corrected monopole v2: frozen causal echo history",
+  "sources": [
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z.npz",
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-1__20261002T001350Z.npz",
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-2__20261002T001350Z.npz",
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-3__20261002T001350Z.npz",
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-4__20261002T001350Z.npz"
+  ],
+  "methods": [
+    {
+      "name": "coordinate_transform",
+      "settings": {
+        "kind": "history",
+        "observable": "echo",
+        "transform_archive": "archives/derived/history-basis/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261106T003858Z__history-basis__20261106T005000Z.npz",
+        "system_derivatives": true,
+        "names": [
+          "\\xi_1",
+          "\\xi_2"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,1079 @@
+{
+  "schema": "dynsyslab.native-ui-parity/v1",
+  "release_gate": true,
+  "runtime_python_allowed": false,
+  "capabilities": [
+    {
+      "id": "solver.system_configuration",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "native_service": "workflow/native/src/SystemResolution.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/SolverPanel.cpp",
+          "tokens": [
+            "Dynamical system",
+            "makeScientificParameterGrid",
+            "setParameterOverride"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "tester/tests/test_compute_workbench.py"
+      ]
+    },
+    {
+      "id": "solver.time_method_and_resources",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "native_service": "workflow/native/src/Plan.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/SolverExecutionPane.cpp",
+          "tokens": [
+            "Solver and execution",
+            "Maximum step",
+            "Maximum steps",
+            "Backend"
+          ]
+        },
+        {
+          "path": "compute_workbench/native/src/SolverPanel.cpp",
+          "tokens": [
+            "Coordinates",
+            "PDE partitioning",
+            "Partition shape"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/workflow_plan_tests.cpp"
+      ]
+    },
+    {
+      "id": "solver.initial_condition_ensembles",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "native_service": "workflow/native/src/Hierarchy.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/InitialConditionDialog.cpp",
+          "tokens": [
+            "Explicit initial states",
+            "Random initial-state bounds"
+          ]
+        },
+        {
+          "path": "compute_workbench/native/src/SolverPanel.cpp",
+          "tokens": [
+            "Clusters"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "tester/tests/test_compute_workbench.py"
+      ]
+    },
+    {
+      "id": "solver.krom_training_domain_expansion",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "native_service": "workflow/native/src/TrainingPreflight.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/KromTrainingDialog.cpp",
+          "tokens": [
+            "KROM training-domain expansion",
+            "Preview exact plan",
+            "Apply to Solver"
+          ]
+        },
+        {
+          "path": "compute_workbench/native/src/PostprocessPanel.cpp",
+          "tokens": [
+            "Expand KROM training domain"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "native/tests/training_domain_tests.cpp",
+        "workflow/native/tests/training_preflight_tests.cpp",
+        "tester/tests/test_viewer_native_ui.py"
+      ]
+    },
+    {
+      "id": "solver.lattice_initial_conditions",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "native_service": "workflow/native/src/LatticeSolve.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/LatticeInitialConditionDialog.cpp",
+          "tokens": [
+            "Explicit lattice initial condition",
+            "Explicit site arrays"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "native/tests/lattice_tests.cpp"
+      ]
+    },
+    {
+      "id": "solver.controllers_targets_and_kroms",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "waveform",
+        "random_pulse",
+        "pid",
+        "lqr",
+        "sdre",
+        "mpc",
+        "klqr",
+        "kmpc"
+      ],
+      "native_service": "workflow/native/src/ControlFactory.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/ControllerSettingsDialog.cpp",
+          "tokens": [
+            "Controller configuration"
+          ]
+        },
+        {
+          "path": "compute_workbench/native/src/SolverPanel.cpp",
+          "tokens": [
+            "KROM (KLQR/KMPC)"
+          ]
+        },
+        {
+          "path": "compute_workbench/native/src/SolverPanel.cpp",
+          "tokens": [
+            "observable fixed point",
+            "observable from state waveform"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/control_factory_tests.cpp",
+        "workflow/native/tests/observable_pipeline_tests.cpp"
+      ]
+    },
+    {
+      "id": "solver.control_evaluation_policy",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "native_service": "workflow/native/src/ControlFactory.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/SolverPanel.cpp",
+          "tokens": [
+            "Controller evaluation",
+            "continuous"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/klqr_case_study_parity_tests.cpp"
+      ]
+    },
+    {
+      "id": "solver.cartesian_campaigns",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "native_service": "workflow/native/src/Campaign.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/CampaignDialog.cpp",
+          "tokens": [
+            "Cartesian campaign",
+            "Add / update axis"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/workflow_plan_tests.cpp"
+      ]
+    },
+    {
+      "id": "solver.execution_progress_and_cancel",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "native_service": "workflow/native/src/Run.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/Workbench.cpp",
+          "tokens": [
+            "progress",
+            "Cancel active",
+            "Cancellation requested; waiting for a numerical safe point"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "tester/tests/test_compute_workbench.py"
+      ]
+    },
+    {
+      "id": "operations.saved_jobs",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "native_service": "workflow/native/src/Plan.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/Workbench.cpp",
+          "tokens": [
+            "Save job",
+            "Open job"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "tester/tests/test_compute_workbench.py"
+      ]
+    },
+    {
+      "id": "operations.durable_queue",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "native_service": "workflow/native/src/Queue.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/QueueDialog.cpp",
+          "tokens": [
+            "Durable native job queue",
+            "Cancel selected",
+            "Recover stale"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/queue_tests.cpp"
+      ]
+    },
+    {
+      "id": "operations.archive_audit_and_deduplication",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "native_service": "native/src/ArchiveDeduplication.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/ArchiveToolsDialog.cpp",
+          "tokens": [
+            "Canonical archive maintenance",
+            "Preview deduplication",
+            "Apply recoverable move"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "native/tests/archive_tests.cpp"
+      ]
+    },
+    {
+      "id": "operations.legacy_tagged_csv_import",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "native_service": "native/src/LegacyCsvImport.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/LegacyImportDialog.cpp",
+          "tokens": [
+            "Import legacy tagged trajectory CSV",
+            "Preview / validate",
+            "Import and archive"
+          ]
+        },
+        {
+          "path": "compute_workbench/native/src/Workbench.cpp",
+          "tokens": [
+            "Import data\u2026"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "native/tests/legacy_csv_tests.cpp",
+        "compute_workbench/native/tests/CliLegacyImportContract.cmake",
+        "tester/tests/test_compute_workbench.py"
+      ]
+    },
+    {
+      "id": "operations.viewer_handoff",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "native_service": "compute_workbench/native/src/Backend.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/Workbench.cpp",
+          "tokens": [
+            "Open Viewer"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "tester/tests/test_compute_workbench.py"
+      ]
+    },
+    {
+      "id": "operations.krom_control_candidate_search",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "krom_control_search"
+      ],
+      "native_service": "workflow/native/src/KromControlSearch.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/KromControlSearchDialog.cpp",
+          "tokens": [
+            "Bounded KROM control-candidate campaign",
+            "Controlled regression ensemble",
+            "Maximum attempts (hard limit 25)",
+            "Run campaign",
+            "Plan only",
+            "Save job\u2026",
+            "Queue"
+          ]
+        },
+        {
+          "path": "compute_workbench/native/src/PostprocessPanel.cpp",
+          "tokens": [
+            "KROM control search\u2026"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "native/tests/koopman_control_tests.cpp",
+        "compute_workbench/native/tests/krom_control_search_tests.cpp",
+        "tester/tests/test_compute_workbench.py"
+      ]
+    },
+    {
+      "id": "postprocess.decompositions",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "svd",
+        "pca",
+        "pod",
+        "bagged_pca",
+        "robust_pca",
+        "hankel_pod"
+      ],
+      "native_service": "workflow/native/src/DecompositionPostprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/DecompositionDialog.cpp",
+          "tokens": [
+            "Decomposition settings",
+            "Robust lambda",
+            "Center Hankel-POD"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/pca_postprocess_tests.cpp"
+      ]
+    },
+    {
+      "id": "postprocess.hdmd_scalar_observable",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "hdmd"
+      ],
+      "native_service": "workflow/native/src/Postprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/KoopmanPipelineDialog.cpp",
+          "tokens": [
+            "H-DMD",
+            "Scalar observable"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/hdmd_scattered_krom_tests.cpp"
+      ]
+    },
+    {
+      "id": "postprocess.sindy_eigenfunctions",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "sindy"
+      ],
+      "native_service": "workflow/native/src/Postprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/KoopmanPipelineDialog.cpp",
+          "tokens": [
+            "SINDy",
+            "Coordinate observable"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "compute_workbench/native/tests/native_solve_tests.cpp"
+      ]
+    },
+    {
+      "id": "postprocess.boundary_eigenfunctions",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "boundary_eigenfunctions"
+      ],
+      "native_service": "workflow/native/src/BoundaryPostprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/BoundaryEigenfunctionDialog.cpp",
+          "tokens": [
+            "Construct eigenfunctions from a supplied spectrum",
+            "Additional trajectory archives",
+            "Eigenvalues are never changed"
+          ]
+        },
+        {
+          "path": "compute_workbench/native/src/PostprocessPanel.cpp",
+          "tokens": [
+            "Boundary eigenfunctions",
+            "Configure boundary functions"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "native/tests/boundary_eigenfunction_tests.cpp",
+        "workflow/native/tests/boundary_postprocess_tests.cpp"
+      ]
+    },
+    {
+      "id": "postprocess.eigenvalue_optimization",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "eigenvalue_optimization"
+      ],
+      "native_service": "workflow/native/src/EigenvalueOptimizationPostprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/EigenvalueOptimizationDialog.cpp",
+          "tokens": [
+            "Optimize Koopman eigenvalues from trajectory data",
+            "Initial spectrum",
+            "This stage returns a spectrum only"
+          ]
+        },
+        {
+          "path": "compute_workbench/native/src/PostprocessPanel.cpp",
+          "tokens": [
+            "Optimize eigenvalues",
+            "Configure eigenvalue optimization"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "native/tests/eigenvalue_optimization_tests.cpp",
+        "workflow/native/tests/eigenvalue_optimization_postprocess_tests.cpp"
+      ]
+    },
+    {
+      "id": "postprocess.dmd_edmd_havok",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "dmd",
+        "edmd",
+        "havok"
+      ],
+      "native_service": "workflow/native/src/DecompositionPostprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/PostprocessPanel.cpp",
+          "tokens": [
+            "HAVOK",
+            "DMD",
+            "EDMD"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "compute_workbench/native/tests/native_solve_tests.cpp"
+      ]
+    },
+    {
+      "id": "postprocess.krom_extraction",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "krom_extract"
+      ],
+      "native_service": "workflow/native/src/Postprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/KromExtractionDialog.cpp",
+          "tokens": [
+            "Extract an independent sub-KROM",
+            "selected_modes"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/krom_postprocess_tests.cpp"
+      ]
+    },
+    {
+      "id": "postprocess.koopman_validation",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "koopman_validation"
+      ],
+      "native_service": "workflow/native/src/KromValidationPostprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/KromValidationDialog.cpp",
+          "tokens": [
+            "Validate a KROM on a free trajectory",
+            "Dataset role",
+            "Semigroup horizons"
+          ]
+        },
+        {
+          "path": "compute_workbench/native/src/PostprocessPanel.cpp",
+          "tokens": [
+            "Validate KROM",
+            "Configure KROM validation"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/krom_validation_tests.cpp"
+      ]
+    },
+    {
+      "id": "postprocess.control_map_regression",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "control_regression"
+      ],
+      "native_service": "workflow/native/src/Postprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/ControlRegressionDialog.cpp",
+          "tokens": [
+            "Control-map regression",
+            "Additional controlled trajectory archives",
+            "Add files\u2026",
+            "Korda\u2013Mezi\u0107 multistep output regression",
+            "Observable reconstruction C",
+            "Exact-map sample stride",
+            "Error-map columns"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "native/tests/koopman_control_tests.cpp",
+        "compute_workbench/native/tests/native_solve_tests.cpp"
+      ]
+    },
+    {
+      "id": "postprocess.observability_and_klqe",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "observability",
+        "klqe"
+      ],
+      "native_service": "workflow/native/src/EstimationPostprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/EstimationDialog.cpp",
+          "tokens": [
+            "Observability / KLQE",
+            "Measurement C map"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "compute_workbench/native/tests/native_solve_tests.cpp"
+      ]
+    },
+    {
+      "id": "viewer.archive_hierarchy_and_lineage",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "native_service": "viewer/native/src/ArchiveCatalog.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/Workbench.cpp",
+          "tokens": [
+            "DynSysLab Viewer"
+          ]
+        },
+        {
+          "path": "viewer/native/src/InspectorPane.cpp",
+          "tokens": [
+            "Related objects"
+          ]
+        },
+        {
+          "path": "viewer/native/src/WorkbenchCatalog.cpp",
+          "tokens": [
+            "navigation_.setCatalog"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "viewer/native/tests/plot_export_tests.cpp",
+        "tester/tests/test_viewer_native_ui.py"
+      ]
+    },
+    {
+      "id": "viewer.batch_cluster_and_campaign_aggregates",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "covers": [
+        "ensemble_time",
+        "ensemble_phase",
+        "ensemble_control",
+        "campaign_summary",
+        "campaign_bifurcation"
+      ],
+      "native_service": "viewer/native/src/HierarchyPayload.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/HierarchyCatalog.cpp",
+          "tokens": [
+            "ensemble_phase",
+            "campaign_summary",
+            "campaign_bifurcation",
+            "parameter \u00b7 ",
+            "group \u00b7 "
+          ]
+        },
+        {
+          "path": "viewer/native/src/HierarchyPayload.cpp",
+          "tokens": [
+            "Trajectory ensemble",
+            "State-0 response amplitude",
+            "Asymptotic state-0 response",
+            "Aggregate display limited"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "viewer/native/tests/hierarchy_catalog_tests.cpp"
+      ]
+    },
+    {
+      "id": "viewer.complete_view_selection",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "native_service": "viewer/native/src/Workbench.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/Workbench.cpp",
+          "tokens": [
+            "kViewSelectId",
+            "CB_ADDSTRING",
+            "requestView"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "tester/tests/test_viewer_native_ui.py"
+      ]
+    },
+    {
+      "id": "viewer.solution_and_control_views",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "covers": [
+        "data_overview",
+        "time",
+        "phase",
+        "three_d",
+        "fourier",
+        "time_frequency",
+        "control"
+      ],
+      "native_service": "viewer/native/src/NativePayload.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/NativePayload.cpp",
+          "tokens": [
+            "phase",
+            "control"
+          ]
+        },
+        {
+          "path": "viewer/native/src/FourierPayload.cpp",
+          "tokens": [
+            "Fourier amplitude",
+            "frequency (cycles / tau)"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "native/tests/time_series_tests.cpp",
+        "viewer/native/tests/display_policy_tests.cpp",
+        "viewer/native/tests/native_payload_tests.cpp",
+        "tester/tests/test_viewer_native_ui.py"
+      ]
+    },
+    {
+      "id": "viewer.automatic_detail_insets",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "native_service": "viewer/native/src/Model.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/PlotFigureDrawing.cpp",
+          "tokens": [
+            "automaticDetailInset",
+            "automatic detail"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "viewer/native/tests/display_policy_tests.cpp"
+      ]
+    },
+    {
+      "id": "viewer.observable_views",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "native_service": "viewer/native/src/ObservablePayload.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/ObservablePayload.cpp",
+          "tokens": [
+            "observable_time",
+            "observable_heatmap"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "tester/tests/test_viewer_native_ui.py"
+      ]
+    },
+    {
+      "id": "viewer.koopman_spectrum_and_eigenfunctions",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "native_service": "viewer/native/src/KromPayload.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/KromWorkspace.cpp",
+          "tokens": [
+            "buildKromWorkspace",
+            "KROM eigenvalues",
+            "domain-coloring"
+          ]
+        },
+        {
+          "path": "viewer/native/src/KromTraining.cpp",
+          "tokens": [
+            "eigenfunction"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "tester/tests/test_viewer_native_ui.py",
+        "native/tests/scattered_eigenfunction_tests.cpp",
+        "viewer/native/tests/krom_workspace_tests.cpp"
+      ]
+    },
+    {
+      "id": "viewer.koopman_validation",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "native_service": "viewer/native/src/KoopmanValidationPayload.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/KoopmanValidationPayload.cpp",
+          "tokens": [
+            "Relative semigroup defects",
+            "Tail pointwise defects",
+            "Finite-horizon semigroup error"
+          ]
+        },
+        {
+          "path": "viewer/native/src/ArchiveCatalog.cpp",
+          "tokens": [
+            "Free-trajectory Koopman semigroup validation",
+            "evaluates KROM"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "viewer/native/tests/koopman_validation_payload_tests.cpp"
+      ]
+    },
+    {
+      "id": "viewer.eigenvalue_optimization",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "native_service": "viewer/native/src/EigenvalueOptimizationPayload.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/EigenvalueOptimizationPayload.cpp",
+          "tokens": [
+            "Initial and optimized discrete spectra",
+            "Variable-projection fit residual",
+            "Optimization effort"
+          ]
+        },
+        {
+          "path": "viewer/native/src/ArchiveCatalog.cpp",
+          "tokens": [
+            "Optimized Koopman spectrum",
+            "eigenvalue_optimization"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "viewer/native/tests/eigenvalue_optimization_payload_tests.cpp"
+      ]
+    },
+    {
+      "id": "viewer.control_map_error_heatmaps",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "native_service": "viewer/native/src/NativePayload.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/NativePayload.cpp",
+          "tokens": [
+            "control_map_error",
+            "Constant B absolute error"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "tester/tests/test_viewer_native_ui.py"
+      ]
+    },
+    {
+      "id": "viewer.krom_control_campaigns",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "native_service": "viewer/native/src/KromControlCampaignPayload.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/KromControlCampaignPayload.cpp",
+          "tokens": [
+            "Target error at control release",
+            "Final error after release",
+            "Peak control demand",
+            "Mean B_psi approximation error",
+            "Candidate pre-screening",
+            "Extracted KROM size"
+          ]
+        },
+        {
+          "path": "viewer/native/src/ArchiveCatalog.cpp",
+          "tokens": [
+            "Control campaigns",
+            "krom_control_campaign"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "viewer/native/tests/krom_control_campaign_payload_tests.cpp",
+        "tester/tests/test_viewer_native_ui.py"
+      ]
+    },
+    {
+      "id": "viewer.decomposition_estimation_and_non_ode",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "native_service": "viewer/native/src/NativePayload.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/NativePayload.cpp",
+          "tokens": [
+            "decompositionPayload",
+            "observabilityPayload"
+          ]
+        },
+        {
+          "path": "viewer/native/src/LatticePayload.cpp",
+          "tokens": [
+            "Initial lattice",
+            "Final lattice"
+          ]
+        },
+        {
+          "path": "viewer/native/src/ArchiveCatalog.cpp",
+          "tokens": [
+            "Native Koopman state estimate"
+          ]
+        },
+        {
+          "path": "viewer/native/src/FieldPayload.cpp",
+          "tokens": [
+            "Space-time field"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "tester/tests/test_viewer_native_ui.py"
+      ]
+    },
+    {
+      "id": "viewer.comparison_and_axis_controls",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "native_service": "viewer/native/src/ComparisonPayload.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/WorkbenchActions.cpp",
+          "tokens": [
+            "startComparison"
+          ]
+        },
+        {
+          "path": "viewer/native/src/AxisRangeDialog.cpp",
+          "tokens": [
+            "Plot axis ranges"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "tester/tests/test_viewer_native_ui.py"
+      ]
+    },
+    {
+      "id": "viewer.clipboard_and_disk_export",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "native_service": "viewer/native/src/PlotExport.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/WorkbenchActions.cpp",
+          "tokens": [
+            "copyPlotToClipboard",
+            "savePlotToDisk"
+          ]
+        },
+        {
+          "path": "viewer/native/src/PlotExport.cpp",
+          "tokens": [
+            "PDF report",
+            "/Subtype /Image",
+            "savePdf"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "tester/tests/test_viewer_native_ui.py"
+      ]
+    },
+    {
+      "id": "viewer.postprocessor_handoff",
+      "app": "DynSysLabViewer.exe",
+      "status": "implemented",
+      "native_service": "viewer/native/src/Process.cpp",
+      "ui_evidence": [
+        {
+          "path": "viewer/native/src/WorkbenchActions.cpp",
+          "tokens": [
+            "openPostprocessor",
+            "--postprocessor"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "tester/tests/test_viewer_native_ui.py"
+      ]
+    },
+    {
+      "id": "postprocess.dmdc",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "dmdc"
+      ],
+      "native_service": "workflow/native/src/DmdControlPostprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/PostprocessPanel.cpp",
+          "tokens": [
+            "editDmdControl",
+            "\"dmdc\""
+          ]
+        },
+        {
+          "path": "compute_workbench/native/src/DmdControlDialog.cpp",
+          "tokens": [
+            "showDmdControlDialog",
+            "Apply settings"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/dmd_control_postprocess_tests.cpp",
+        "compute_workbench/native/tests/CliDmdControlContract.cmake"
+      ]
+    },
+    {
+      "id": "postprocess.edmdc",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "edmdc"
+      ],
+      "native_service": "workflow/native/src/DmdControlPostprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/PostprocessPanel.cpp",
+          "tokens": [
+            "editDmdControl",
+            "\"edmdc\""
+          ]
+        },
+        {
+          "path": "compute_workbench/native/src/DmdControlDialog.cpp",
+          "tokens": [
+            "showDmdControlDialog",
+            "Apply settings"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/dmd_control_postprocess_tests.cpp",
+        "compute_workbench/native/tests/CliDmdControlContract.cmake"
+      ]
+    },
+    {
+      "id": "postprocess.causal_history_saved_jobs",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "history_basis",
+        "history_projection",
+        "echo_history_koopman"
+      ],
+      "interface": "Open job: saved postprocess JSON, plan or run. No dedicated settings dialog yet.",
+      "native_service": "workflow/native/src/HistoryPostprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/Workbench.cpp",
+          "tokens": [
+            "Open job\u2026",
+            "openJobDefinition",
+            "runJobJson(job,answer==IDYES)"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/echo_history_koopman_tests.cpp",
+        "cmake/HistoryPackageSmoke.cmake"
+      ]
+    }
+  ]
+}

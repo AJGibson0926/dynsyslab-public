@@ -1,0 +1,45 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "solve",
+  "label": "Gravity-free double pendulum",
+  "system": {
+    "name": "double_pendulum",
+    "parameters": {
+      "gravity_m_s2": 0,
+      "damping1_n_m_s": 0,
+      "damping2_n_m_s": 0
+    }
+  },
+  "time": {
+    "start": 0,
+    "stop": 12,
+    "output_step": 0.02
+  },
+  "initial_conditions": {
+    "mode": "explicit",
+    "count": 1,
+    "clusters": 1,
+    "values": [
+      [
+        0.6,
+        0.5,
+        0,
+        0.5
+      ]
+    ],
+    "ranges": [],
+    "seed": 0
+  },
+  "controller": {
+    "kind": "none"
+  },
+  "solver": {
+    "method": "RK45",
+    "rtol": 1e-10,
+    "atol": 1e-12,
+    "analytic_solution": "auto"
+  },
+  "archive": {
+    "enabled": true
+  }
+}

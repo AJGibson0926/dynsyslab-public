@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "description": "Local deployment-binding template. Copy to antenna_suite.json locally; it is intentionally ignored by Git.",
+  "git": {
+    "repository": "<GITHUB_REPOSITORY>",
+    "visibility": "private"
+  },
+  "artifact_store": {
+    "provider": "s3",
+    "bucket": "<PRIVATE_BUCKET_NAME>",
+    "region": "<REGION>"
+  },
+  "compute": {
+    "provider": "aws",
+    "runner": "<PRIVATE_RUNNER_OR_BACKEND_REFERENCE>"
+  }
+}

@@ -1,0 +1,15 @@
+.git/
+build/
+dist/
+*.egg-info/
+**/__pycache__/
+archives/
+logs/
+test_reports/
+viewer_compute_archive/
+codex_harness/.venv/
+config/antenna_policy.json
+config/antenna_suite.json
+access-key.json
+*.account-metadata.json
+*.credentials.json

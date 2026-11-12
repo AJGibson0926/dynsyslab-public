@@ -1,0 +1,48 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "solve",
+  "label": "rpe-periodic-100khz-20kpa-phase-portrait",
+  "system": {
+    "name": "rpe",
+    "preset": "air_water_20c",
+    "parameters": {
+      "equilibrium_radius_m": 0.00001,
+      "ambient_pressure_pa": 100000.0,
+      "pressure_input_sign": -1.0
+    }
+  },
+  "time": {
+    "start": 0.0,
+    "stop": 300.0,
+    "output_step": 0.02,
+    "coordinate_system": "dimensionless"
+  },
+  "initial_conditions": {
+    "mode": "explicit",
+    "count": 1,
+    "clusters": 1,
+    "seed": 0,
+    "values": [[1.0, 0.0]],
+    "ranges": []
+  },
+  "controller": {
+    "kind": "waveform",
+    "settings": {
+      "frequencies_hz": [100000.0],
+      "amplitudes": [20000.0],
+      "phases_rad": [1.5707963267948966],
+      "offset": 0.0
+    }
+  },
+  "solver": {
+    "method": "BDF",
+    "rtol": 1e-9,
+    "atol": 1e-11,
+    "max_step": 0.02,
+    "control_evaluation": "continuous_rhs"
+  },
+  "archive": {
+    "enabled": true,
+    "data_role": "periodic_forcing_phase_portrait"
+  }
+}

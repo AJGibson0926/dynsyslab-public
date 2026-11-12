@@ -1,0 +1,33 @@
+{
+  "schema": "dynsyslab.phase-space-query/v1",
+  "mode": "compute",
+  "system": {
+    "identifier": "rpe",
+    "driver": {
+      "amplitude": 20,
+      "frequency_hz": 100000,
+      "phase_radians": 0.31
+    }
+  },
+  "options": {
+    "dynamics": "periodic-forcing",
+    "lower": [
+      0.8,
+      -0.2
+    ],
+    "upper": [
+      1.2,
+      0.2
+    ],
+    "periodic_seeds": [
+      {
+        "state": [
+          1,
+          0
+        ]
+      }
+    ],
+    "manifolds": false,
+    "vector_grid_per_axis": 7
+  }
+}

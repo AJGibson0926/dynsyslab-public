@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DynSysLab Solver + Viewer UI refactor PRD</title>
+  <style>
+    :root {
+      --paper: #f4f8fb;
+      --sheet: #ffffff;
+      --mist: #e8f1f6;
+      --mist-2: #dbe8ef;
+      --line: #cbd8e1;
+      --line-strong: #9fb4c2;
+      --ink: #13212b;
+      --ink-2: #334a5c;
+      --muted: #526778;
+      --teal: #0b7d75;
+      --teal-deep: #0b5e58;
+      --teal-soft: #d6f4f0;
+      --blue: #0b6fbf;
+      --blue-soft: #dceeff;
+      --red: #c73e45;
+      --red-soft: #fdebed;
+      --amber: #a34f00;
+      --amber-soft: #fff4dd;
+      --shadow: 0 18px 46px rgba(35, 65, 84, .10);
+      --radius-s: 6px;
+      --radius-m: 10px;
+      --radius-l: 16px;
+      --measure: 78ch;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: #075d9f; text-underline-offset: 3px; }
+    a:hover { color: #073f6b; }
+    a:focus-visible, button:focus-visible, summary:focus-visible {
+      outline: 3px solid var(--blue);
+      outline-offset: 3px;
+    }
+    code, .mono { font-family: "Cascadia Code", "Cascadia Mono", monospace; }
+    h1, h2, h3, h4 { margin: 0; line-height: 1.14; text-wrap: balance; }
+    h1 { max-width: 14ch; font-size: clamp(2.6rem, 7vw, 5.9rem); letter-spacing: -.045em; }
+    h2 { font-size: clamp(1.8rem, 3.5vw, 3rem); letter-spacing: -.03em; }
+    h3 { font-size: 1.35rem; letter-spacing: -.015em; }
+    h4 { font-size: 1rem; }
+    p { max-width: var(--measure); text-wrap: pretty; }
+    figure { margin: 0; }
+    img { max-width: 100%; display: block; }
+
+    .report-shell { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; }
+    .report-nav {
+      position: sticky; top: 0; align-self: start; height: 100vh; overflow: auto;
+      padding: 28px 22px; border-right: 1px solid var(--line); background: rgba(244,248,251,.96);
+    }
+    .report-nav .mark { display: flex; gap: 10px; align-items: center; font-weight: 700; color: var(--ink); }
+    .phase-mark { width: 34px; height: 34px; border-radius: 9px; background: var(--teal-soft); display: grid; place-items: center; }
+    .report-nav small { display: block; margin: 14px 0 24px; color: var(--muted); }
+    .report-nav ul { margin: 0; padding: 0; list-style: none; }
+    .report-nav li { margin: 3px 0; }
+    .report-nav a { display: block; padding: 8px 10px; color: var(--ink-2); text-decoration: none; border-radius: var(--radius-s); }
+    .report-nav a:hover { background: var(--mist); color: var(--ink); }
+
+    main { min-width: 0; }
+    .hero {
+      min-height: 690px; padding: clamp(42px, 7vw, 96px) clamp(28px, 7vw, 108px);
+      display: grid; align-content: center; position: relative; overflow: hidden;
+      background: linear-gradient(155deg, #fff 0%, #edf7fa 58%, #e3f2f2 100%);
+      border-bottom: 1px solid var(--line);
+    }
+    .hero::after {
+      content: ""; position: absolute; width: 55vw; height: 33vw; min-width: 640px; min-height: 380px;
+      right: -16vw; bottom: -14vw; opacity: .55;
+      background: radial-gradient(ellipse at center, transparent 31%, var(--teal) 31.3%, transparent 31.8%, transparent 40%, var(--blue) 40.3%, transparent 40.8%);
+      transform: rotate(-11deg); pointer-events: none;
+    }
+    .eyebrow { display: inline-flex; align-items: center; gap: 9px; color: var(--teal-deep); font-weight: 650; margin-bottom: 18px; }
+    .eyebrow::before { content: ""; width: 36px; height: 3px; background: var(--teal); border-radius: 3px; }
+    .hero p { font-size: 1.2rem; color: var(--ink-2); max-width: 62ch; }
+    .meta-row { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 28px; }
+    .pill { padding: 7px 11px; border-radius: 999px; background: rgba(255,255,255,.72); border: 1px solid var(--line); color: var(--ink-2); font-size: .9rem; }
+
+    .section { padding: 72px clamp(24px, 6vw, 92px); border-bottom: 1px solid var(--line); }
+    .section > header { display: grid; grid-template-columns: minmax(180px, .38fr) minmax(0, 1fr); gap: 48px; align-items: end; margin-bottom: 38px; }
+    .section > header p { color: var(--muted); margin: 0; }
+    .section-number { color: var(--teal); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .lede { font-size: 1.16rem; color: var(--ink-2); }
+
+    .decision-strip {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line);
+      border-radius: var(--radius-l); overflow: hidden; background: var(--sheet); box-shadow: var(--shadow);
+    }
+    .decision-strip > div { padding: 24px; border-right: 1px solid var(--line); }
+    .decision-strip > div:last-child { border: 0; }
+    .decision-strip strong { display: block; margin-bottom: 8px; }
+    .decision-strip span { color: var(--muted); font-size: .93rem; }
+
+    .rank-table, .requirements, .acceptance, .file-map { width: 100%; border-collapse: collapse; background: var(--sheet); }
+    table caption { text-align: left; padding: 0 0 12px; color: var(--muted); }
+    th, td { padding: 13px 15px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--mist); font-size: .83rem; color: var(--ink-2); letter-spacing: .02em; }
+    td { font-size: .94rem; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--sheet); }
+    .fit { color: var(--teal-deep); font-weight: 700; white-space: nowrap; }
+    .status-chip { display: inline-flex; align-items: center; padding: 5px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; }
+    .status-chip.pass { color: var(--teal-deep); background: var(--teal-soft); }
+    .status-chip.partial { color: var(--amber); background: var(--amber-soft); }
+    .implementation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+    .implementation-grid figure { padding: 14px; background: var(--sheet); border: 1px solid var(--line); border-radius: var(--radius-m); }
+    .implementation-grid img { border: 1px solid var(--line); border-radius: var(--radius-s); }
+    .implementation-grid figcaption { padding: 12px 2px 2px; color: var(--muted); font-size: .9rem; }
+
+    .audit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+    .audit-card { background: var(--sheet); border: 1px solid var(--line); border-radius: var(--radius-m); overflow: hidden; }
+    .audit-card header { padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
+    .audit-card header span { color: var(--muted); font-size: .86rem; }
+    .audit-card ul { margin: 0; padding: 18px 24px 22px 42px; color: var(--ink-2); }
+    .audit-card li + li { margin-top: 8px; }
+
+    .evidence { position: relative; background: #0c141c; border-radius: var(--radius-m); overflow: hidden; border: 1px solid var(--line-strong); }
+    .evidence img { width: 100%; height: auto; }
+    .marker { position: absolute; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--amber-soft); color: var(--amber); font-weight: 800; border: 2px solid #fff; box-shadow: 0 3px 10px rgba(0,0,0,.28); }
+    .viewer-evidence .m1 { top: 2%; right: 24%; }
+    .viewer-evidence .m2 { top: 12%; left: 8%; }
+    .viewer-evidence .m3 { top: 15%; left: 40%; }
+    .viewer-evidence .m4 { top: 62%; left: 10%; }
+    .viewer-evidence .m5 { top: 54%; left: 66%; }
+    .solver-evidence .m1 { top: 12%; left: 16%; }
+    .solver-evidence .m2 { top: 17%; left: 48%; }
+    .solver-evidence .m3 { top: 31%; left: 48%; }
+    .solver-evidence .m4 { top: 71%; left: 57%; }
+    .caption { padding: 13px 16px; color: var(--ink-2); background: var(--sheet); font-size: .88rem; border: 1px solid var(--line); border-top: 0; }
+    .callouts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; margin-top: 12px; }
+    .callout { font-size: .86rem; color: var(--ink-2); padding: 12px; background: var(--mist); border-radius: var(--radius-s); }
+    .callout b { color: var(--amber); }
+
+    .direction-grid { display: grid; grid-template-columns: .85fr 1.15fr; gap: 28px; align-items: start; }
+    .direction-note { border-left: 4px solid var(--teal); padding-left: 20px; }
+    .direction-note dl { display: grid; grid-template-columns: 110px 1fr; gap: 9px 14px; margin: 20px 0 0; }
+    dt { font-weight: 700; color: var(--ink); }
+    dd { margin: 0; color: var(--ink-2); }
+    .swatches { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .swatch { min-height: 118px; padding: 14px; border-radius: var(--radius-m); display: flex; flex-direction: column; justify-content: end; border: 1px solid rgba(19,33,43,.12); }
+    .swatch b, .swatch span { background: rgba(255,255,255,.85); width: fit-content; padding: 1px 5px; border-radius: 3px; }
+    .swatch span { font-size: .75rem; color: var(--ink-2); margin-top: 3px; }
+
+    .flow { display: grid; grid-template-columns: 1fr 54px 1fr; align-items: stretch; gap: 12px; }
+    .flow-pane { background: var(--sheet); border: 1px solid var(--line); border-radius: var(--radius-m); padding: 20px; }
+    .flow-pane h3 { margin-bottom: 14px; }
+    .flow-pane ul { margin: 0; padding-left: 20px; }
+    .flow-arrow { display: grid; place-items: center; color: var(--teal); font-size: 2rem; font-weight: 300; }
+    .mini-layout { margin-top: 18px; display: grid; gap: 4px; grid-template-columns: .55fr 1.5fr .7fr; min-height: 145px; }
+    .mini-layout span { display: grid; place-items: center; padding: 8px; text-align: center; background: var(--mist); color: var(--ink-2); border-radius: 4px; font-size: .8rem; }
+    .mini-layout .main { background: var(--teal-soft); color: var(--teal-deep); }
+
+    .mock-window { background: var(--paper); border: 1px solid var(--line-strong); border-radius: 13px; overflow: hidden; box-shadow: 0 26px 70px rgba(19,33,43,.18); }
+    .mock-titlebar { height: 35px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; background: #dbe7ed; border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: .78rem; }
+    .window-dots { display: flex; gap: 7px; }
+    .window-dots i { width: 9px; height: 9px; border-radius: 50%; background: #9fb4c2; }
+    .appbar { min-height: 58px; padding: 9px 14px; display: flex; align-items: center; gap: 16px; background: var(--sheet); border-bottom: 1px solid var(--line); }
+    .app-brand { display: flex; align-items: center; gap: 10px; min-width: 190px; }
+    .app-glyph { width: 32px; height: 32px; border-radius: 8px; background: var(--teal-soft); display: grid; place-items: center; color: var(--teal); font-size: 1.25rem; }
+    .app-brand b { display: block; line-height: 1.1; }
+    .app-brand small { color: var(--muted); }
+    .app-tabs { display: flex; align-self: stretch; gap: 2px; }
+    .app-tab { display: grid; place-items: center; min-width: 82px; padding: 0 12px; color: var(--muted); border-bottom: 3px solid transparent; font-weight: 600; }
+    .app-tab.active { color: var(--teal-deep); border-bottom-color: var(--teal); }
+    .app-actions { margin-left: auto; display: flex; gap: 7px; align-items: center; }
+    .button { min-height: 36px; padding: 0 13px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line-strong); border-radius: var(--radius-s); background: var(--sheet); color: var(--ink); font-weight: 650; font-size: .8rem; }
+    .button.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .button.tonal { background: var(--teal-soft); color: var(--teal-deep); border-color: #9bdad4; }
+    .icon-button { width: 38px; height: 38px; padding: 0; font-size: 1rem; }
+    .mock-body.solver { display: grid; grid-template-columns: 242px minmax(420px, 1fr) 274px; min-height: 620px; }
+    .mock-body.viewer { display: grid; grid-template-columns: 304px minmax(600px, 1fr); min-height: 660px; }
+    .rail { padding: 14px; background: #edf4f7; border-right: 1px solid var(--line); }
+    .rail-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .rail-title b { font-size: .9rem; }
+    .search { height: 36px; border: 1px solid var(--line-strong); background: var(--sheet); color: var(--muted); border-radius: var(--radius-s); padding: 7px 10px; margin-bottom: 10px; font-size: .78rem; }
+    .sortbar { display: flex; gap: 6px; margin-bottom: 11px; }
+    .sortbar .icon-button { width: 34px; height: 34px; min-height: 34px; background: var(--sheet); }
+    .sortbar .selected { background: var(--teal-soft); color: var(--teal-deep); border-color: #8acfc8; }
+    .tree { display: grid; gap: 3px; font-size: .77rem; }
+    .tree-row { min-height: 28px; display: flex; align-items: center; gap: 6px; border-radius: 5px; padding: 4px 7px; color: var(--ink-2); }
+    .tree-row.branch { font-weight: 700; color: var(--ink); }
+    .tree-row.indent-1 { padding-left: 19px; }
+    .tree-row.indent-2 { padding-left: 34px; }
+    .tree-row.indent-3 { padding-left: 49px; }
+    .tree-row.indent-4 { padding-left: 64px; }
+    .tree-row.active { background: var(--teal-soft); color: var(--teal-deep); font-weight: 700; box-shadow: inset 3px 0 var(--teal); }
+    .tree-row .count { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .center { min-width: 0; padding: 16px 18px 80px; background: var(--paper); }
+    .context-head { display: flex; align-items: start; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
+    .context-head small { display: block; color: var(--muted); margin-bottom: 2px; }
+    .context-head h3 { font-size: 1.2rem; }
+    .stagebar { display: flex; gap: 5px; padding: 5px; background: var(--mist); border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
+    .stagebar span { flex: 1; text-align: center; padding: 7px 9px; border-radius: 5px; color: var(--muted); font-size: .73rem; font-weight: 600; white-space: nowrap; }
+    .stagebar .active { background: var(--sheet); color: var(--teal-deep); box-shadow: 0 1px 3px rgba(19,33,43,.10); }
+    .surface { background: var(--sheet); border: 1px solid var(--line); border-radius: var(--radius-m); overflow: hidden; }
+    .surface + .surface { margin-top: 12px; }
+    .surface-head { padding: 13px 15px 9px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; }
+    .surface-head b { font-size: .88rem; }
+    .surface-head small { color: var(--muted); }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; padding: 14px; }
+    .field label { display: block; color: var(--muted); font-size: .72rem; margin-bottom: 4px; }
+    .control { min-height: 36px; padding: 7px 9px; background: #f7fafc; border: 1px solid var(--line-strong); border-radius: 5px; font-size: .79rem; display: flex; align-items: center; justify-content: space-between; }
+    .parameter-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 5px 14px 12px; }
+    .parameter { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; padding: 8px 4px; border-bottom: 1px solid #e5edf2; font-size: .77rem; }
+    .parameter .symbol { color: var(--teal-deep); font-family: "Cambria Math", serif; font-style: italic; }
+    .parameter .unit { color: var(--muted); }
+    .review-rail { padding: 14px; background: var(--sheet); border-left: 1px solid var(--line); }
+    .review-rail h4 { margin: 4px 0 12px; }
+    .ready { display: flex; gap: 8px; align-items: center; padding: 10px; background: var(--teal-soft); color: var(--teal-deep); border-radius: 7px; font-size: .79rem; font-weight: 650; }
+    .summary-list { margin: 14px 0; }
+    .summary-row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: .75rem; }
+    .summary-row span { color: var(--muted); }
+    .sticky-actions { position: absolute; left: 242px; right: 274px; bottom: 0; min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 18px; background: rgba(255,255,255,.95); border-top: 1px solid var(--line); }
+    .solver-wrap { position: relative; }
+
+    .viewer-center { min-width: 0; background: var(--paper); }
+    .viewer-context { padding: 12px 16px 10px; background: var(--sheet); border-bottom: 1px solid var(--line); }
+    .breadcrumb { color: var(--muted); font-size: .7rem; }
+    .viewer-context-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 4px; }
+    .viewer-context-row h3 { font-size: 1.08rem; }
+    .workspace-tabs { display: flex; gap: 16px; height: 38px; align-items: end; padding: 0 16px; background: var(--sheet); }
+    .workspace-tabs span { height: 38px; padding: 9px 2px 7px; color: var(--muted); font-size: .78rem; font-weight: 650; border-bottom: 3px solid transparent; }
+    .workspace-tabs .active { color: var(--teal-deep); border-bottom-color: var(--teal); }
+    .viewer-tools { min-height: 47px; padding: 7px 16px; display: flex; gap: 7px; align-items: center; background: var(--sheet); border-bottom: 1px solid var(--line); }
+    .viewer-tools .spacer { flex: 1; }
+    .select { min-width: 148px; }
+    .plot-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; padding: 12px; }
+    .plot-card { min-height: 224px; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 10px; position: relative; }
+    .plot-title { display: flex; justify-content: space-between; font-size: .7rem; color: var(--ink-2); margin-bottom: 5px; }
+    .plot-card svg { width: 100%; height: 180px; display: block; }
+    .plot-gridline { stroke: #dbe5eb; stroke-width: 1; }
+    .plot-axis { stroke: #91a8b8; stroke-width: 1.2; }
+    .plot-curve { fill: none; stroke: #0b8f86; stroke-width: 2.5; stroke-linejoin: round; }
+    .plot-curve-blue { fill: none; stroke: #0b6fbf; stroke-width: 2.2; }
+    .plot-curve-red { fill: none; stroke: #c73e45; stroke-width: 1.8; stroke-dasharray: 5 5; }
+    .inspector-drawer { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .inspector-drawer .summary-row { padding: 6px 0; }
+
+    .requirements td:first-child, .acceptance td:first-child { font-family: "Cascadia Mono", monospace; color: var(--teal-deep); font-weight: 700; white-space: nowrap; }
+    .priority { display: inline-block; min-width: 42px; padding: 3px 7px; border-radius: 999px; text-align: center; font-size: .72rem; font-weight: 700; }
+    .p0 { background: var(--red-soft); color: #972d33; }
+    .p1 { background: var(--amber-soft); color: var(--amber); }
+    .p2 { background: var(--blue-soft); color: #075d9f; }
+
+    .plan { position: relative; padding-left: 28px; }
+    .plan::before { content: ""; position: absolute; top: 8px; bottom: 8px; left: 7px; width: 2px; background: var(--mist-2); }
+    .phase { position: relative; padding: 0 0 28px 24px; }
+    .phase::before { content: ""; position: absolute; left: -27px; top: 6px; width: 14px; height: 14px; background: var(--sheet); border: 3px solid var(--teal); border-radius: 50%; }
+    .phase h3 { display: flex; align-items: center; gap: 12px; }
+    .phase h3 span { color: var(--muted); font-size: .78rem; font-weight: 500; }
+    .phase p { color: var(--ink-2); margin: 8px 0; }
+    .phase ul { margin: 8px 0 0; padding-left: 19px; color: var(--ink-2); }
+
+    .review-box { padding: 24px; background: var(--amber-soft); border-left: 5px solid #d27a16; border-radius: 0 var(--radius-m) var(--radius-m) 0; }
+    .review-box h3 { margin-bottom: 10px; }
+    .questions { counter-reset: question; display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-top: 20px; }
+    .question { counter-increment: question; padding: 18px; background: var(--sheet); border: 1px solid #e6c58c; border-radius: var(--radius-m); }
+    .question::before { content: "Decision " counter(question); display: block; color: var(--amber); font-size: .76rem; font-weight: 700; margin-bottom: 6px; }
+    .question b { display: block; margin-bottom: 5px; }
+
+    footer { padding: 36px clamp(24px, 6vw, 92px) 60px; color: var(--muted); background: var(--mist); }
+    footer p { margin: 0; }
+
+    @media (max-width: 1100px) {
+      .report-shell { grid-template-columns: 1fr; }
+      .report-nav { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .report-nav ul { display: flex; flex-wrap: wrap; gap: 3px; }
+      .section > header { grid-template-columns: 1fr; gap: 14px; }
+      .decision-strip { grid-template-columns: repeat(2, 1fr); }
+      .decision-strip > div:nth-child(2) { border-right: 0; }
+      .decision-strip > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      .audit-grid, .direction-grid, .implementation-grid { grid-template-columns: 1fr; }
+      .mock-window { overflow-x: auto; }
+      .solver-wrap, .mock-window .viewer-shell { min-width: 980px; }
+    }
+    @media (max-width: 720px) {
+      .hero { min-height: 560px; }
+      .decision-strip, .swatches, .questions { grid-template-columns: 1fr; }
+      .decision-strip > div { border-right: 0; border-bottom: 1px solid var(--line); }
+      .flow { grid-template-columns: 1fr; }
+      .flow-arrow { transform: rotate(90deg); }
+      .callouts { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    @media print {
+      .report-nav { display: none; }
+      .report-shell { display: block; }
+      .section { break-inside: avoid; }
+      .mock-window { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="report-shell">
+    <nav class="report-nav" aria-label="Report sections">
+      <div class="mark"><span class="phase-mark" aria-hidden="true">∿</span><span>DynSysLab UI PRD</span></div>
+      <small>Implemented baseline + PRD<br>14 September 2026</small>
+      <ul>
+        <li><a href="#recommendation">Recommendation</a></li>
+        <li><a href="#delivery">Delivery evidence</a></li>
+        <li><a href="#skills">Skills used</a></li>
+        <li><a href="#audit">Before-state audit</a></li>
+        <li><a href="#direction">Design direction</a></li>
+        <li><a href="#architecture">Information architecture</a></li>
+        <li><a href="#solver">Solver concept</a></li>
+        <li><a href="#viewer">Viewer concept</a></li>
+        <li><a href="#requirements">Detailed PRD</a></li>
+        <li><a href="#plan">Refactor plan</a></li>
+        <li><a href="#acceptance">Acceptance gates</a></li>
+        <li><a href="#review">Human decisions</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      <header class="hero" id="recommendation">
+        <span class="eyebrow">Product requirements and refactor plan</span>
+        <h1>A luminous workbench for dynamical systems.</h1>
+        <p>The approved light scientific workbench is now implemented as the production baseline for Solver and Viewer. This report is the product-requirements record, implementation map, before/after evidence, and acceptance ledger for continued refinement.</p>
+        <div class="meta-row">
+          <span class="pill">Status: implemented baseline</span>
+          <span class="pill">Default: light scientific theme</span>
+          <span class="pill">Target: WCAG 2.2 AA</span>
+          <span class="pill">Architecture: native Win32/GDI+</span>
+        </div>
+      </header>
+
+      <section class="section">
+        <header>
+          <div><span class="section-number">00</span><h2>Recommendation at a glance</h2></div>
+          <p class="lede">Refactor the shared visual language first, then reorganize each workbench around its primary task. Preserve every scientific and archive boundary.</p>
+        </header>
+        <div class="decision-strip">
+          <div><strong>Light is the default</strong><span>Pale blue-gray canvas, white working surfaces, navy text, restrained scientific color.</span></div>
+          <div><strong>One focal task</strong><span>Solver culminates in review/run. Viewer culminates in the active scientific figure.</span></div>
+          <div><strong>Context stays nearby</strong><span>Selection identity, provenance, validation, and actions move beside the work they explain.</span></div>
+          <div><strong>Progressive disclosure</strong><span>Frequent controls stay visible; rare archive/file actions move into compact menus or drawers.</span></div>
+        </div>
+        <p class="lede" style="margin-top:28px">The current palette has respectable nominal contrast, but perceived visibility is reduced by a nearly black shell, weak separation among dark surfaces, dense horizontal chrome, and a jarring transition to white plots. The answer is not merely brighter cyan. It is a coherent light surface hierarchy with fewer simultaneous choices.</p>
+      </section>
+
+      <section class="section" id="delivery">
+        <header>
+          <div><span class="section-number">00A</span><h2>Delivered implementation</h2></div>
+          <p>These are native hidden-workbench captures of the rebuilt executables against the real archive—not browser mockups. The implementation preserves scientific services, job schemas, archive identity, plots, and read-only Viewer behavior.</p>
+        </header>
+        <div class="decision-strip" style="margin-bottom:28px">
+          <div><strong>Shared daylight theme</strong><span>Semantic lab-paper, mist, graphite, teal, cobalt, red, and amber tokens now drive both applications.</span></div>
+          <div><strong>Viewer is tree-first</strong><span>Search and icon-only leaf sort sit above a larger tree; compact details sit below; selected context leads the canvas.</span></div>
+          <div><strong>Solver is staged</strong><span>System, ICs, Control, Integrator, and Review form a visible workflow with persistent plan/run actions.</span></div>
+          <div><strong>Keyboard states</strong><span>Shared controls are tab stops, owner-drawn actions expose strong focus, and icon utilities have names plus tooltips.</span></div>
+        </div>
+        <div class="implementation-grid">
+          <figure>
+            <img src="assets/implemented/solver-main.png" alt="Implemented light DynSysLab Solver with job explorer, five-stage workflow, system parameter editor, persistent review actions, and review rail.">
+            <figcaption><strong>Solver after refactor.</strong> Five-stage setup, a cobalt Run &amp; archive action, grouped header utilities, and a named review/provenance rail. Hidden check: 1,668 archive objects; workflow ordered; all five stages keyboard-focusable; panes non-overlapping; seven tooltips.</figcaption>
+          </figure>
+          <figure>
+            <img src="assets/implemented/viewer-main.png" alt="Implemented light DynSysLab Viewer with tree-first archive rail, icon-only sort controls, selected training-set context, compact inspector, and four scientific plots.">
+            <figcaption><strong>Viewer after refactor.</strong> The newest forced training set is selected by default; sort applies to leaves only; IC/EC annotations sit beside their phase points. Hidden check: 1,998 presented items, 2,004 nodes, 24 observable figures, workspace-state restoration, tooltips, and default date sort all passed.</figcaption>
+          </figure>
+        </div>
+        <div class="table-wrap" style="margin-top:28px"><table><thead><tr><th>Acceptance area</th><th>Status</th><th>Evidence in this delivery</th></tr></thead><tbody>
+          <tr><td>Visual system</td><td><span class="status-chip pass">PASS</span></td><td>One shared native token source; WCAG contrast contract test; light Windows title/control theming; preserved plot palette.</td></tr>
+          <tr><td>Viewer hierarchy</td><td><span class="status-chip pass">PASS</span></td><td>Training-data default, forced/free branches, compact leaves, selected context, tree-first rail, and icon-only leaf sorting verified by background check.</td></tr>
+          <tr><td>Solver workflow</td><td><span class="status-chip pass">PASS</span></td><td>Five ordered stage controls, persistent validation/run actions, wide review rail, and narrow output drawer verified by native geometry check.</td></tr>
+          <tr><td>Build and installation</td><td><span class="status-chip pass">PASS</span></td><td>All 94 native tests pass; focused Solver, Viewer, and design-contract suites pass; rebuilt installed Solver and Viewer executables each pass their hidden-workbench check.</td></tr>
+          <tr><td>Keyboard and names</td><td><span class="status-chip partial">BASELINE</span></td><td>Tab stops, visible cobalt focus, descriptive native window text, and tooltips implemented. A full external Windows UI Automation screen-reader audit remains a release follow-up.</td></tr>
+          <tr><td>DPI and usability</td><td><span class="status-chip partial">REVIEW</span></td><td>DPI-scaled metrics and real desktop captures pass. The complete 100/150/200% matrix and moderated scientist task study remain human-review gates.</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section class="section" id="skills">
+        <header>
+          <div><span class="section-number">01</span><h2>Skills selected and applied</h2></div>
+          <p>skills.sh exposes installs, repository popularity, recency, and security-audit signals rather than a single star rating. Candidates were therefore ranked by relevant adoption and fit.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="rank-table">
+            <caption>Installed before planning; metrics observed 14 September 2026.</caption>
+            <thead><tr><th>Rank</th><th>Skill</th><th>Adoption signal</th><th>Applied contribution</th><th>Fit</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td><a href="https://www.skills.sh/anthropics/skills/frontend-design">frontend-design</a></td><td>884.7K installs · 176.1K repository stars · all listed audits pass</td><td>Domain-specific visual direction, intentional type/color, disciplined motion, non-generic report and mockup craft.</td><td class="fit">Excellent</td></tr>
+              <tr><td>2</td><td><a href="https://www.skills.sh/dammyjay93/interface-design/interface-design">interface-design</a></td><td>26.4K installs · 5.7K repository stars</td><td>Data-dense hierarchy, one focal point per view, semantic tokens, spacing/depth system, state completeness.</td><td class="fit">Excellent</td></tr>
+              <tr><td>3</td><td><a href="https://www.skills.sh/affaan-m/ecc/accessibility">accessibility</a></td><td>3.1K installs · 255.9K repository stars · all listed audits pass</td><td>WCAG 2.2 AA contrast, focus, target size, keyboard operation, accessible names, live status and error guidance.</td><td class="fit">Required</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><strong>Considered but not used:</strong> Penpot UI/UX Design has strong adoption, but its external Penpot/MCP dependency does not improve this native planning deliverable. Framework-specific React/Vercel skills were excluded because DynSysLab is Windows-native C++17, Win32, and GDI+.</p>
+        <p><strong>Standards basis:</strong> measurable accessibility requirements follow the W3C guidance for <a href="https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html">text contrast</a>, <a href="https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html">non-text contrast</a>, <a href="https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html">target size</a>, and <a href="https://www.w3.org/WAI/WCAG22/Understanding/focus-appearance.html">focus appearance</a>, adapted to native Windows controls and UI Automation.</p>
+      </section>
+
+      <section class="section" id="audit">
+        <header>
+          <div><span class="section-number">02</span><h2>Before-state evidence</h2></div>
+          <p>The Viewer image was painted by the installed native workbench’s hidden capture path against the real archive. The Solver image is retained native render evidence from 6 September and is cross-checked against the current theme and layout source.</p>
+        </header>
+
+        <h3 style="margin-bottom:14px">Viewer: current installed workbench</h3>
+        <figure>
+          <div class="evidence viewer-evidence">
+            <img src="assets/current/workspace-main.png" alt="Current DynSysLab Viewer with a dark shell, context pane and data tree at left, dense toolbars across the top, and four white plot panels.">
+            <span class="marker m1">1</span><span class="marker m2">2</span><span class="marker m3">3</span><span class="marker m4">4</span><span class="marker m5">5</span>
+          </div>
+          <figcaption class="caption">Authentic hidden-workbench capture from the installed Viewer, 14 September 2026.</figcaption>
+        </figure>
+        <div class="callouts">
+          <div class="callout"><b>1</b> Seven equal-weight header actions flatten priority.</div>
+          <div class="callout"><b>2</b> Inspector consumes the upper half of the navigation rail.</div>
+          <div class="callout"><b>3</b> Workspace, view, page, drag, coordinate, and scale controls form several competing rows.</div>
+          <div class="callout"><b>4</b> The tree is structurally good but vertically constrained and visually low-energy.</div>
+          <div class="callout"><b>5</b> White plots are clear in isolation but visually detach from the nearly black workbench.</div>
+        </div>
+
+        <h3 style="margin:42px 0 14px">Solver: current native system panel</h3>
+        <figure>
+          <div class="evidence solver-evidence">
+            <img src="assets/current/solver-system-current.png" alt="Current DynSysLab Solver and Post-processor showing a dark interface with job hierarchy, wide action toolbar, system and preset fields, and a dense parameter book.">
+            <span class="marker m1">1</span><span class="marker m2">2</span><span class="marker m3">3</span><span class="marker m4">4</span>
+          </div>
+          <figcaption class="caption">Current native render evidence. The screenshot predates this report by eight days; current source retains the same shared dark tokens, pane structure, and system-book composition.</figcaption>
+        </figure>
+        <div class="callouts" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+          <div class="callout"><b>1</b> The proposed-job tree is useful, but its selection and action hierarchy compete with the editor.</div>
+          <div class="callout"><b>2</b> Utility actions span the header with little frequency-based grouping.</div>
+          <div class="callout"><b>3</b> System/preset and mode navigation do not establish a strong task sequence.</div>
+          <div class="callout"><b>4</b> The parameter book is information-rich but clipped/dense at common widths.</div>
+        </div>
+
+        <div class="audit-grid" style="margin-top:38px">
+          <article class="audit-card"><header><h3>What should remain</h3><span>Product knowledge</span></header><ul><li>Native controls, DPI-aware metrics, and asynchronous work.</li><li>Solver job hierarchy and Viewer's provenance-backed data tree.</li><li>White scientific plots and precise mathematical typesetting.</li><li>Separate Solver/Post-processor and Viewer executable responsibilities.</li><li>Resizable panes and immutable archive behavior.</li></ul></article>
+          <article class="audit-card"><header><h3>What should change</h3><span>Presentation debt</span></header><ul><li>Dark-by-default shell and weak dark-surface differentiation.</li><li>Equal visual weight for primary and rare actions.</li><li>Inspector/tree competition and repeated context.</li><li>Large multi-row toolbar footprint in Viewer.</li><li>Small targets, understated focus, clipping, and missing state standards.</li></ul></article>
+        </div>
+      </section>
+
+      <section class="section" id="direction">
+        <header>
+          <div><span class="section-number">03</span><h2>Design direction</h2></div>
+          <p>The visual identity should feel like a well-lit computational laboratory: precise and technical, but not terminal-like or austere.</p>
+        </header>
+        <div class="direction-grid">
+          <div class="direction-note">
+            <h3>Luminous computational workbench</h3>
+            <dl>
+              <dt>Domain</dt><dd>Phase portraits, trajectories, spectra, experimental runs, operators, observables, provenance, control loops.</dd>
+              <dt>Color world</dt><dd>Laboratory paper, instrument enamel, blueprint cyan, oscilloscope teal, cobalt focus, red reference ink, amber warning lamp.</dd>
+              <dt>Signature</dt><dd>A restrained phase-trajectory line marks active context: tab underline, selected tree rail, progress path, and plot-selection affordance.</dd>
+              <dt>Rejecting</dt><dd>Generic card dashboard → continuous workbench panes; terminal darkness → daylight laboratory surfaces; decorative rainbow → scientific/status color only.</dd>
+              <dt>Density</dt><dd>Workbench-tight: 4px base unit, 12–16px pane padding, 32–36px visible controls, 40px preferred icon targets.</dd>
+              <dt>Depth</dt><dd>Surface-color shifts plus restrained borders. Shadows only for floating menus/dialogs.</dd>
+            </dl>
+          </div>
+          <div>
+            <div class="swatches" aria-label="Proposed color palette">
+              <div class="swatch" style="background:#f4f8fb"><b>Lab paper</b><span>#F4F8FB</span></div>
+              <div class="swatch" style="background:#e8f1f6"><b>Instrument mist</b><span>#E8F1F6</span></div>
+              <div class="swatch" style="background:#13212b;color:#fff"><b style="color:#13212b">Graphite ink</b><span>#13212B</span></div>
+              <div class="swatch" style="background:#d6f4f0"><b>Trace selection</b><span>#D6F4F0</span></div>
+              <div class="swatch" style="background:#0b7d75;color:#fff"><b style="color:#13212b">Oscilloscope teal</b><span>#0B7D75</span></div>
+              <div class="swatch" style="background:#0b6fbf;color:#fff"><b style="color:#13212b">Focus cobalt</b><span>#0B6FBF</span></div>
+              <div class="swatch" style="background:#fdebed"><b>Reference red</b><span>#C73E45</span></div>
+              <div class="swatch" style="background:#fff4dd"><b>Warning amber</b><span>#A34F00</span></div>
+            </div>
+            <div class="table-wrap" style="margin-top:12px">
+              <table><thead><tr><th>Pair</th><th>Contrast</th><th>Use</th></tr></thead><tbody>
+                <tr><td>Graphite / Lab paper</td><td>15.36:1</td><td>Primary text</td></tr>
+                <tr><td>Muted / White</td><td>5.88:1</td><td>Supporting text</td></tr>
+                <tr><td>Cobalt / White</td><td>5.20:1</td><td>Actions and visible focus</td></tr>
+                <tr><td>Deep teal / Trace selection</td><td>6.55:1</td><td>Selected context</td></tr>
+                <tr><td>Reference red / White</td><td>5.00:1</td><td>IC, EC, destructive/error cues</td></tr>
+              </tbody></table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="architecture">
+        <header>
+          <div><span class="section-number">04</span><h2>Information architecture</h2></div>
+          <p>Rearrangement is intentionally a presentation refactor. It does not alter job JSON, numerical services, archive identity, or the scientific tree model.</p>
+        </header>
+        <div class="flow">
+          <div class="flow-pane"><h3>Current shell</h3><ul><li>Many global actions in one horizontal strip</li><li>Navigation / editor / inspector all permanently visible</li><li>Settings grouped mostly by implementation surface</li><li>Status, progress, and validation separated from next action</li></ul><div class="mini-layout"><span>Tree</span><span class="main">Editor + toolbars</span><span>Inspector / output</span></div></div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-pane"><h3>Proposed shell</h3><ul><li>App mode and identity in header</li><li>Contextual actions beside current object</li><li>Frequent task sequence in center workspace</li><li>Review/provenance rail collapses at constrained widths</li></ul><div class="mini-layout"><span>Explorer</span><span class="main">Focused scientific work</span><span>Context / review</span></div></div>
+        </div>
+        <div class="audit-grid" style="margin-top:24px">
+          <article class="audit-card"><header><h3>Solver task model</h3><span>Configure → validate → run</span></header><ul><li>Application modes: <strong>Solve</strong> and <strong>Post-process</strong>.</li><li>Setup stages: System, ICs, Control, Integrator, Review.</li><li>Job hierarchy remains the left source of scope and ownership.</li><li>Validation summary and execution output share the right review rail.</li><li>Plan and Run &amp; archive remain visible in one sticky action area.</li></ul></article>
+          <article class="audit-card"><header><h3>Viewer task model</h3><span>Orient → inspect → compare/export</span></header><ul><li>Data tree receives most of the left rail by default.</li><li>Inspector becomes a resizable Details/Lineage drawer below the tree.</li><li>Selected-object breadcrumb and short label lead the center workspace.</li><li>View, workspace, plot manipulation, scale, and coordinates become one compact contextual bar.</li><li>Rare export/help actions move to a stable utility group.</li></ul></article>
+        </div>
+      </section>
+
+      <section class="section" id="solver">
+        <header>
+          <div><span class="section-number">05</span><h2>Solver concept</h2></div>
+          <p>This is an impression of the intended hierarchy, density, and palette—not a final component design.</p>
+        </header>
+        <div class="mock-window solver-wrap" role="img" aria-label="Conceptual light-theme Solver layout with job explorer, focused system setup, review rail, and sticky validation and run actions.">
+          <div class="mock-titlebar"><span>DynSysLab Solver and Post-processor</span><span class="window-dots"><i></i><i></i><i></i></span></div>
+          <div class="appbar">
+            <div class="app-brand"><span class="app-glyph">∿</span><div><b>DynSysLab</b><small>Solver</small></div></div>
+            <div class="app-tabs"><span class="app-tab active">Solve</span><span class="app-tab">Post-process</span></div>
+            <div class="app-actions"><span class="button">Open</span><span class="button">Save</span><span class="button icon-button" aria-label="More tools">•••</span></div>
+          </div>
+          <div class="mock-body solver">
+            <aside class="rail">
+              <div class="rail-title"><b>Job explorer</b><span class="button icon-button">＋</span></div>
+              <div class="tree">
+                <div class="tree-row branch">⌄ Batch 1 <span class="count">1 system</span></div>
+                <div class="tree-row branch indent-1 active">⌄ Bubble · air in water</div>
+                <div class="tree-row indent-2">⌄ IC set #1 <span class="count">1</span></div>
+                <div class="tree-row indent-3">IC #1</div>
+              </div>
+            </aside>
+            <section class="center">
+              <div class="context-head"><div><small>Batch 1 / Bubble · air in water</small><h3>System setup</h3></div><span class="button tonal">Default preset</span></div>
+              <div class="stagebar"><span class="active">System</span><span>Initial conditions</span><span>Control</span><span>Integrator</span><span>Review</span></div>
+              <div class="surface">
+                <div class="surface-head"><b>Dynamical system</b><small>Physical realization</small></div>
+                <div class="form-grid"><div class="field"><label>System</label><div class="control">Rayleigh–Plesset <span>⌄</span></div></div><div class="field"><label>Parameter preset</label><div class="control">Air in water · 20 °C <span>⌄</span></div></div></div>
+              </div>
+              <div class="surface">
+                <div class="surface-head"><b>Physical and model parameters</b><small>6 values · click to edit</small></div>
+                <div class="parameter-list">
+                  <div class="parameter"><span class="symbol">p₀</span><b>1 × 10⁵</b><span class="unit">Pa</span></div>
+                  <div class="parameter"><span class="symbol">μL</span><b>0.001</b><span class="unit">Pa s</span></div>
+                  <div class="parameter"><span class="symbol">R₀</span><b>1 × 10⁻⁵</b><span class="unit">m</span></div>
+                  <div class="parameter"><span class="symbol">ρL</span><b>998</b><span class="unit">kg/m³</span></div>
+                  <div class="parameter"><span class="symbol">κ</span><b>1.3333</b><span class="unit">—</span></div>
+                  <div class="parameter"><span class="symbol">σ</span><b>0.072</b><span class="unit">N/m</span></div>
+                </div>
+              </div>
+              <div class="surface"><div class="surface-head"><b>Derived scales</b><small>Collapsed summary · 4 values</small></div></div>
+            </section>
+            <aside class="review-rail">
+              <h4>Review</h4><div class="ready">✓ Ready to validate</div>
+              <div class="summary-list"><div class="summary-row"><span>System</span><b>RPE</b></div><div class="summary-row"><span>Trajectories</span><b>1</b></div><div class="summary-row"><span>Forcing</span><b>Free</b></div><div class="summary-row"><span>Coordinates</span><b>Automatic</b></div><div class="summary-row"><span>Solver</span><b>BDF</b></div></div>
+              <h4>Checks</h4><p style="font-size:.76rem;color:var(--muted)">No validation issues. Plan will estimate resources without executing.</p>
+            </aside>
+          </div>
+          <div class="sticky-actions"><span style="color:var(--muted);font-size:.76rem">Unsaved changes · no computation running</span><div style="display:flex;gap:8px"><span class="button">Plan / validate</span><span class="button primary">Run &amp; archive</span></div></div>
+        </div>
+        <p><strong>Key rearrangement:</strong> system definition and the parameter book remain in the center, but a five-stage setup strip establishes progress; validation moves into a persistent review rail; the destructive/material action “Run &amp; archive” is visually singular; queue, archive maintenance, import, and help move out of the primary task line.</p>
+      </section>
+
+      <section class="section" id="viewer">
+        <header>
+          <div><span class="section-number">06</span><h2>Viewer concept</h2></div>
+          <p>The data tree stays conceptually structured and leaf-sorted exactly as specified. The improvement is vertical priority, context placement, and toolbar consolidation.</p>
+        </header>
+        <div class="mock-window viewer-shell" role="img" aria-label="Conceptual light-theme Viewer with a larger data tree, compact inspector drawer, contextual toolbar, and integrated two-by-two plot dashboard.">
+          <div class="mock-titlebar"><span>DynSysLab Viewer</span><span class="window-dots"><i></i><i></i><i></i></span></div>
+          <div class="appbar"><div class="app-brand"><span class="app-glyph">λ</span><div><b>DynSysLab</b><small>Viewer</small></div></div><div class="app-actions"><span class="button">Post-process</span><span class="button icon-button" aria-label="Export">⇧</span><span class="button icon-button" aria-label="Help">?</span></div></div>
+          <div class="mock-body viewer">
+            <aside class="rail">
+              <div class="rail-title"><b>Data library</b><span style="font-size:.72rem;color:var(--muted)">2,224 files</span></div>
+              <div class="search">Search labels, physics, provenance…</div>
+              <div class="sortbar" aria-label="Leaf sorting"><span class="button icon-button selected" title="Date">◷</span><span class="button icon-button" title="Trajectories">∿</span><span class="button icon-button" title="Data size">▤</span><span style="margin-left:auto" class="button icon-button" title="Refresh">↻</span></div>
+              <div class="tree">
+                <div class="tree-row branch">⌄ Data</div>
+                <div class="tree-row branch indent-1">⌄ Bubble</div>
+                <div class="tree-row branch indent-2">⌄ Air in water</div>
+                <div class="tree-row branch indent-3">⌄ Training data</div>
+                <div class="tree-row branch indent-4">⌄ Forced <span class="count">67</span></div>
+                <div class="tree-row active" style="padding-left:79px">Training set #67</div>
+                <div class="tree-row" style="padding-left:79px">Training set #66</div>
+                <div class="tree-row" style="padding-left:79px">Training set #65</div>
+                <div class="tree-row branch indent-3">› Models &amp; assets</div>
+                <div class="tree-row branch indent-3">› Control &amp; estimation</div>
+              </div>
+              <div class="inspector-drawer"><div class="rail-title"><b>Details</b><span>⌃</span></div><div class="summary-row"><span>Type</span><b>Training data</b></div><div class="summary-row"><span>System</span><b>RPE</b></div><div class="summary-row"><span>Forcing</span><b>Periodic</b></div><div class="summary-row"><span>Coordinates</span><b>Dimensionless</b></div><div style="display:flex;gap:10px;font-size:.73rem"><a href="#viewer">Lineage</a><a href="#viewer">Properties</a></div></div>
+            </aside>
+            <section class="viewer-center">
+              <div class="viewer-context"><div class="breadcrumb">Bubble / Air in water / Training data / Forced</div><div class="viewer-context-row"><h3>Training set #67</h3><span style="font-size:.72rem;color:var(--muted)">4 views · 25,001 samples</span></div></div>
+              <div class="workspace-tabs"><span class="active">Main</span><span>Observables</span><span>Phase context</span></div>
+              <div class="viewer-tools"><span class="control select">Data overview <span>⌄</span></span><span class="button tonal">Move plots</span><span class="button">Pan curves</span><span class="button">＋ Panel</span><span class="spacer"></span><span class="button">Dimensionless</span><span class="button icon-button" title="Scale">↕</span><span class="button icon-button" title="Axes">⌗</span><span class="button icon-button" title="Compare">≋</span></div>
+              <div class="plot-grid">
+                <div class="plot-card"><div class="plot-title"><b>Control input</b><span>u₀</span></div><svg viewBox="0 0 360 180" aria-hidden="true"><path class="plot-gridline" d="M35 30H350M35 80H350M35 130H350M95 15V160M175 15V160M255 15V160"/><path class="plot-axis" d="M35 15V160H350"/><path class="plot-curve" d="M35 90 C45 22 55 150 65 89 S85 20 95 90 S115 155 125 88 S145 20 155 90 S175 150 185 88 S205 27 215 90 S235 148 245 88 S265 30 275 90 S295 145 305 89 S325 33 340 89"/></svg></div>
+                <div class="plot-card"><div class="plot-title"><b>Radius</b><span>r</span></div><svg viewBox="0 0 360 180" aria-hidden="true"><path class="plot-gridline" d="M35 30H350M35 80H350M35 130H350M95 15V160M175 15V160M255 15V160"/><path class="plot-axis" d="M35 15V160H350"/><path class="plot-curve" d="M35 95 C47 10 58 150 71 90 S96 17 108 89 S132 143 145 90 S170 25 182 89 S207 136 220 91 S245 30 258 88 S283 132 296 90 S320 35 342 87"/></svg></div>
+                <div class="plot-card"><div class="plot-title"><b>Radial velocity</b><span>dr/dτ</span></div><svg viewBox="0 0 360 180" aria-hidden="true"><path class="plot-gridline" d="M35 30H350M35 80H350M35 130H350M95 15V160M175 15V160M255 15V160"/><path class="plot-axis" d="M35 15V160H350"/><path class="plot-curve-blue" d="M35 80 C48 22 58 155 71 78 S95 20 108 80 S132 148 145 79 S170 25 182 80 S207 141 220 79 S245 32 258 80 S283 137 296 80 S320 36 342 82"/></svg></div>
+                <div class="plot-card"><div class="plot-title"><b>Phase trajectory</b><span>IC ○ · EC ●</span></div><svg viewBox="0 0 360 180" aria-hidden="true"><path class="plot-gridline" d="M35 30H350M35 80H350M35 130H350M95 15V160M175 15V160M255 15V160"/><path class="plot-axis" d="M35 15V160H350"/><ellipse class="plot-curve-blue" cx="190" cy="88" rx="130" ry="57"/><ellipse class="plot-curve" cx="190" cy="88" rx="111" ry="47"/><ellipse class="plot-curve-red" cx="190" cy="88" rx="91" ry="37"/><circle cx="110" cy="116" r="4" fill="#fff" stroke="#c73e45" stroke-width="2"/><circle cx="190" cy="88" r="4" fill="#c73e45"/></svg></div>
+              </div>
+            </section>
+          </div>
+        </div>
+        <p><strong>Key rearrangement:</strong> the tree receives most of the rail; compact Details/Lineage sits beneath it; the selected object is named once above the plots; controls become one contextual row; low-frequency Help/export actions leave the scientific workspace; the pale canvas visually bridges white plots and surrounding chrome.</p>
+      </section>
+
+      <section class="section" id="requirements">
+        <header>
+          <div><span class="section-number">07</span><h2>Detailed product requirements</h2></div>
+          <p>Requirements use stable IDs so the refactor can be split into small PRs and reviewed without ambiguity.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="requirements">
+            <thead><tr><th>ID</th><th>Priority</th><th>Requirement</th><th>Acceptance signal</th></tr></thead>
+            <tbody>
+              <tr><td>VIS-01</td><td><span class="priority p0">P0</span></td><td>Default both applications to one shared light scientific theme.</td><td>Solver and Viewer resolve all chrome colors from shared semantic tokens; no private app palette.</td></tr>
+              <tr><td>VIS-02</td><td><span class="priority p0">P0</span></td><td>Use four text tiers: primary, secondary, tertiary, disabled; never communicate state through low opacity alone.</td><td>All normal text meets 4.5:1; large text and essential UI graphics meet 3:1.</td></tr>
+              <tr><td>VIS-03</td><td><span class="priority p1">P1</span></td><td>Reserve teal for active scientific context, cobalt for focus/primary actions, and red/amber for reference/error/warning meaning.</td><td>Color inventory finds no decorative semantic-color reuse; monochrome review retains state comprehension.</td></tr>
+              <tr><td>VIS-04</td><td><span class="priority p1">P1</span></td><td>Integrate white plots into pale surrounding canvas without altering scientific color maps.</td><td>Plot background, grid, curves, jet/domain coloring, IC/EC conventions, and exported figures remain scientifically unchanged.</td></tr>
+              <tr><td>IA-01</td><td><span class="priority p0">P0</span></td><td>Every view has one named focal task and no more than one primary action.</td><td>Squint test and action inventory identify a single focal region/action for every major state.</td></tr>
+              <tr><td>IA-02</td><td><span class="priority p0">P0</span></td><td>Separate application-mode, contextual, and low-frequency utility actions.</td><td>Utilities do not occupy the main scientific action row; contextual actions remain adjacent to their object.</td></tr>
+              <tr><td>IA-03</td><td><span class="priority p1">P1</span></td><td>Support wide, compact, and narrow pane policies without clipped controls or hidden primary actions.</td><td>Verified at 100%, 150%, and 200% DPI and widths 1024, 1280, 1440, and 1920.</td></tr>
+              <tr><td>SOL-01</td><td><span class="priority p0">P0</span></td><td>Present Solver setup as System, Initial conditions, Control, Integrator, and Review stages.</td><td>All current fields remain reachable; stage changes never change job ownership or serialized schema.</td></tr>
+              <tr><td>SOL-02</td><td><span class="priority p0">P0</span></td><td>Keep Plan / validate and Run &amp; archive together in a persistent action region.</td><td>Actions remain visible while scrolling and expose busy, disabled, cancelled, failed, and complete states.</td></tr>
+              <tr><td>SOL-03</td><td><span class="priority p1">P1</span></td><td>Combine validation, resource estimate, execution progress, and output in a contextual review rail.</td><td>Errors link/focus the responsible stage/control; progress is exposed visually and through UI Automation status.</td></tr>
+              <tr><td>SOL-04</td><td><span class="priority p1">P1</span></td><td>Reflow the parameter book by semantic families and available width.</td><td>No horizontal scrolling at supported widths; units remain adjacent; inline edits preserve current math parsing.</td></tr>
+              <tr><td>SOL-05</td><td><span class="priority p1">P1</span></td><td>Apply the same shell and form rules to Post-processor while retaining method-specific structured editors.</td><td>Every parity-ledger workflow remains operable and uses the current native service.</td></tr>
+              <tr><td>VWR-01</td><td><span class="priority p0">P0</span></td><td>Give the data tree at least 60% of the context rail height by default.</td><td>Inspector collapses/resizes independently; selected context remains available without starving the tree.</td></tr>
+              <tr><td>VWR-02</td><td><span class="priority p0">P0</span></td><td>Preserve category/system structure and leaf-only date/count/size sorting.</td><td>Existing catalog sorting tests pass; sort buttons remain icon-only with tooltips and UIA names.</td></tr>
+              <tr><td>VWR-03</td><td><span class="priority p0">P0</span></td><td>Consolidate workspace, view, manipulation, coordinate, scale, and comparison controls into one contextual toolbar.</td><td>All controls remain keyboard reachable; no control overlaps the plot at 200% DPI.</td></tr>
+              <tr><td>VWR-04</td><td><span class="priority p1">P1</span></td><td>Name the selected object once using a compact breadcrumb and leaf label above the canvas.</td><td>Tree, Inspector, and plot chrome do not redundantly repeat the full archive name.</td></tr>
+              <tr><td>VWR-05</td><td><span class="priority p1">P1</span></td><td>Preserve plot interaction, composition, coordinate conversion, and export behavior.</td><td>Existing cursor, pan, panel, scale, KROM, observables, background-render, and export tests remain green.</td></tr>
+              <tr><td>A11Y-01</td><td><span class="priority p0">P0</span></td><td>Provide visible, 2–3px high-contrast keyboard focus for every interactive element.</td><td>Keyboard walkthrough never loses focus indication; focus is not obscured by adjacent controls.</td></tr>
+              <tr><td>A11Y-02</td><td><span class="priority p0">P0</span></td><td>Expose native Name, Control Type, Value/Selection, state, and descriptions through Windows UI Automation.</td><td>Accessibility-tree checks cover custom tabs, toolbar buttons, tree groups, progress, plot panels, and dialogs.</td></tr>
+              <tr><td>A11Y-03</td><td><span class="priority p0">P0</span></td><td>Make all workflows operable by keyboard with predictable focus return.</td><td>Tab/Shift+Tab, arrows, Space/Enter, Escape, and dialog focus-return scenarios pass.</td></tr>
+              <tr><td>A11Y-04</td><td><span class="priority p1">P1</span></td><td>Use 24×24 logical px as an absolute target floor; prefer 32–40px controls and 40px icon actions.</td><td>Automated geometry audit reports no smaller actionable target and no overlapping targets.</td></tr>
+              <tr><td>A11Y-05</td><td><span class="priority p1">P1</span></td><td>Do not encode scientific or workflow meaning by color alone.</td><td>Selected, forced/free, warning, error, IC/EC, and busy states also have shape, text, or pattern cues.</td></tr>
+              <tr><td>ARCH-01</td><td><span class="priority p0">P0</span></td><td>Keep UI code as composition over public native services.</td><td>No scientific algorithm, archive mutation, or duplicate object model enters event handlers.</td></tr>
+              <tr><td>ARCH-02</td><td><span class="priority p0">P0</span></td><td>Preserve versioned jobs, immutable archives, async loading, and read-only Viewer behavior.</td><td>Native UI parity, workflow, archive, and background checks pass unchanged.</td></tr>
+              <tr><td>PERF-01</td><td><span class="priority p1">P1</span></td><td>Preserve atomic repaint and bounded plot rendering.</td><td>No new flicker; input remains responsive during catalog/payload work; scroll benchmarks do not regress &gt;10%.</td></tr>
+              <tr><td>DOC-01</td><td><span class="priority p2">P2</span></td><td>Publish the accepted token, component, layout, and copy conventions.</td><td>A versioned UI system document and before/after evidence accompany the implementation.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="plan">
+        <header>
+          <div><span class="section-number">08</span><h2>Refactor plan</h2></div>
+          <p>The implementation followed these separable work packages. Foundation, shared shell, Solver staging, and Viewer hierarchy are delivered here; deeper control consolidation, external UIA review, and moderated usability remain incremental follow-ups.</p>
+        </header>
+        <div class="plan">
+          <article class="phase"><h3>PR 1 · Evidence and semantic tokens <span>Delivered</span></h3><p>Freeze current screenshots and interaction inventories. Introduce a versioned light token set, text tiers, control tokens, focus colors, density metrics, and contrast tests behind the shared theme API.</p><ul><li>Primary files: <span class="mono">Theme.hpp/.cpp</span>, native UI tests, UI system documentation.</li><li>Implemented as the production light baseline.</li></ul></article>
+          <article class="phase"><h3>PR 2 · Shared accessible primitives <span>Delivered baseline</span></h3><p>Refactor owner-drawn buttons, folder tabs, combo boxes, scrollbars, splitters, tooltips, progress, and inline fields to consume tokens and expose complete states/UIA metadata.</p><ul><li>Windows-native focus, selection, popup lists, and DPI behavior retained.</li><li>External assistive-technology auditing remains a follow-up.</li></ul></article>
+          <article class="phase"><h3>PR 3 · Shared shell and responsive pane policy <span>Delivered baseline</span></h3><p>Separate app-mode, contextual, and utility actions; add consistent breadcrumbs/context headers; implement wide/compact/narrow layouts and collapsible context rails.</p><ul><li>Solver's three-pane and Viewer's two-pane ownership models remain intact.</li><li>Rare-action overflow consolidation remains an optional refinement.</li></ul></article>
+          <article class="phase"><h3>PR 4 · Solver workflow projection <span>Delivered baseline</span></h3><p>Map existing controls into five setup stages, reflow parameter families, establish the right review rail, and make Plan / validate plus Run &amp; archive the persistent culmination.</p><ul><li><span class="mono">SolveJobModel</span>, job JSON, execution pane, controller and IC dialogs are unchanged.</li><li>Validation-to-field deep linking remains a refinement.</li></ul></article>
+          <article class="phase"><h3>PR 5 · Post-processor projection <span>Theme delivered</span></h3><p>Apply the lighter shell and form hierarchy to source selection, pipeline staging, method-specific editors, and planning/execution while preserving every parity-ledger capability.</p><ul><li>Shared theme and shell are delivered.</li><li>Deeper method-editor rearrangement remains a focused follow-up.</li></ul></article>
+          <article class="phase"><h3>PR 6 · Viewer context and toolbar <span>Hierarchy delivered</span></h3><p>Allocate the rail to the tree first, convert Inspector to Details/Lineage drawer, add selected-object context, and consolidate plot controls without changing the tree's scientific grouping or leaf-only sorting.</p><ul><li>Panel composition, workspace state, KROM layout, observables scrolling, and phase context are retained.</li><li>Tree sorting and selected context are delivered; further plot-toolbar compression remains optional.</li></ul></article>
+          <article class="phase"><h3>PR 7 · Accessibility, DPI, performance and rollout <span>In validation</span></h3><p>Run complete keyboard/UIA, contrast, target-size, DPI, background-render, repaint, scroll, and package-install gates. Compare before/after task walkthroughs with a scientist.</p><ul><li>Light is now the default; automated contrast and hidden workbench checks are delivered.</li><li>External UIA/DPI matrix and moderated task review remain before declaring the design final.</li></ul></article>
+        </div>
+
+        <h3 style="margin:24px 0 12px">Expected source ownership</h3>
+        <div class="table-wrap"><table class="file-map"><thead><tr><th>Area</th><th>Likely files/modules</th><th>Responsibility</th></tr></thead><tbody>
+          <tr><td>Shared tokens</td><td><span class="mono">viewer/native/include/dynsyslab_viewer/Theme.hpp</span><br><span class="mono">viewer/native/src/Theme.cpp</span></td><td>Palette, typography, DPI metrics, state colors, contrast policy.</td></tr>
+          <tr><td>Shared controls</td><td><span class="mono">FolderTab</span>, <span class="mono">OrnamentalComboBox</span>, <span class="mono">OrnamentalScrollBar</span>, splitters, toggle/button drawing</td><td>Accessible states, consistent geometry and focus.</td></tr>
+          <tr><td>Shared context</td><td><span class="mono">NavigationPane</span>, <span class="mono">InspectorPane</span>, <span class="mono">HorizontalPaneLayout</span></td><td>Tree, detail/lineage drawer, responsive panes.</td></tr>
+          <tr><td>Solver shell</td><td><span class="mono">compute_workbench/native/src/WorkbenchLayout.cpp</span>, <span class="mono">Workbench.cpp</span></td><td>Mode, utility, review rail, status and persistent actions.</td></tr>
+          <tr><td>Solver editor</td><td><span class="mono">SolverPanelLayout.cpp</span>, <span class="mono">SolverPageChrome.cpp</span>, parameter and execution panes</td><td>Stage projection, semantic parameter reflow, validation focus.</td></tr>
+          <tr><td>Viewer shell</td><td><span class="mono">viewer/native/src/WorkbenchLayout.cpp</span>, <span class="mono">Workbench.cpp</span></td><td>Tree-first rail, context header, compact toolbar.</td></tr>
+          <tr><td>Viewer plotting</td><td><span class="mono">PlotDragToolbar</span>, <span class="mono">PlotPanelChrome</span>, <span class="mono">PlotFigureDrawing</span></td><td>Control consolidation and surface integration; no scientific plot semantic changes.</td></tr>
+          <tr><td>Regression evidence</td><td>Existing hidden workbench, payload, catalog, interaction, presentation, package-smoke, and parity tests</td><td>Visual, behavioral, performance, and architectural gates.</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section class="section" id="acceptance">
+        <header>
+          <div><span class="section-number">09</span><h2>Acceptance and review gates</h2></div>
+          <p>“Lighter” is treated as a measurable product change, not a subjective color swap.</p>
+        </header>
+        <div class="table-wrap"><table class="acceptance"><thead><tr><th>Gate</th><th>Method</th><th>Pass condition</th></tr></thead><tbody>
+          <tr><td>G-01</td><td>Contrast audit of every semantic foreground/background and essential icon/border pair.</td><td>WCAG 2.2 AA thresholds met with no exceptions hidden in disabled/hover states.</td></tr>
+          <tr><td>G-02</td><td>Keyboard-only walkthrough: create/edit job, validate, run/cancel; tree search/sort, change view, inspect, compare, export.</td><td>No pointer-only operation; logical order; focus always visible and restored.</td></tr>
+          <tr><td>G-03</td><td>Windows UI Automation inspection.</td><td>Custom controls expose Name, role/control type, state, value/selection, and actionable patterns.</td></tr>
+          <tr><td>G-04</td><td>Snapshot matrix at 1024/1280/1440/1920 and 100/150/200% DPI.</td><td>No clipped label, overlap, unreachable action, unintended horizontal scrolling, or plot below minimum useful width.</td></tr>
+          <tr><td>G-05</td><td>Scientific color and export comparison.</td><td>Trajectory identities, jet/domain coloring, targets, IC/EC markers, units, axis math, PNG/PDF output remain correct.</td></tr>
+          <tr><td>G-06</td><td>Native full test suite, parity contract, doctor/audit and package smoke.</td><td>No new failure, boundary violation, or source above the established size ceiling.</td></tr>
+          <tr><td>G-07</td><td>Repaint/scroll benchmark and manual resize stress.</td><td>No visible flicker; catalog/payload work stays async; p95 scroll time and memory remain within 10% of baseline.</td></tr>
+          <tr><td>G-08</td><td>Five-task moderated scientist review.</td><td>Participants identify the next action without prompting and complete core tasks without searching documentation.</td></tr>
+        </tbody></table></div>
+        <h3 style="margin:28px 0 12px">Suggested usability tasks</h3>
+        <div class="audit-grid"><article class="audit-card"><header><h3>Solver</h3><span>Completion + confidence</span></header><ul><li>Create a forced RPE solve with two ICs.</li><li>Find and edit a physical parameter.</li><li>Plan without executing and resolve one error.</li><li>Run, interpret progress, and cancel safely.</li><li>Open a trajectory in Viewer.</li></ul></article><article class="audit-card"><header><h3>Viewer</h3><span>Orientation + discovery</span></header><ul><li>Find the newest forced training set.</li><li>Switch to phase context and locate IC/EC.</li><li>Add and rearrange a plot panel.</li><li>Compare two compatible records.</li><li>Trace a KROM back to its training data and export the page.</li></ul></article></div>
+      </section>
+
+      <section class="section" id="review">
+        <header>
+          <div><span class="section-number">10</span><h2>Human review requested</h2></div>
+          <p>The baseline is implemented. These choices remain open for the next human-reviewed refinement pass rather than blocking use of the lighter workbenches.</p>
+        </header>
+        <div class="review-box"><h3>Implemented baseline</h3><p>Light scientific direction, five-stage Solver projection, tree-first Viewer rail, compact Details/Lineage drawer, and semantic token system are now live in the rebuilt native applications. Treat the concept mockups as hierarchy references and the captures in “Delivered implementation” as the actual baseline for feedback.</p></div>
+        <div class="questions">
+          <div class="question"><b>Theme rollout</b><span>Should light become the only theme, or should the existing dark theme remain selectable after the refactor?</span></div>
+          <div class="question"><b>Solver navigation</b><span>Is the five-stage strip preferable to a vertical stage list inside the center workspace?</span></div>
+          <div class="question"><b>Viewer Inspector</b><span>Should Details/Lineage be open by default, collapsed by default, or remember its last height?</span></div>
+          <div class="question"><b>Utility grouping</b><span>Which low-frequency actions deserve permanent labels instead of the overflow menu: Queue, Archive tools, Import, Help, Save/Open?</span></div>
+          <div class="question"><b>Density</b><span>Does the proposed workbench-tight scale feel appropriately scientific, or should the default use larger 40px controls throughout?</span></div>
+          <div class="question"><b>Signature</b><span>Is the phase-trajectory rail distinctive enough, or should DynSysLab lean more strongly into spectral/phase geometry?</span></div>
+        </div>
+      </section>
+
+      <footer>
+        <p><strong>Scope boundary:</strong> production Solver/Viewer presentation, shared control styling, responsive pane layout, and native UI checks changed. Scientific services, job formats, numerical algorithms, archive records, and read-only Viewer behavior did not. Sources include the native theme and layouts, before/after hidden-workbench captures, architecture guides, parity contract, and the installed UI skills listed above.</p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

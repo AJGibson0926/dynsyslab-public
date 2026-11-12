@@ -1,0 +1,5 @@
+{
+  "schema": "dynsyslab.architecture-baseline/v1",
+  "allowed_hard_size_paths": [],
+  "allowed_boundary_violations": []
+}

@@ -1,0 +1,23 @@
+{
+  "schema": "dynsyslab.analytic-query/v1",
+  "system": {
+    "name": "spring_coupled_pendulums",
+    "parameters": {
+      "damping1_n_m_s": 0,
+      "damping2_n_m_s": 0,
+      "spring_constant_n_m": 40
+    }
+  },
+  "initial_state": [
+    0.7,
+    0,
+    0.7,
+    0
+  ],
+  "initial_time": 0,
+  "time": [
+    0,
+    1,
+    3
+  ]
+}

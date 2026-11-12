@@ -1,0 +1,67 @@
+{
+  "archive": {
+    "enabled": true
+  },
+  "controller": {
+    "kind": "klqr",
+    "settings": {
+      "Q": 1,
+      "R": 0.1,
+      "active_time_window": [
+        0.1,
+        12
+      ],
+      "control_limit": 0.8,
+      "control_representation": "fit",
+      "estimator": {
+        "initial_lifted": [
+          0,
+          0
+        ],
+        "measurement": "sensor",
+        "measurement_covariance": 0.001,
+        "measurement_observable": "position",
+        "output": "state",
+        "process_covariance": 1
+      },
+      "krom": "archives/experiments/koopman-feedback-benchmark-20261105/krom/feedback-fixture.npz"
+    }
+  },
+  "initial_conditions": {
+    "clusters": 1,
+    "count": 2,
+    "mode": "explicit",
+    "values": [
+      [
+        0.1,
+        0
+      ],
+      [
+        -0.1,
+        0
+      ]
+    ]
+  },
+  "kind": "solve",
+  "label": "estimated-klqr-test",
+  "schema": "dynsyslab.compute-job/v1",
+  "solver": {
+    "atol": 1E-12,
+    "control_sample_time": 0.005,
+    "method": "RK45",
+    "rtol": 1E-10
+  },
+  "system": {
+    "name": "duffing",
+    "parameters": {
+      "alpha": 2,
+      "beta": 0,
+      "delta": 1
+    }
+  },
+  "time": {
+    "output_step": 0.02,
+    "start": 0,
+    "stop": 12
+  }
+}

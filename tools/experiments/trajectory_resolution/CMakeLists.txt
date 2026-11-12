@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.20)
+project(TrajectoryResolution LANGUAGES CXX)
+add_library(trajectory_resolution SHARED vertices.cpp)
+target_compile_features(trajectory_resolution PRIVATE cxx_std_17)
+set_target_properties(trajectory_resolution PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+include(CTest)
+if(BUILD_TESTING)
+  find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  add_test(NAME trajectory_resolution_tests COMMAND "${Python3_EXECUTABLE}"
+           "${CMAKE_CURRENT_SOURCE_DIR}/test_resolution.py" $<TARGET_FILE:trajectory_resolution>)
+endif()

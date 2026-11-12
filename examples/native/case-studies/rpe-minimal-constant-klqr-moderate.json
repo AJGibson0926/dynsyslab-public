@@ -1,0 +1,37 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "solve",
+  "label": "native-parity-rpe-minimal-constant-klqr-moderate",
+  "system": {
+    "name": "rpe",
+    "preset": "air_water_reference",
+    "parameters": {
+      "equilibrium_radius_m": 0.00001,
+      "kappa": 1.3333333333333333,
+      "ambient_pressure_pa": 100000.0,
+      "vapor_pressure_pa": 2330.0,
+      "rho_kg_m3": 998.0,
+      "sigma_n_m": 0.0725,
+      "mu_pa_s": 0.001,
+      "pressure_input_sign": -1.0
+    }
+  },
+  "time": {"start": 0.0, "stop": 10.0, "output_step": 0.001, "coordinate_system": "dimensionless"},
+  "initial_conditions": {"mode": "explicit", "count": 1, "clusters": 1, "seed": 0, "values": [[1.0, 0.0]], "ranges": []},
+  "controller": {
+    "kind": "klqr",
+    "settings": {
+      "unverified_legacy_reason": "Historical parity fixture: parameters checked against legacy spectrum.system metadata; archive predates the native provenance contract.",
+      "krom": "archives/derived/koopman-krom-extract/rpe-reference-training-bdf-tau25-dtau0p001__20260826T220948.289776Z__koopman-krom-extract__20260827T183646.410439Z__0dea0923.npz",
+      "control_representation": "constant",
+      "unverified_control_map_reason": "Historical RPE parity fixture: use its original fitted map and original one-mode KROM; no model identity was recorded by the legacy writer.",
+      "control_map_archive": "archives/experiments/rpe_control_identification_designed/rpe-minimal-krom-error-evaluations.npz",
+      "control_map_prefix": "evaluation_0",
+      "Q": 5000.0,
+      "R": 0.0001
+    },
+    "target": {"kind": "rpe_canonical", "name": "rpe_multisine_equilibrium_moderate_identification"}
+  },
+  "solver": {"method": "BDF", "rtol": 1e-9, "atol": 1e-9, "max_step": 0.001, "control_evaluation": "continuous_rhs"},
+  "archive": {"enabled": true, "data_role": "native_parity_validation"}
+}

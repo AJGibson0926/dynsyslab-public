@@ -1,0 +1,41 @@
+{
+  "schema": "dynsyslab.observable-closure-query/v1",
+  "system": {
+    "name": "rpe",
+    "preset": "air_water_20c",
+    "parameters": {
+      "equilibrium_radius_m": 1e-05,
+      "ambient_pressure_pa": 100000,
+      "vapor_pressure_pa": 2330,
+      "rho_kg_m3": 998,
+      "mu_pa_s": 0.001,
+      "sigma_n_m": 0.0725,
+      "kappa": 1.3333333333333333
+    }
+  },
+  "observable": "echo",
+  "domain": {
+    "minimum": [0.19, -39.0],
+    "maximum": [2.5, 39.0],
+    "coordinate_system": "dimensionless"
+  },
+  "highest_derivative_order": 3,
+  "sample_count": 1024,
+  "pair_candidate_count": 128,
+  "maximum_refinement_iterations": 120,
+  "minimum_normalized_state_separation": 0.03,
+  "collision_tolerance": 1e-11,
+  "successor_difference_tolerance": 1e-8,
+  "rank_tolerance": 1e-10,
+  "seed": 20261105,
+  "pair_seeds": [
+    {
+      "left": [0.9087071031, -5.8121728919],
+      "right": [1.1002768956, -6.4529294201]
+    },
+    {
+      "left": [0.7500373016335908, 5.627534424684314],
+      "right": [1.1887083801676752, 7.575355314915713]
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+interface:
+  display_name: "Coordinate closure witnesses"
+  short_description: "Refine branch crossings and check closure evidence"

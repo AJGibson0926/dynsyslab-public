@@ -1,0 +1,21 @@
+{
+  "schema": "dynsyslab.eigenfunction-api-refactor-verification/v1",
+  "verified_date": "2026-10-29",
+  "baseline": "build/eigenfunction-api-parity/baseline.json",
+  "baseline_sha256": "df525654b3290adbe87ce4ffcac56c6675c7b536b5b98f29d07baf01cca1f7f0",
+  "model": "archives/experiments/rpe-forced-edmdc-validation-20261028-v1/all-modes.npz",
+  "parity_quantities": 15630,
+  "eigenfunctions": 15,
+  "validation_trajectories": 5,
+  "maximum_scaled_difference": 0,
+  "ctest_passed": 106,
+  "ctest_failed": 0,
+  "package_smoke": "passed",
+  "installed_location": "~/AppData/Local/Programs/DynSysLab",
+  "installed_matches_build": [
+    "DynSysLab.exe", "DynSysLabViewer.exe", "dynsyslab-cli.exe",
+    "dynsyslab_koopman.dll", "dynsyslab_eigenfunctions.dll"
+  ],
+  "archive_policy": "Existing scientific archives and the pre-refactor baseline were not rewritten. Scientific data and baseline remain local; this record contains pointers only.",
+  "architecture_audit": "Existing debt unchanged: one Python hard-size violation, one Python boundary violation, two native preferred-size exceptions, one broken documentation link and four unindexed documents. No cycles or new native size violations."
+}

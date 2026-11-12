@@ -1,0 +1,47 @@
+{
+  "schema": "dynsyslab.observable-closure-query/v2",
+  "system": {
+    "name": "rpe",
+    "preset": "air_water_20c",
+    "parameters": {
+      "kappa": 1.3333333333333333
+    }
+  },
+  "observable": "echo",
+  "positive_axes": [0],
+  "solver_timeout_ms": 6000,
+  "highest_derivative_order": 4,
+  "polynomial_degree": 1,
+  "pair_seeds": [
+    {
+      "left": [
+        0.9457041294916282,
+        14.559306001295163
+      ],
+      "right": [
+        0.7810263280328975,
+        -14.828898931901062
+      ]
+    },
+    {
+      "left": [
+        0.9087071031,
+        -5.8121728919
+      ],
+      "right": [
+        1.1002768956,
+        -6.4529294201
+      ]
+    },
+    {
+      "left": [
+        0.7500373016335908,
+        5.627534424684314
+      ],
+      "right": [
+        1.1887083801676752,
+        7.575355314915713
+      ]
+    }
+  ]
+}

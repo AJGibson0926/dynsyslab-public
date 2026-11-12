@@ -1,0 +1,22 @@
+{
+  "schema": "dynsyslab.analytic-query/v1",
+  "system": {
+    "name": "kuramoto",
+    "parameters": {
+      "oscillators": 2,
+      "coupling": 0.7,
+      "frequency_spread": 0.5
+    }
+  },
+  "initial_state": [
+    -0.3,
+    0.4
+  ],
+  "initial_time": 0,
+  "time": [
+    0,
+    1,
+    5,
+    20
+  ]
+}

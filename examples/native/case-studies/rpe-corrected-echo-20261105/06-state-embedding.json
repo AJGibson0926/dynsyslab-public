@@ -1,0 +1,20 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "Native evaluation of embedded compact model: corrected release, state-only control",
+  "sources": [
+    "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261106T003851Z.npz",
+    "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-1__20261002T001350Z__coordinate-transform__20261106T003858Z.npz",
+    "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-4__20261002T001350Z__coordinate-transform__20261106T003925Z.npz"
+  ],
+  "methods": [
+    {
+      "name": "dynamics_validation",
+      "settings": {
+        "model_archive": "archives/experiments/rpe-vector-field-sindy-20261105/compact-model-in-broad-library.npz",
+        "compare_model_archive": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261106T003851Z__sindy-dynamics__20261106T004711Z.npz",
+        "diagnostic_stride": 40
+      }
+    }
+  ]
+}

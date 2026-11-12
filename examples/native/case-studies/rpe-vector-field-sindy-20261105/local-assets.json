@@ -1,0 +1,185 @@
+{
+  "schema": "dynsyslab.local-assets/v1",
+  "assets": [
+    {
+      "path": "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201310Z.npz",
+      "bytes": 25306307,
+      "sha256": "af1f9d3bdf783eb3c95b24517c3b14cb6ee1881b3422483abeec386b5cb66e74"
+    },
+    {
+      "path": "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201320Z.npz",
+      "bytes": 26095314,
+      "sha256": "297e82511f8b4b5ab904bfb6074102616f071fb0abfb1933aefecedc953d44a5"
+    },
+    {
+      "path": "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201324Z.npz",
+      "bytes": 25547465,
+      "sha256": "1d89cd261649b6f60e3979d0bd2a88665279051f6141813ce08c8fc1947ab21f"
+    },
+    {
+      "path": "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-1__20261002T001350Z__coordinate-transform__20261105T201326Z.npz",
+      "bytes": 25016145,
+      "sha256": "c5ca0400f18f81767123330dbaae4250c841b95bf64bed1c0b3e2ec69e748b22"
+    },
+    {
+      "path": "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-1__20261002T001350Z__coordinate-transform__20261105T201340Z.npz",
+      "bytes": 25998304,
+      "sha256": "3bc19853f63bfbd3dbfa3928779e397366c2c3bbcf6e4f88754ab91a0eaf3558"
+    },
+    {
+      "path": "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-1__20261002T001350Z__coordinate-transform__20261105T201344Z.npz",
+      "bytes": 25589413,
+      "sha256": "1b18cb3b56cbeaa03290708ed126ee88dedd43933a590973610f0eb6cf2955f5"
+    },
+    {
+      "path": "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-4__20261002T001350Z__coordinate-transform__20261105T201346Z.npz",
+      "bytes": 25331071,
+      "sha256": "1223cd44edcea15d4686534bce4b6c4869e183259b8b1ec1ddce9a7790141b94"
+    },
+    {
+      "path": "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-4__20261002T001350Z__coordinate-transform__20261105T201356Z.npz",
+      "bytes": 26100553,
+      "sha256": "22ea2f6c75f4a3445b498985f9b2efc2f0c4aa86f65e0d6bf72da998e32d5acb"
+    },
+    {
+      "path": "archives/derived/coordinate-transform/rpe-viscous-echo-long-training-five-ics-trajectory-4__20261002T001350Z__coordinate-transform__20261105T201401Z.npz",
+      "bytes": 25535516,
+      "sha256": "2170146b9539940e9b7d051ddaeabf7921e3bfc65562d1d0b8411cc35e41c8fb"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201310Z__sindy-dynamics__20261105T201501Z.npz",
+      "bytes": 38694125,
+      "sha256": "257bf27075d483e92aa31c8d78f651fb5a17cc987d6f8fb1c811014cd66abe5f"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201310Z__sindy-dynamics__20261105T201517Z.npz",
+      "bytes": 38694903,
+      "sha256": "261591a7d854d9c32f2aa02279b371076e9a303277791c40cfb20f7ef5934715"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201310Z__sindy-dynamics__20261105T201521Z.npz",
+      "bytes": 37877461,
+      "sha256": "daa3bc05f209e5a88be3333eebf58a379d537f6701871dd1d95d7ece89cd9a5f"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201310Z__sindy-dynamics__20261105T201556Z.npz",
+      "bytes": 37877270,
+      "sha256": "63b46f98d5ee4986ec86a09f81b9429308d4a45acc72e35af66d8573a99793b4"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201310Z__sindy-dynamics__20261105T202552Z.npz",
+      "bytes": 38700047,
+      "sha256": "9153703792632fab36b14213e3cfc878355310dab1259c63886ab7e1098136ed"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201310Z__sindy-dynamics__20261105T203910Z.npz",
+      "bytes": 7750253,
+      "sha256": "76c3da0f92b28433a3422f6372f315a7170a8c0a55f4201c8c722b605944e3d8"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201310Z__sindy-dynamics__20261105T204018Z.npz",
+      "bytes": 7740093,
+      "sha256": "95ea78d8b5a570288809eccd8c8a8ef225aaf37b42af8022f791b5f6952f5f4a"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201310Z__sindy-dynamics__20261105T204110Z.npz",
+      "bytes": 7750228,
+      "sha256": "8d8a0f605193578b1cd5be4c770203aef088ebdf67856ef6378a6cd47b534db8"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201310Z__sindy-dynamics__20261105T204123Z.npz",
+      "bytes": 7745268,
+      "sha256": "984d212595029d374eb4f54e966579ee1ae424df5ebdab70d35c0af5f69c0a45"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201310Z__sindy-dynamics__20261105T204207Z.npz",
+      "bytes": 7746156,
+      "sha256": "2595f78b78af9855fd6b773bdf7b31946229d52f6f5b19cf70793b69f5f82f44"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201310Z__sindy-dynamics__20261105T204212Z.npz",
+      "bytes": 7750359,
+      "sha256": "b2e7fdce59779da513929853b8d5848e3ee4d9dcbb38e5468f1557d6f7d1a8a4"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201320Z__sindy-dynamics__20261105T201522Z.npz",
+      "bytes": 38704708,
+      "sha256": "75311068cef11d2a9887012414d0eba89bcce86a75c33526cd2cb6360dfd29ea"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201320Z__sindy-dynamics__20261105T201559Z.npz",
+      "bytes": 38704313,
+      "sha256": "294e512fbe058ed98190af042577e8e43d2c48fc71758ad3323099c410475414"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201320Z__sindy-dynamics__20261105T202542Z.npz",
+      "bytes": 39318468,
+      "sha256": "b63b1e80529419dc9e21cc0f72aff20d34c86d95bdcb35a9cb61cc0384faf45c"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201324Z__sindy-dynamics__20261105T201507Z.npz",
+      "bytes": 38522975,
+      "sha256": "f19c378d847e938c8f810d21c7f28f8fcfd6bd318fba208e7b18fc87b8185146"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201324Z__sindy-dynamics__20261105T201528Z.npz",
+      "bytes": 38522728,
+      "sha256": "d962e97cca32edeb6c254048e0cadebe12e592f31497b4abfbae76f8aaaab837"
+    },
+    {
+      "path": "archives/derived/sindy-dynamics/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z__coordinate-transform__20261105T201324Z__sindy-dynamics__20261105T202544Z.npz",
+      "bytes": 37277985,
+      "sha256": "e4e6cdc5f4aac61e000b651261ee955894054fcd91b91704d5a5f0bf9b89b5a0"
+    },
+    {
+      "path": "archives/experiments/rpe-vector-field-sindy-20261105/compact-model-in-broad-library.npz",
+      "bytes": 13069,
+      "sha256": "df0c70075bbf110e0a638ca7e246242648b8d4658510fa9deee216a8ddbe4ada"
+    },
+    {
+      "path": "archives/experiments/rpe-vector-field-sindy-20261105/metrics.json",
+      "bytes": 724000,
+      "sha256": "1a43636e7c68b5cd1bb97887ea79cfd724d13cfd2778d39e167e71287fa06653"
+    },
+    {
+      "path": "viewer_outputs/rpe-dynamics-echo-20261105.png",
+      "bytes": 768030,
+      "sha256": "e0a8f891528ca197c4337e9b9493d0ff1048353fbef4b672d4a78ee3b69ae574"
+    },
+    {
+      "path": "viewer_outputs/rpe-dynamics-echo_broad-20261105.png",
+      "bytes": 819158,
+      "sha256": "a5efbd935b62d8a0271b1cb1d4378bd94dd156a19e3d89191fa401d095dffc15"
+    },
+    {
+      "path": "viewer_outputs/rpe-dynamics-inverse-20261105.png",
+      "bytes": 357045,
+      "sha256": "b8e985166c2a66defb5de4f09433741bbadf54329080a9703e400927b9e9f159"
+    },
+    {
+      "path": "viewer_outputs/rpe-dynamics-latent-20261105.png",
+      "bytes": 425987,
+      "sha256": "454874a9424a95481a5cccc940746e944380b035d5782aa743962addede50ac1"
+    },
+    {
+      "path": "viewer_outputs/rpe-dynamics-latent_broad-20261105.png",
+      "bytes": 410238,
+      "sha256": "7cfed7da0824e3a8c9ad20e9a933d0efaa6995904584647553f41bbc6a1f8ba9"
+    },
+    {
+      "path": "viewer_outputs/rpe-dynamics-state-20261105.png",
+      "bytes": 423825,
+      "sha256": "87cb120946ebf9dfe3067eec33421ab26234d446a9d7915914b11a43b024f0f2"
+    },
+    {
+      "path": "viewer_outputs/rpe-dynamics-state_broad-20261105.png",
+      "bytes": 384556,
+      "sha256": "51680478e43be636bc513b41aa9b3ac5ee32176644b512c119850c60f994e561"
+    },
+    {
+      "path": "viewer_outputs/rpe-dynamics-state_matched-20261105.png",
+      "bytes": 356978,
+      "sha256": "584e38badf50f753abc02a0e1efe0521c98c415da2d45d21d62964ee0688a097"
+    }
+  ]
+}
