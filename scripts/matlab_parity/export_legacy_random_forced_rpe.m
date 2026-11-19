@@ -8,9 +8,9 @@ function [outputFile, summaryFile] = export_legacy_random_forced_rpe(options)
 
 arguments
     options.SuiteRoot (1,1) string = ...
-        "~/Documents/MATLAB/dynsyslab (9-21-24) (working copy)"
+        fullfile(userpath, "dynsyslab (9-21-24) (working copy)")
     options.InputFile (1,1) string = ...
-        "~/Documents/MATLAB/dynsyslab (9-21-24) (working copy)\dynsyslib\Bubble\Bubble.mat"
+        fullfile(userpath, "dynsyslab (9-21-24) (working copy)", "dynsyslib", "Bubble", "Bubble.mat")
     options.OutputFile (1,1) string = ""
 end
 

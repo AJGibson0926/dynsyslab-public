@@ -13,7 +13,7 @@ function [outputFile, summaryFile] = export_dynsyslab_rpe_hdmd_sindy(options)
 
 arguments
     options.SuiteRoot (1,1) string = ...
-        "~/Documents/MATLAB/dynsyslab (5-15-25) (cleanup begins)"
+        fullfile(userpath, "dynsyslab (5-15-25) (cleanup begins)")
     options.OutputFile (1,1) string = ""
     options.ExistingSystem = []
     options.Seed (1,1) double = 2141442

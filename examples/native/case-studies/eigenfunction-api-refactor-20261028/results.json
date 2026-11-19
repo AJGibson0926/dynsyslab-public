@@ -11,7 +11,7 @@
   "ctest_passed": 106,
   "ctest_failed": 0,
   "package_smoke": "passed",
-  "installed_location": "~/AppData/Local/Programs/DynSysLab",
+  "installed_location": "%LOCALAPPDATA%/Programs/DynSysLab",
   "installed_matches_build": [
     "DynSysLab.exe", "DynSysLabViewer.exe", "dynsyslab-cli.exe",
     "dynsyslab_koopman.dll", "dynsyslab_eigenfunctions.dll"

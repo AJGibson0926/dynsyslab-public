@@ -15,7 +15,7 @@ function [outputFile, summaryFile, figureFile] = run_matlab_rpe_klqr_control_exp
 
 arguments
     options.SuiteRoot (1,1) string = ...
-        "~/Documents/MATLAB/dynsyslab (5-15-25) (cleanup begins)"
+        fullfile(userpath, "dynsyslab (5-15-25) (cleanup begins)")
     options.OutputFile (1,1) string = ""
     options.Seed (1,1) double = 2141442
     options.TrainingInitialState (1,2) double = [2.3333865986017348, 0]

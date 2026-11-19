@@ -2,7 +2,7 @@
 import glob, json, subprocess, sys, os
 import numpy as np
 
-ROOT = r"."
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), *[".."] * 5)).replace(os.sep, "/")
 CLI = ROOT + "/build/linear-systems/bin/dynsyslab-cli.exe"
 JOBS = ROOT + "/examples/native/case-studies/rpe-echo-mode-selection-20261116/closed-loop"
 SYSTEM = {"name": "rpe", "preset": "air_water_20c", "parameters": {"ambient_pressure_pa": 100000, "equilibrium_radius_m": 1e-05,

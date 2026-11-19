@@ -13,7 +13,7 @@ function summary = export_korda_mezic_duffing_control_candidate(outputFile, opti
 
 arguments
     outputFile (1,1) string
-    options.KordaRoot (1,1) string = "~/Documents/MATLAB/KordaMPC"
+    options.KordaRoot (1,1) string = fullfile(userpath, "KordaMPC")
     options.Seed (1,1) double {mustBeInteger,mustBeNonnegative} = 2141442
     options.TrajectoryCount (1,1) double {mustBeInteger,mustBePositive} = 100
     options.TrajectoryLength (1,1) double {mustBeInteger,mustBeGreaterThan(options.TrajectoryLength,2)} = 800

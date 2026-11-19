@@ -247,7 +247,7 @@ The scientific parity client and frozen baseline are in
 `build/eigenfunction-api-parity`. The package gate uses only its disposable
 `build/native-suite-fast/package-smoke` directory. Installation used the standard
 `tools/Install-DynSysLabNative.ps1` after the full test and package gates passed.
-The installed root is `~/AppData/Local/Programs/DynSysLab`.
+The installed root is `%LOCALAPPDATA%/Programs/DynSysLab`.
 
 Existing scientific archives remain untouched. No experiments were refitted or
 published, and no Git commit or push was part of this refactor.

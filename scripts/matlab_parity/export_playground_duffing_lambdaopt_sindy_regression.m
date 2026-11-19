@@ -16,11 +16,11 @@ function summary = export_playground_duffing_lambdaopt_sindy_regression(outputFi
 arguments
     outputFile (1,1) string
     options.SuiteRoot (1,1) string = ...
-        "~/Documents/MATLAB/dynsyslab (5-15-25) (cleanup begins)"
+        fullfile(userpath, "dynsyslab (5-15-25) (cleanup begins)")
     options.InitialConditionFile (1,1) string = ...
-        "~/Documents/MATLAB/dynsyslab (5-15-25) (cleanup begins)\scripts\dynsyslib\Duffing\DuffingICs.csv"
+        fullfile(userpath, "dynsyslab (5-15-25) (cleanup begins)", "scripts", "dynsyslib", "Duffing", "DuffingICs.csv")
     options.ControlCSVFile (1,1) string = ...
-        "~/Documents/MATLAB/dynsyslab (5-15-25) (cleanup begins)\noisyDuffData.csv"
+        fullfile(userpath, "dynsyslab (5-15-25) (cleanup begins)", "noisyDuffData.csv")
     options.Seed (1,1) double {mustBeInteger,mustBeNonnegative} = 2141442
     options.FreeTrajectoryCount (1,1) double {mustBeInteger,mustBePositive} = 30
     options.FreeDeltaT (1,1) double {mustBePositive} = 0.01
