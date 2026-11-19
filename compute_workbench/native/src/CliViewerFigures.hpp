@@ -1,7 +1,7 @@
 #pragma once
 // Headless figures for CLI reports: runs DynSysLabViewerCli (next to dynsyslab-cli) without a
-// window, with its own output silenced, against the directory that holds the archive so the
-// Viewer catalogs only that folder.
+// window and with its own output silenced, on the archive root whose index lists the archive
+// (index new archives with core::indexArchiveFiles first).
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -9,6 +9,7 @@
 namespace dynsyslab::cli {
 
 struct FigureRequest {
+    std::filesystem::path archiveRoot;
     std::filesystem::path archive;
     std::string view;                     // Viewer route: time, phase, fourier, ...
     std::vector<std::wstring> extra;      // further Viewer CLI options

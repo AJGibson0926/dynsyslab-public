@@ -83,7 +83,7 @@ if ([IO.Path]::GetFullPath($first.archive_root) -ne [IO.Path]::GetFullPath($arch
 $paths = @($first.runs.archive) + @($second.runs.archive)
 if (@($paths | Select-Object -Unique).Count -ne $paths.Count) { throw 'Repeated quickstart runs share an archive.' }
 foreach ($path in $paths) { if (-not (Test-Path -LiteralPath $path)) { throw "Missing quickstart archive: $path" } }
-foreach ($figure in @($first.runs.figures)) {
+foreach ($figure in @($first.runs.figures) + @($second.runs.figures)) {
     if (-not $figure.rendered -or -not (Test-Path -LiteralPath $figure.path)) { throw "Quickstart figure not rendered: $($figure.title)" }
 }
 if (Get-ChildItem -LiteralPath $long -Force) { throw 'quickstart wrote into the working directory.' }

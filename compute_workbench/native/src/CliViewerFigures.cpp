@@ -35,7 +35,7 @@ bool renderFigure(const std::filesystem::path& viewerCli, const FigureRequest& r
     std::filesystem::create_directories(core::extendedLengthPath(request.output.parent_path()), ignored);
 #ifdef _WIN32
     std::wstring command = quoted(viewerCli.wstring()) + L" render --archives "
-        + quoted(request.archive.parent_path().wstring()) + L" --cache " + quoted(cache.wstring())
+        + quoted(request.archiveRoot.wstring()) + L" --cache " + quoted(cache.wstring())
         + L" --source " + quoted(request.archive.wstring()) + L" --view " + quoted(std::wstring(request.view.begin(), request.view.end()))
         + L" --width 1200 --height 800 --output " + quoted(request.output.wstring());
     for (const auto& option : request.extra) command += L" " + quoted(option);

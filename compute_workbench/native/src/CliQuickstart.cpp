@@ -4,6 +4,7 @@
 
 #include <dynsyslab/workflow/Solve.hpp>
 #include <dynsyslab/core/Archive.hpp>
+#include <dynsyslab/core/ArchiveIndex.hpp>
 #include <dynsyslab/core/Json.hpp>
 #include <dynsyslab/core/LongPath.hpp>
 #include <dynsyslab/core/Text.hpp>
@@ -91,6 +92,9 @@ Run runExample(const json::Value& example, const fs::path& examples, const fs::p
     const auto job = json::load((examples / core::wide(example.at("job").string())).wstring());
     const auto result = workflow::executeSolve(job, archiveRoot, {});
     if (result.archives.empty()) throw std::runtime_error("quickstart example produced no archive");
+    auto published = result.archives;  // index like executeJob, so the Viewer catalog sees the run
+    if (!result.hierarchyManifest.empty()) published.push_back(result.hierarchyManifest);
+    (void)core::indexArchiveFiles(archiveRoot, published);
     Run run;
     run.title = example.at("title").string(); run.about = example.at("about").string();
     run.system = result.system; run.preset = job.at("system").at("preset").string();
@@ -182,7 +186,7 @@ int quickstart(const QuickstartOptions& options) {
     const auto cache = figures / L".viewer-cache";
     for (std::size_t k = 0; k < runs.size(); ++k)
         for (const auto& spec : index.at("examples").array()[k].at("figures").array()) {
-            FigureRequest request{fs::path(core::wide(runs[k].archive)), spec.at("view").string(), {},
+            FigureRequest request{options.archiveRoot, fs::path(core::wide(runs[k].archive)), spec.at("view").string(), {},
                                   figures / core::wide(spec.at("name").string() + ".png")};
             if (!spec.at("options").isNull())
                 for (const auto& option : spec.at("options").array()) request.extra.push_back(core::wide(option.string()));
