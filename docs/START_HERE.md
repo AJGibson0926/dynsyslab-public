@@ -15,7 +15,9 @@ runtime.
 
 For an ordinary installation, follow [Install DynSysLab](INSTALL.md). The
 prebuilt release includes both desktop apps and the CLI; no build tools are
-required. Another Codex user can start from `AJGibson0926/dynsyslab` alone.
+required. Anyone can start from `AJGibson0926/dynsyslab-public` alone. Running
+DynSysLab means `dynsyslab-cli quickstart`: the overview, the bundled examples,
+their results and figures, as Markdown, without opening a window.
 
 For source development, install and launch from the repository root:
 

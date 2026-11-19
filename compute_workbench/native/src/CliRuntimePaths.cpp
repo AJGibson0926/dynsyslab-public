@@ -32,7 +32,9 @@ std::filesystem::path savedArchiveRoot(const std::filesystem::path& file) {
     }
 }
 
-std::filesystem::path executablePath() {
+}  // namespace
+
+std::filesystem::path cliExecutablePath() {
 #ifdef _WIN32
     std::vector<wchar_t> buffer(32768);
     const DWORD count = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
@@ -41,10 +43,20 @@ std::filesystem::path executablePath() {
     return std::filesystem::current_path() / L"dynsyslab-cli";
 }
 
+std::filesystem::path sourceCheckoutContaining(const std::filesystem::path& executable) {
+    for (auto candidate = executable.parent_path(); !candidate.empty(); candidate = candidate.parent_path()) {
+        if (sourceCheckout(candidate)) return candidate;
+        if (candidate == candidate.parent_path()) break;
+    }
+    return {};
+}
+
+namespace {
 std::filesystem::path userDataRoot() {
 #ifdef _WIN32
-    if (const wchar_t* local = _wgetenv(L"LOCALAPPDATA"); local && *local)
-        return std::filesystem::path(local) / L"DynSysLab";
+    std::vector<wchar_t> local(32768);
+    const DWORD size = GetEnvironmentVariableW(L"LOCALAPPDATA", local.data(), static_cast<DWORD>(local.size()));
+    if (size && size < local.size()) return std::filesystem::path(std::wstring(local.data(), size)) / L"DynSysLab";
 #else
     if (const char* home = std::getenv("HOME"); home && *home)
         return std::filesystem::path(home) / ".local" / "share" / "DynSysLab";
@@ -56,10 +68,8 @@ std::filesystem::path userDataRoot() {
 
 ArchiveRootChoice resolveArchiveRoot(const std::filesystem::path& executable,
                                      const std::filesystem::path& userData) {
-    for (auto candidate = executable.parent_path(); !candidate.empty(); candidate = candidate.parent_path()) {
-        if (sourceCheckout(candidate)) return {candidate / L"archives", "source_checkout"};
-        if (candidate == candidate.parent_path()) break;
-    }
+    if (const auto checkout = sourceCheckoutContaining(executable); !checkout.empty())
+        return {checkout / L"archives", "source_checkout"};
     if (auto saved = savedArchiveRoot(executable.parent_path().parent_path() / L"resources" / L"runtime.json");
         !saved.empty()) return {saved, "install_runtime"};
     if (auto saved = savedArchiveRoot(userData / L"runtime.json"); !saved.empty())
@@ -67,6 +77,6 @@ ArchiveRootChoice resolveArchiveRoot(const std::filesystem::path& executable,
     return {userData / L"archives", "user_default"};
 }
 
-ArchiveRootChoice defaultArchiveRoot() { return resolveArchiveRoot(executablePath(), userDataRoot()); }
+ArchiveRootChoice defaultArchiveRoot() { return resolveArchiveRoot(cliExecutablePath(), userDataRoot()); }
 
 }  // namespace dynsyslab::cli

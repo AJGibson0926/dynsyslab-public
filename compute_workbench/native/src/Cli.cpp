@@ -1,4 +1,5 @@
 #include "CliArguments.hpp"
+#include "CliQuickstart.hpp"
 #include <dynsyslab/workflow/Run.hpp>
 #include <dynsyslab/workflow/Pipeline.hpp>
 #include <dynsyslab/workflow/ObservableQuery.hpp>
@@ -49,6 +50,8 @@ void usage() {
     std::cout
         << "DynSysLab native CLI (Python is not required)\n\n"
         << "dynsyslab_cli capabilities\n"
+        << "dynsyslab_cli quickstart [--archive-root PATH] [--format markdown|json]\n"
+        << "    welcome, overview, bundled examples, Fourier summary and figures; no GUI\n"
         << "dynsyslab_cli doctor [--archive-root PATH]\n"
         << "dynsyslab_cli docs\n"
         << "dynsyslab_cli systems\n"
@@ -387,6 +390,8 @@ int wmain(int argc, wchar_t** argv) {
         const std::wstring command = args.positional.front();
         if (command == L"capabilities") capabilities();
         else if (command == L"doctor") doctor(args);
+        else if (command == L"quickstart")
+            return dynsyslab::cli::quickstart({args.archiveRoot, args.archiveRootSource, args.format});
         else if (command == L"docs") docs();
         else if (command == L"systems") systems();
         else if (command == L"krom-info") {

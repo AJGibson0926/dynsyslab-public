@@ -1,0 +1,28 @@
+{
+  "schema": "dynsyslab.quickstart-examples/v1",
+  "examples": [
+    {
+      "job": "duffing-double-well.json",
+      "title": "Duffing double well",
+      "about": "A damped particle in a double-well potential: it crosses the barrier, then settles into the left well.",
+      "fourier_state": 0,
+      "fourier_state_name": "x",
+      "figures": [
+        {"view": "phase", "name": "duffing-phase", "title": "Duffing phase portrait"},
+        {"view": "time", "name": "duffing-time", "title": "Duffing time series"}
+      ]
+    },
+    {
+      "job": "lorenz-1963.json",
+      "title": "Lorenz 1963 (chaotic)",
+      "about": "The Lorenz convection model on its strange attractor.",
+      "fourier_state": 2,
+      "fourier_state_name": "z",
+      "figures": [
+        {"view": "phase", "name": "lorenz-phase", "title": "Lorenz attractor (x, y)"},
+        {"view": "time", "name": "lorenz-time", "title": "Lorenz time series"},
+        {"view": "fourier", "name": "lorenz-spectrum", "title": "Lorenz Fourier spectra", "options": ["--x-range", "0:3"]}
+      ]
+    }
+  ]
+}

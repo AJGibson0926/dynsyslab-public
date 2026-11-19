@@ -65,10 +65,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Every release body starts with the install-and-run procedure.
+          $notes = (Get-Content -Raw .github/release-notes-template.md).Replace('{{TAG}}', $env:GITHUB_REF_NAME)
+          [IO.File]::WriteAllText("$PWD/build/release-notes.md", $notes, [Text.UTF8Encoding]::new($false))
           gh release view $env:GITHUB_REF_NAME *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $env:GITHUB_REF_NAME --draft --verify-tag --generate-notes --title "DynSysLab $env:GITHUB_REF_NAME"
+            gh release create $env:GITHUB_REF_NAME --draft --verify-tag --generate-notes --notes-file build/release-notes.md --title "DynSysLab $env:GITHUB_REF_NAME"
             if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
+          }
+          $body = gh release view $env:GITHUB_REF_NAME --json body -q .body | Out-String
+          if (-not $body.TrimStart().StartsWith('### Install and run')) {
+            [IO.File]::WriteAllText("$PWD/build/release-notes.md", $notes + "`n" + $body, [Text.UTF8Encoding]::new($false))
+            gh release edit $env:GITHUB_REF_NAME --notes-file build/release-notes.md
+            if ($LASTEXITCODE -ne 0) { throw 'Release notes update failed' }
           }
           $zip = @(Get-ChildItem build/native-suite-fast/DynSysLab-*-windows-x64.zip)
           if ($zip.Count -ne 1) { throw 'Expected one release ZIP' }

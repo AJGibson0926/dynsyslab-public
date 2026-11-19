@@ -1,12 +1,5 @@
 # Welcome to DynSysLab
 
-*Shown by AI coding agents (Claude Code, Codex, Gemini CLI and others) the first time they
-open this repository, and after installing a release with `install.ps1`. Agents: present the
-greeting and overview below in the chat, in your own words, briefly, then ask what the user
-wants to do. Do not start the desktop applications unless the user asks.*
-
----
-
 **Hello, and welcome to DynSysLab.** It is a native C++ suite for simulating, analysing,
 modelling and controlling dynamical systems: from equations, through data-driven Koopman
 models, to estimators and controllers, with every result archived and every figure traceable
@@ -37,11 +30,13 @@ planned, run and re-run; archives are immutable and record their provenance.
 - **Python client (optional, any OS):**
   `pip install git+https://github.com/AJGibson0926/dynsyslab-public` installs the
   dependency-free `dynsyslab` client that drives the compiled CLI.
-- **First calculation:**
-  `dynsyslab-cli doctor` then
-  `dynsyslab-cli run <example> --archive-root <a new folder>`, where `<example>` is
-  `resources\examples\duffing-free-solve.json` in an installed release (under
-  `%LOCALAPPDATA%\Programs\DynSysLab`) or `examples/native/duffing-free-solve.json` in this checkout.
+- **Run DynSysLab:** `dynsyslab-cli quickstart` (installed at
+  `%LOCALAPPDATA%\Programs\DynSysLab\bin\dynsyslab-cli.exe`). It prints this overview, runs
+  the bundled examples, and reports their results and figures as Markdown, without opening
+  any window. Results go to `Documents\DynSysLab\archives`. The desktop applications
+  (Solver/Post-processor and Viewer) are optional: open them from the Start menu.
+- **Your own calculation:** `dynsyslab-cli run <job.json>`; examples are in
+  `resources\examples` (installed) or `examples/native` (checkout).
 - **Build from source:** [BUILD_NATIVE.md](BUILD_NATIVE.md).
 
 ## Where to read next
@@ -57,7 +52,7 @@ planned, run and re-run; archives are immutable and record their provenance.
 
 ## Things you can ask your agent
 
-- "Install DynSysLab and run the Duffing example."
+- "Run the Duffing example with a stronger push and compare it with the quickstart run."
 - "Simulate the Lorenz system and show me its phase portrait."
 - "Fit a Koopman model to these trajectories and check how well it predicts."
 - "Design an LQR controller for this K-ROM and show me its Nyquist plot."

@@ -8,10 +8,12 @@ Campaigner planning/execution layers.
 
 ## Using DynSysLab with an AI agent
 
-Open this repository in Claude Code, Codex, Gemini CLI or another coding agent: on the first
-session the agent greets you with [a short overview](docs/AGENT_WELCOME.md) and can install
-the release, run examples, fit models and produce figures for you. Agent conventions are in
-[AGENTS.md](AGENTS.md).
+Ask Claude Code, Codex or another agent: *"Install and run DynSysLab at
+https://github.com/AJGibson0926/dynsyslab-public/releases/latest"*. Installing runs
+`dynsyslab-cli quickstart`, which prints [the overview](docs/AGENT_WELCOME.md), runs the
+bundled examples and reports their results and figures, without opening a window; running
+DynSysLab later means the same command. Opening this repository in an agent gives the same
+overview on the first session; source conventions are in [AGENTS.md](AGENTS.md).
 
 ## Start here
 

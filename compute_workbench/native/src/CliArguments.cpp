@@ -18,6 +18,8 @@ Arguments arguments(int count, wchar_t** values) {
             result.auditDays = std::stod(values[++index]);
         } else if (value == L"--help" || value == L"-h" || value == L"/?") {
             result.help = true;
+        } else if (value == L"--format" && index + 1 < count) {
+            result.format = dynsyslab::core::narrow(values[++index]);
         } else if (value == L"--all-ages") {
             result.auditDays = -1.0;
         } else if ((value == L"--section" || value == L"--system") && index + 1 < count) {

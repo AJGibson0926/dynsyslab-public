@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.2 — 2026-11-19
+
+- `dynsyslab-cli quickstart`: the first run as one command. It prints the welcome and
+  overview, runs the bundled examples (Duffing double well, Lorenz 1963), reports each run
+  (samples, solver steps, dominant frequency, final state, archive) and Viewer CLI figures as
+  Markdown (`--format json` for tools), and ends with things to try next. No window opens.
+- Installer: runs `quickstart` at the end (`-NoQuickstart` skips it) and no longer addresses
+  agents in its output; `release-install.json` records `version`, `cli`, `welcome_document`,
+  `archive_root` and `quickstart_command`.
+- Release notes start with an "Install and run" procedure, generated from
+  `.github/release-notes-template.md` by the release workflow.
+- Docs: `AGENT_WELCOME.md` is plain user-facing content; INSTALL describes install and run as
+  three commands. The release install test checks the first-run output, that no desktop
+  application starts, repeated runs and a long working directory.
+
 ## 0.6.1 — 2026-11-19
 
 - CLI: without `--archive-root`, results go to the archive folder the installer configured

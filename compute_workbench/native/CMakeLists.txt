@@ -29,7 +29,8 @@ if(NOT TARGET dynsyslab_ui_support)
 endif()
 
 if(DYNSYSLAB_COMPUTE_BUILD_CLI)
-add_executable(dynsyslab_cli src/Cli.cpp src/CliArguments.cpp src/CliRuntimePaths.cpp)
+add_executable(dynsyslab_cli src/Cli.cpp src/CliArguments.cpp src/CliRuntimePaths.cpp
+  src/CliQuickstart.cpp src/CliViewerFigures.cpp)
   target_link_libraries(dynsyslab_cli PRIVATE dynsyslab_queue)
   target_compile_features(dynsyslab_cli PRIVATE cxx_std_17)
   if(MSVC)
@@ -167,6 +168,12 @@ if(BUILD_TESTING AND DYNSYSLAB_COMPUTE_BUILD_TESTS)
     ../../workflow/native/tests/control_factory_tests.cpp)
   target_link_libraries(dynsyslab_control_factory_tests PRIVATE dynsyslab_workflow)
   add_test(NAME dynsyslab_control_factory_tests COMMAND dynsyslab_control_factory_tests)
+  add_test(NAME dynsyslab_cli_quickstart_contract
+    COMMAND ${CMAKE_COMMAND}
+      -DCLI=$<TARGET_FILE:dynsyslab_cli>
+      -DROOT=${CMAKE_BINARY_DIR}/cli-quickstart-contract
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/CliQuickstartContract.cmake)
+  set_tests_properties(dynsyslab_cli_quickstart_contract PROPERTIES LABELS "native;cli" TIMEOUT 120)
   add_test(NAME dynsyslab_cli_queue_contract
     COMMAND ${CMAKE_COMMAND}
       -DCLI=$<TARGET_FILE:dynsyslab_cli>

@@ -47,8 +47,46 @@ Expect-Rejection {
     & $installer -PackagePath $unsafeZip -ChecksumPath $unsafeChecksum -InstallRoot $install -DataRoot $data -NoShortcuts -NoUserConfig
 } 'unsafe path'
 
-& $installer -PackagePath $PackagePath -ChecksumPath $ChecksumPath -InstallRoot $install -DataRoot $data -NoShortcuts -NoUserConfig
+$installOutput = & $installer -PackagePath $PackagePath -ChecksumPath $ChecksumPath -InstallRoot $install -DataRoot $data -NoShortcuts -NoUserConfig *>&1 | Out-String
+Write-Host $installOutput
 $cli = Join-Path $install 'bin\dynsyslab-cli.exe'
+$archives = Join-Path $data 'archives'
+# The installer's own output is the first-run experience: welcome, example results, figures, no GUI.
+foreach ($expected in @('# Welcome to DynSysLab', '## Quickstart results', '| Duffing double well |',
+                        '## Figures', '## Things you can ask next', 'The applications were not started')) {
+    if (-not $installOutput.Contains($expected)) { throw "Installer output is missing: $expected" }
+}
+if ($installOutput -match 'AI agents:') { throw 'Installer output addresses agents directly.' }
+$installedPrefix = $install.TrimEnd('\') + '\'
+$gui = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+    try { $_.Path -and $_.Path.StartsWith($installedPrefix, [StringComparison]::OrdinalIgnoreCase) } catch { $false } })
+if ($gui.Count) { throw "Installer started: $($gui.Name -join ', ')" }
+$record = Get-Content -LiteralPath (Join-Path $install 'release-install.json') -Raw | ConvertFrom-Json
+foreach ($field in @('version', 'cli', 'welcome_document', 'quickstart_command', 'archive_root')) {
+    if (-not $record.$field) { throw "release-install.json lacks $field" }
+}
+if (-not (Test-Path -LiteralPath $record.welcome_document)) { throw 'Installed welcome document is missing.' }
+# quickstart: JSON form, default archive root from the install, distinct runs, long working directory.
+$long = Join-Path $work ('long-working-directory-' + ('x' * 150))
+New-Item -ItemType Directory -Force -Path $long | Out-Null
+Push-Location -LiteralPath $long
+try {
+    $first = (& $cli quickstart --format json | Out-String) | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0) { throw 'quickstart failed from a long working directory.' }
+    $second = (& $cli quickstart --format json | Out-String) | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0) { throw 'second quickstart failed.' }
+} finally { Pop-Location }
+if ($first.schema -ne 'dynsyslab.quickstart/v1' -or $first.runs.Count -lt 2) { throw 'quickstart JSON report is incomplete.' }
+if ([IO.Path]::GetFullPath($first.archive_root) -ne [IO.Path]::GetFullPath($archives)) {
+    throw "quickstart used $($first.archive_root) instead of the installed archive folder."
+}
+$paths = @($first.runs.archive) + @($second.runs.archive)
+if (@($paths | Select-Object -Unique).Count -ne $paths.Count) { throw 'Repeated quickstart runs share an archive.' }
+foreach ($path in $paths) { if (-not (Test-Path -LiteralPath $path)) { throw "Missing quickstart archive: $path" } }
+foreach ($figure in @($first.runs.figures)) {
+    if (-not $figure.rendered -or -not (Test-Path -LiteralPath $figure.path)) { throw "Quickstart figure not rendered: $($figure.title)" }
+}
+if (Get-ChildItem -LiteralPath $long -Force) { throw 'quickstart wrote into the working directory.' }
 $example = Join-Path $install 'resources\examples\duffing-free-solve.json'
 $resultText = & $cli run $example --archive-root (Join-Path $data 'archives')
 if ($LASTEXITCODE -ne 0) { throw 'Installed example solve failed.' }
@@ -66,4 +104,4 @@ if ((Get-Content -LiteralPath $sentinel -Raw) -ne 'preserve this existing data')
 }
 $newRuntime = if (Test-Path -LiteralPath $runtimePath) { (Get-FileHash -LiteralPath $runtimePath).Hash } else { '' }
 if ($oldRuntime -ne $newRuntime) { throw 'Isolated install changed the user runtime configuration.' }
-Write-Host "Release installer checks passed: checksum, ZIP containment, native solve, both apps, data preservation. Evidence: $work"
+Write-Host "Release installer checks passed: checksum, ZIP containment, first-run quickstart without GUI, distinct repeated runs, long working directory, native solve, both apps, data preservation. Evidence: $work"

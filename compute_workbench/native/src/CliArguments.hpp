@@ -12,6 +12,7 @@ struct Arguments {
     std::filesystem::path archiveRoot;
     std::string archiveRootSource{"argument"};  // see CliRuntimePaths.hpp when not given
     bool help{};
+    std::string format{"markdown"};  // quickstart: markdown | json
     std::filesystem::path progress;
     double auditDays{2.0};
     std::vector<std::string> auditSections;

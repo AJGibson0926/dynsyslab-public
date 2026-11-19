@@ -20,4 +20,8 @@ struct ArchiveRootChoice {
                                                    const std::filesystem::path& userDataRoot);
 [[nodiscard]] ArchiveRootChoice defaultArchiveRoot();
 
+// The running executable, and the source checkout containing it (empty for an install).
+[[nodiscard]] std::filesystem::path cliExecutablePath();
+[[nodiscard]] std::filesystem::path sourceCheckoutContaining(const std::filesystem::path& executable);
+
 }  // namespace dynsyslab::cli
