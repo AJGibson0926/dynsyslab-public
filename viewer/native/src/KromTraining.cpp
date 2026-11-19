@@ -79,7 +79,11 @@ KromTraining readKromTraining(const std::filesystem::path& source,
     const dynsyslab::core::NpzRecord& archive, const json::Value& metadata,
     const dynsyslab::core::KoopmanModel& model) {
     KromTraining result;
-    const auto* states = array(archive, {"training_states"});
+    // Coordinate KROMs (e.g. causal-history xi) store their samples as
+    // training_coordinates; physical-state KROMs as training_states.
+    const auto* states = model.requiresExternalCoordinates()
+        ? array(archive, {"training_states", "training_coordinates"})
+        : array(archive, {"training_states"});
     const auto expectedDimension = model.requiresExternalCoordinates()
         ? model.coordinateDimension() : model.stateDimension();
     if (!states || states->shape.size() != 2 || !states->shape[0] ||

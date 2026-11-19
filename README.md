@@ -4,6 +4,15 @@
 archives, postprocessing, read-only viewing, and separate JobManager and
 Campaigner planning/execution layers.
 
+**New here? Read the [DynSysLab overview](docs/OVERVIEW.md)** — what the suite does, its modules and pipelines, and how to analyse and control a dynamical system, with architecture diagrams.
+
+## Using DynSysLab with an AI agent
+
+Open this repository in Claude Code, Codex, Gemini CLI or another coding agent: on the first
+session the agent greets you with [a short overview](docs/AGENT_WELCOME.md) and can install
+the release, run examples, fit models and produce figures for you. Agent conventions are in
+[AGENTS.md](AGENTS.md).
+
 ## Start here
 
 **Install on Windows x64 from [the latest release](https://github.com/AJGibson0926/dynsyslab-public/releases/latest).**

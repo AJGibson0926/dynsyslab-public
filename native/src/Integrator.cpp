@@ -1,6 +1,7 @@
 #include <dynsyslab/core/Integrator.hpp>
 
 #include "IntegratorBackend.hpp"
+#include <dynsyslab/core/Execution.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -262,6 +263,8 @@ NativeSolution integrateControlled(
     result.time.resize(result.sampleCount);
     result.values.resize(trajectoryCount * result.sampleCount * result.stateDimension);
     if (controller) result.controlValues.resize(trajectoryCount * result.sampleCount);
+    result.completedSamples.assign(trajectoryCount, result.sampleCount);
+    result.terminationReasons.assign(trajectoryCount, {});
     for (std::size_t sample = 0; sample < result.sampleCount; ++sample)
         result.time[sample] = std::min(options.initialTime + sample*options.outputStep, options.finalTime);
     auto lastProgress = std::chrono::steady_clock::now();
@@ -292,6 +295,8 @@ NativeSolution integrateControlled(
         double nextTick = sampled
             ? tickTime(options.initialTime, controller.sampleTime, tick)
             : (std::numeric_limits<double>::infinity)();
+        std::size_t completed = 1;
+        try {
         for (std::size_t sample = 1; sample < result.sampleCount; ++sample) {
             double current = result.time[sample - 1];
             const double target = result.time[sample];
@@ -309,6 +314,7 @@ NativeSolution integrateControlled(
             }
             std::copy(state.begin(), state.end(), result.values.begin()
                 + (trajectory*result.sampleCount + sample)*result.stateDimension);
+            completed = sample + 1;
             if (controller) {
                 auto& stored = result.controlValues[trajectory * result.sampleCount + sample];
                 if (sampled) stored = heldInput;
@@ -329,6 +335,17 @@ NativeSolution integrateControlled(
                     trajectoryCount * result.sampleCount});
             if (emit) { lastProgress = now; lastFraction = fraction; }
         }
+            } catch (const ExecutionCancelled&) { throw; }
+            catch (const std::exception& failure) {
+                if (!options.truncateOnFailure) throw;
+                const double nan = std::numeric_limits<double>::quiet_NaN();
+                for (std::size_t sample = completed; sample < result.sampleCount; ++sample) {
+                    std::fill_n(result.values.begin() + (trajectory * result.sampleCount + sample) * result.stateDimension, result.stateDimension, nan);
+                    if (controller) result.controlValues[trajectory * result.sampleCount + sample] = nan;
+                }
+                result.completedSamples[trajectory] = completed;
+                result.terminationReasons[trajectory] = failure.what();
+            }
     }
     return result;
 }

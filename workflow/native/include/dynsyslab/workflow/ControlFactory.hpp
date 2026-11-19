@@ -7,6 +7,8 @@
 #include <dynsyslab/workflow/Json.hpp>
 
 #include <cstddef>
+#include <optional>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -38,5 +40,9 @@ struct ControllerSetup {
     const json::Value& controllerSpec, const json::Value& solverSpec,
     const dynsyslab::core::ODESystem& system, std::size_t trajectoryCount,
     double defaultSampleTime, const std::vector<double>& linearizationState);
+
+// The actuator-cap toggle shared by every controller: "control_limit" absent, null or
+// false -> no cap; a positive number L -> [-L, L]; [low, high] -> that interval.
+[[nodiscard]] std::optional<std::pair<double, double>> controlCap(const json::Value& controlLimit);
 
 }  // namespace dynsyslab::workflow

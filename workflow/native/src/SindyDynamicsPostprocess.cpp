@@ -1,10 +1,14 @@
 #include "PostprocessInternal.hpp"
 #include "ObservationSource.hpp"
 #include "KromDatasetSupport.hpp"
+#include "CoordinateInverse.hpp"
 #include <dynsyslab/core/CoordinateTransform.hpp>
 #include <dynsyslab/core/SindyDynamics.hpp>
 #include <dynsyslab/core/DynamicsLibrary.hpp>
+#include <dynsyslab/core/PathSimplification.hpp>
+#include <utility>
 #include <algorithm>
+#include <iterator>
 #include <cmath>
 #include <stdexcept>
 
@@ -25,9 +29,12 @@ c::TimeSeries sampled(const c::TimeSeries& s,std::size_t stride) {
     }
     return {time,values,s.componentCount()};
 }
+// q: predictor coordinates. numeric/reference: rates of the response
+// coordinates (by default the predictors themselves) on the same clock.
 struct Dataset {
     SourceData source;c::TimeSeries q,numeric;
     std::optional<c::TimeSeries> reference;
+    bool cross{};
 };
 Dataset dataset(const SourceData& s) {
     if(datasetDynamics(s)!="unforced")
@@ -43,6 +50,49 @@ Dataset dataset(const SourceData& s) {
         d.reference=c::trimTimeSeries(c::TimeSeries(s.time,v.doubles(),s.dimension),2,s.samples-4);
     }
     return d;
+}
+// Rows of `series` at the given times (which must all be present).
+c::TimeSeries rowsAt(const c::TimeSeries& series,const std::vector<double>& times) {
+    std::vector<double> values;values.reserve(times.size()*series.componentCount());
+    std::size_t k=0;
+    for(const double t:times) {
+        while(k<series.sampleCount()&&series.time(k)<t)++k;
+        for(std::size_t j=0;j<series.componentCount();++j)values.push_back(series.value(k,j));
+    }
+    return {times,std::move(values),series.componentCount()};
+}
+// Predictors from one coordinate archive, response rates from another, on
+// their common sample times (e.g. [e,e']' against (r,v) or xi).
+Dataset paired(const SourceData& predictors,const SourceData& response) {
+    const auto x=dataset(predictors),y=dataset(response);
+    std::vector<double> common;
+    std::set_intersection(x.q.timeData(),x.q.timeData()+x.q.sampleCount(),
+        y.q.timeData(),y.q.timeData()+y.q.sampleCount(),std::back_inserter(common));
+    if(common.size()<16)throw std::invalid_argument("Predictor and response coordinates share too few sample times");
+    Dataset d{predictors,rowsAt(x.q,common),rowsAt(y.numeric,common),{},true};
+    if(y.reference)d.reference=rowsAt(*y.reference,common);
+    return d;
+}
+// Rows `kept` of several aligned series, archived under key+suffix, plus key+"time".
+void archiveRows(c::NpzRecord& a,const std::string& key,const std::vector<std::pair<std::string,c::TimeSeries>>& series,
+                 const std::vector<std::size_t>& kept) {
+    std::vector<double> time;for(const auto k:kept)time.push_back(series.front().second.time(k));
+    a.arrays[key+"time"]=c::NpyArray::fromDoubles({kept.size()},time);
+    for(const auto& [suffix,s]:series) {
+        std::vector<double> values;
+        for(const auto k:kept)for(std::size_t j=0;j<s.componentCount();++j)values.push_back(s.value(k,j));
+        a.arrays[key+suffix]=c::NpyArray::fromDoubles({kept.size(),s.componentCount()},values);
+    }
+}
+// Error-bounded vertices of all the series together (core PathSimplification):
+// collapses keep their detail, smooth stretches are thinned.
+std::vector<std::size_t> rolloutVertices(const std::vector<std::pair<std::string,c::TimeSeries>>& series,std::size_t maximum) {
+    const auto n=series.front().second.sampleCount();std::size_t width=0;
+    for(const auto& item:series)width+=item.second.componentCount();
+    std::vector<double> joined;joined.reserve(n*width);
+    for(std::size_t k=0;k<n;++k)for(const auto& item:series)
+        for(std::size_t j=0;j<item.second.componentCount();++j)joined.push_back(item.second.value(k,j));
+    return c::simplifiedPathIndices(joined,n,width,maximum);
 }
 void archiveSeries(c::NpzRecord& a,const std::string& key,const c::TimeSeries& s,std::size_t stride) {
     auto thin=sampled(s,stride);
@@ -78,34 +128,86 @@ json::Value evaluate(const c::SindyDynamicsModel& model,const Dataset& d,
     }
     result["regions"]=regions;
     json::Value::Array rollouts;std::size_t index=0;
+    if(d.cross||!model.isVectorField()){result["rollouts"]="not applicable: the response coordinates differ from the predictors";return result;}
     for(const auto& start:settings.at("rollout_starts").array()) {
         const auto* begin=d.q.timeData();const auto* end=begin+d.q.sampleCount();
         const auto k=std::size_t(std::lower_bound(begin,end,start.number())-begin);
-        const auto count=std::size_t(std::llround(settings.at("rollout_duration").number(1)/d.q.deltaTime()))+1;
-        if(k>=d.q.sampleCount()||count>d.q.sampleCount()-k||count<2)continue;
+        // "full" runs to the end of the record; a longer duration is clipped to it.
+        const auto& duration=settings.at("rollout_duration");
+        const bool full=std::holds_alternative<std::string>(duration.storage())&&duration.string()=="full";
+        if(k>=d.q.sampleCount())continue;
+        auto count=full?d.q.sampleCount()-k:std::size_t(std::llround(duration.number(1)/d.q.deltaTime()))+1;
+        count=std::min(count,d.q.sampleCount()-k);
+        if(count<2)continue;
         json::Value::Object record{{"start",d.q.time(k)},{"duration",double(count-1)*d.q.deltaTime()}};
         try {
-            c::IntegrationOptions options;options.initialTime=d.q.time(k);options.finalTime=d.q.time(k+count-1);
-            options.outputStep=d.q.deltaTime();options.maximumInternalSteps=100000;
-            options.relativeTolerance=1e-8;options.absoluteTolerance=1e-10;
-            std::vector<double> initial(d.q.valuesData()+k*d.source.dimension,d.q.valuesData()+(k+1)*d.source.dimension);
-            const auto solution=c::integrateSindyDynamics(model,initial,options);
-            // Compare using the observed timestamps (solver roundoff need not be bitwise identical).
-            const auto actual=c::trimTimeSeries(d.q,k,count);
-            if(solution.sampleCount<count||solution.sampleCount>count+1)
-                throw std::runtime_error("Rollout output grid differs from requested horizon");
-            for(std::size_t row=0;row<count;++row)
-                if(std::abs(solution.time[row]-actual.time(row))>1e-10*std::max(1.,std::abs(actual.time(row))))
-                    throw std::runtime_error("Rollout timestamps do not match validation samples");
-            // The standard solver's ceil grid may include one duplicate endpoint
-            // from floating-point rounding. Preserve one copy of each observed tick.
-            const auto predicted=c::TimeSeries({actual.timeData(),actual.timeData()+count},
-                {solution.values.data(),solution.values.data()+count*d.source.dimension},d.source.dimension);
-            record["error"]=c::dynamicsError(actual,predicted).toJson();record["status"]="complete";
+            // Integrate in segments (rollout_segment, default 0.5 tau), each continuing
+            // from the previous end state, so a law that diverges keeps the valid
+            // part of its trajectory instead of losing all of it.
+            const std::size_t width=d.source.dimension;
+            const auto full=c::trimTimeSeries(d.q,k,count);
+            const auto segment=std::max<std::size_t>(2,std::size_t(std::llround(
+                settings.at("rollout_segment").number(0.5)/d.q.deltaTime())));
+            std::vector<double> state(full.valuesData(),full.valuesData()+width),values=state;
+            std::size_t valid=1,step=segment;std::string reason;
+            while(valid<count) {
+                const std::size_t a=valid-1,b=std::min(count-1,a+step);
+                try {
+                    c::IntegrationOptions options;options.initialTime=full.time(a);options.finalTime=full.time(b);
+                    options.outputStep=d.q.deltaTime();
+                    options.maximumInternalSteps=std::size_t(settings.at("rollout_max_steps").number(100000));
+                    options.relativeTolerance=1e-8;options.absoluteTolerance=1e-10;
+                    const auto solution=c::integrateSindyDynamics(model,state,options);
+                    if(solution.sampleCount<b-a+1)throw std::runtime_error("Rollout output grid differs from requested horizon");
+                    // Compare on the observed timestamps (solver roundoff need not be bitwise identical).
+                    for(std::size_t row=1;row<=b-a;++row) {
+                        if(std::abs(solution.time[row]-full.time(a+row))>1e-10*std::max(1.,std::abs(full.time(a+row))))
+                            throw std::runtime_error("Rollout timestamps do not match validation samples");
+                        values.insert(values.end(),solution.values.begin()+std::ptrdiff_t(row*width),
+                                      solution.values.begin()+std::ptrdiff_t((row+1)*width));
+                    }
+                    state.assign(solution.values.begin()+std::ptrdiff_t((b-a)*width),solution.values.begin()+std::ptrdiff_t((b-a+1)*width));
+                    valid=b+1;step=std::min(segment,2*step);
+                } catch(const std::exception& e) {
+                    // Halve the segment to keep everything up to the blow-up itself.
+                    reason=e.what();
+                    if(step<=2)break;
+                    step=std::max<std::size_t>(2,step/2);
+                }
+            }
+            if(valid<2)throw std::runtime_error(reason.empty()?"rollout produced no samples":reason);
+            const auto actual=c::trimTimeSeries(d.q,k,valid);
+            const auto predicted=c::TimeSeries({actual.timeData(),actual.timeData()+valid},std::move(values),width);
+            record["error"]=c::dynamicsError(actual,predicted).toJson();
+            record["status"]=valid==count?"complete":"diverged";
+            if(valid<count){record["valid_until"]=actual.time(valid-1);record["reason"]=reason;}
             const auto name=prefix+"rollout_"+std::to_string(index)+"_";
-            archiveSeries(a,name+"actual",actual,stride);archiveSeries(a,name+"predicted",predicted,stride);
-            const auto ts=sampled(actual,stride);
-            a.arrays[name+"time"]=c::NpyArray::fromDoubles({ts.sampleCount()},{ts.timeData(),ts.timeData()+ts.sampleCount()});
+            std::vector<std::pair<std::string,c::TimeSeries>> stored{{"actual",actual},{"predicted",predicted}};
+            // rollout_map: show a state-space rollout in other coordinates too, e.g.
+            // echo_jet2 maps a free (r,v) rollout and its reference to (e,e').
+            if(const auto mapName=settings.at("rollout_map").string();!mapName.empty()) {
+                const auto catalog=c::createSystem(systemConfiguration(d.source))->observableCatalog();
+                const auto map=catalog.coordinatePresets().count(mapName)?catalog.coordinatePreset(mapName):catalog.at(mapName);
+                stored.emplace_back("mapped_actual",c::transformCoordinates(actual,map).coordinates);
+                stored.emplace_back("mapped_predicted",c::transformCoordinates(predicted,map).coordinates);
+                record["mapped_error"]=c::dynamicsError(stored[2].second,stored[3].second).toJson();
+                record["map"]=mapName;
+                const auto& names=map.descriptor().outputNames;
+                record["map_labels"]=names.size()==2&&mapName=="echo_jet2"?json::Value::Array{"e","e'"}
+                    :json::parse(jsonStringArray(names));
+            } else if(const auto inversePath=settings.at("rollout_inverse").string();!inversePath.empty()) {
+                // The coordinates' retained inverse, e.g. xi back to (e,e'): both
+                // the observed and the free rollout go through the same map.
+                const auto inverse=loadCoordinateInverse(std::filesystem::u8path(inversePath));
+                stored.emplace_back("mapped_actual",inverse.apply(actual));
+                stored.emplace_back("mapped_predicted",inverse.apply(predicted));
+                record["mapped_error"]=c::dynamicsError(stored[2].second,stored[3].second).toJson();
+                record["map"]="inverse ("+inverse.kind()+")";
+                record["map_labels"]=json::parse(jsonStringArray(inverse.targetLabels()));
+            }
+            // Stored for display with error-bounded vertices (rollout_vertices),
+            // not every Nth sample; errors above use every sample.
+            archiveRows(a,name,stored,rolloutVertices(stored,std::size_t(settings.at("rollout_vertices").number(60000))));
         } catch(const std::exception& e){record["status"]="failed";record["reason"]=e.what();}
         rollouts.emplace_back(record);++index;
     }
@@ -146,7 +248,12 @@ std::filesystem::path runDynamicsValidation(const SourceData& source,const json:
 }
 std::filesystem::path runSindyDynamics(const SourceData& source,const json::Value& settings,
     const std::filesystem::path& root,const std::string& label) {
-    const auto data=dataset(source);const auto dimension=source.dimension;
+    // response_source: fit the rates of another coordinate archive's coordinates
+    // (w' = g(z)) instead of the predictors' own rates (z' = f(z)).
+    const auto responsePath=settings.at("response_source").string();
+    const auto data=responsePath.empty()?dataset(source):paired(source,[&]{
+        auto r=loadSource(std::filesystem::u8path(responsePath));requireSameObservationSystem(source,r);return r;}());
+    const auto dimension=data.numeric.componentCount();
     const auto derivative=settings.at("derivatives").string("finite_difference");
     if(derivative!="finite_difference"&&derivative!="stored")
         throw std::invalid_argument("SINDy dynamics derivatives must be finite_difference or stored");
@@ -175,13 +282,20 @@ std::filesystem::path runSindyDynamics(const SourceData& source,const json::Valu
     const auto model=c::fitSindyDynamics(q,dq,library,options,&fitDiagnostics);
     c::NpzRecord archive;
     archive.arrays["dynamics_model_json"]=c::NpyArray::fromString(json::dump(model.definition()));
-    archive.arrays["coefficients"]=c::NpyArray::fromDoubles({library.outputDimension(),dimension},model.coefficients());
+    archive.arrays["coefficients"]=c::NpyArray::fromDoubles({library.outputDimension(),model.outputs()},model.coefficients());
     auto meta=json::parse(metadata(source,"sindy-dynamics",label,""));
     const auto sourceMeta=json::parse(source.metadataJson);
-    for(const char* key:{"coordinate_names","coordinate_transform_kind","coordinate_transform_identity",
+    for(const char* key:{"coordinate_names","coordinate_labels","coordinate_transform_kind","coordinate_transform_identity",
         "coordinate_transform_archive","coordinate_definition","derivative_evidence"})
         if(!sourceMeta.at(key).isNull())meta.object()[key]=sourceMeta.at(key);
-    meta.object()["settings"]=settings;meta.object()["coordinate_dimension"]=double(dimension);
+    meta.object()["settings"]=settings;meta.object()["coordinate_dimension"]=double(source.dimension);
+    meta.object()["response_dimension"]=double(dimension);
+    if(!responsePath.empty()) {
+        const auto r=json::parse(c::readNpz(std::filesystem::u8path(responsePath)).metadataJson());
+        meta.object()["response_source"]=responsePath;
+        meta.object()["response_coordinate_names"]=r.at("coordinate_names");
+        meta.object()["response_coordinate_labels"]=r.at("coordinate_labels");
+    }
     meta.object()["fit_samples"]=double(q.sampleCount());
     meta.object()["candidate_count"]=double(library.outputDimension());
     meta.object()["library_family"]=settings.at("library").isNull()?family:"custom";
@@ -198,6 +312,9 @@ std::filesystem::path runSindyDynamics(const SourceData& source,const json::Valu
     meta.object()["sparse_regression_steps"]=fitDiagnostics.toJson();
     meta.object()["training"]=evaluate(model,data,archive,"training_",settings);
     json::Value::Array validations;std::size_t index=0;
+    const auto& responses=settings.at("validation_response_sources").array();
+    if(!responsePath.empty()&&responses.size()!=settings.at("validation_sources").array().size())
+        throw std::invalid_argument("validation_response_sources must pair with validation_sources");
     for(const auto& path:settings.at("validation_sources").array()) {
         const auto s=loadSource(std::filesystem::u8path(path.string()));
         requireSameObservationSystem(source,s);
@@ -205,11 +322,13 @@ std::filesystem::path runSindyDynamics(const SourceData& source,const json::Valu
         for(const char* key:{"coordinate_transform_kind","coordinate_transform_identity","coordinate_definition"})
             if(json::dump(first.at(key))!=json::dump(next.at(key)))
                 throw std::invalid_argument("Validation coordinates must use the frozen training transform");
-        if(s.dimension!=dimension)throw std::invalid_argument("Validation coordinate dimension mismatch");
-        validations.push_back(evaluate(model,dataset(s),archive,"validation_"+std::to_string(index++)+"_",settings));
+        if(s.dimension!=source.dimension)throw std::invalid_argument("Validation coordinate dimension mismatch");
+        const auto validation=responsePath.empty()?dataset(s)
+            :paired(s,loadSource(std::filesystem::u8path(responses[index].string())));
+        validations.push_back(evaluate(model,validation,archive,"validation_"+std::to_string(index++)+"_",settings));
     }
     meta.object()["validation"]=validations;
-    meta.object()["model_type"]="autonomous-vector-field";
+    meta.object()["model_type"]=model.isVectorField()&&responsePath.empty()?"autonomous-vector-field":"cross-coordinate-rate-law";
     meta.object()["derivative_method"]=derivative;
     archive.arrays["metadata_json"]=c::NpyArray::fromString(json::dump(meta));
     return publish(root,source,"sindy-dynamics",label,std::move(archive));

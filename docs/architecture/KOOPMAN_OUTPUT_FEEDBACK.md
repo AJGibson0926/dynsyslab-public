@@ -111,9 +111,9 @@ auto estimatedState = sample.estimate.output;
 // Apply command through the actuator, recording the actual input for next tick.
 ```
 
-Link the workflow composition with `dynsyslab_workflow`. The observer alone
-requires `dynsyslab_estimation`; the controller alone requires
-`dynsyslab_control`. Construct a new runtime to reset a measurement stream.
+Link the workflow composition with `dynsyslab_workflow`. The observer and the
+controller are both in `dynsyslab_control` (estimation and control were merged
+on 2026-11-15); either can be used without the other. Construct a new runtime to reset a measurement stream.
 Core APIs accept multiple measurement and input channels. The existing ODE
 solver adapter currently accepts one scalar input.
 

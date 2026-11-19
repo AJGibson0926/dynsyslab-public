@@ -233,8 +233,10 @@ KoopmanModel loadPolynomialKoopmanModel(const std::filesystem::path& path,
             const auto& value=archive.at("reconstruction__"+safeKey(name));
             if (value.shape.size()!=2 || value.shape[1]!=modes)
                 throw std::invalid_argument("archived observable reconstruction has invalid shape");
-            model.setReconstruction(name,ReconstructionResult{
-                value.complexDoubles(),value.shape[0],modes,0.0,0.0,0.0});
+            ReconstructionResult loaded{value.complexDoubles(),value.shape[0],modes,0.0,0.0,0.0};
+            if(archive.contains("reconstruction_offset__"+safeKey(name)))
+                loaded.offset=archive.at("reconstruction_offset__"+safeKey(name)).doubles();
+            model.setReconstruction(name,std::move(loaded));
         }
     detail::readNamedInputMaps(archive,model);
     if(archive.contains("spectral_data_json"))model.setSpectralData(spectralDataFromJson(json::parse(archive.at("spectral_data_json").string())));
@@ -312,8 +314,10 @@ KoopmanModel loadKoopmanModel(const std::filesystem::path& path,
     if(archive.contains("reconstruction_names"))
         for(const auto& name:splitNames(archive.at("reconstruction_names").string())){
             const auto& value=archive.at("reconstruction__"+safeKey(name));
-            model.setReconstruction(name,ReconstructionResult{value.complexDoubles(),
-                value.shape.at(0),value.shape.at(1),0.0,0.0,0.0});
+            ReconstructionResult loaded{value.complexDoubles(),value.shape.at(0),value.shape.at(1),0.0,0.0,0.0};
+            if(archive.contains("reconstruction_offset__"+safeKey(name)))
+                loaded.offset=archive.at("reconstruction_offset__"+safeKey(name)).doubles();
+            model.setReconstruction(name,std::move(loaded));
         }
     detail::readNamedInputMaps(archive,model);
     if(archive.contains("spectral_data_json"))model.setSpectralData(spectralDataFromJson(json::parse(archive.at("spectral_data_json").string())));
@@ -388,6 +392,9 @@ NpzRecord makeKoopmanArchive(const KoopmanModel& model,
             names.push_back(item.first);
             archive.arrays["reconstruction__"+safeKey(item.first)]=NpyArray::fromComplex(
                 {item.second.outputs,item.second.modes},item.second.matrix);
+            if(!item.second.offset.empty())
+                archive.arrays["reconstruction_offset__"+safeKey(item.first)]=NpyArray::fromDoubles(
+                    {item.second.offset.size()},item.second.offset);
         }
         archive.arrays["reconstruction_names"]=NpyArray::fromString(joinNames(names));
     }

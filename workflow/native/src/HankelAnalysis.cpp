@@ -1,7 +1,5 @@
 #include "HankelAnalysis.hpp"
-#include "KromDatasetSupport.hpp"
-#include <dynsyslab/core/ObservableDerivative.hpp>
-#include <dynsyslab/core/SpectralKromArchive.hpp>
+#include "CoordinateChannels.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -28,72 +26,70 @@ struct Signal {
     std::vector<double> values;
 };
 
-class Signals {
+// The Hankel module never evaluates physics: a channel is a column of the
+// time series it receives, chosen by index or by the archive's column name.
+// Observables, their derivatives and KROM observables are coordinate changes
+// (coordinate_transform) that must run before the series reaches this module.
+class Columns {
 public:
-    explicit Signals(const SourceData& s):source(s) {}
-    Signal resolve(const J& selector,std::size_t order) {
+    explicit Columns(const SourceData& s):source(s),names(timeSeriesColumnNames(s)),
+        named(!(s.metadataJson.empty()?J{}:json::parse(s.metadataJson)).at("coordinate_names").isNull()) {}
+    Signal resolve(const J& item,const J& selector,std::size_t order) {
+        if (order || selectorNeedsCoordinateChange(item,names))
+            throw std::invalid_argument("Hankel channel "+json::dump(item)+" is not a column of the input time series ("
+                +join()+"); evaluate it with a coordinate_transform stage and pass that output to this method");
+        std::size_t k=0;
         if (std::holds_alternative<double>(selector.storage())) {
-            const auto k=integer(selector,"observable",0);
-            if (k>=source.dimension || order) throw std::invalid_argument("use a named observable for its derivative; check component index");
-            Signal result{"state_"+std::to_string(k),"state_"+std::to_string(k),"none",{},{}};
-            result.values.reserve(source.samples);
-            for (std::size_t i=0;i<source.samples;++i) result.values.push_back(source.values[i*source.dimension+k]);
-            return result;
+            k=integer(selector,"observable",0);
+            if (k>=source.dimension) throw std::invalid_argument("Hankel column index exceeds the time-series width");
+        } else {
+            const auto name=selector.string();
+            const auto found=std::find(names.begin(),names.end(),name);
+            k=found!=names.end()?std::size_t(found-names.begin()):std::size_t(std::stoul(name.substr(6)));  // state_k alias
         }
-        if(std::holds_alternative<J::Object>(selector.storage())) {
-            if(order)throw std::invalid_argument("A KROM decomposition reference has no implicit time derivative");
-            c::ObservableDecompositionReference ref;ref.artifact=selector.at("artifact").string();
-            ref.modelIdentity=selector.at("model_identity").string();ref.component=selector.at("component").string();
-            ref.kind=selector.at("kind").string("reconstruction");ref.index=integer(selector.at("index"),"index",0);
-            auto observable=c::existingKromObservable(std::filesystem::u8path(ref.artifact),ref,selector.at("name").string("krom-observable"));
-            if(observable.stateDimension()!=source.dimension)throw std::invalid_argument("KROM observable source coordinate dimension differs");
-            if(selector.at("coordinate_contract").string()!=observable.descriptor().stateCoordinateSystem)
-                throw std::invalid_argument("KROM reference requires explicit matching coordinate_contract; dimensions alone do not identify coordinates");
-            const auto output=integer(selector.at("output"),"output",0);
-            if(output>=observable.outputDimension())throw std::invalid_argument("KROM observable output index out of range");
-            const auto part=selector.at("part").string("real");
-            if(part!="real"&&part!="imag")throw std::invalid_argument("KROM channel part must be real or imag");
-            Signal result{observable.descriptor().name,ref.component,"none","",{}};
-            for(std::size_t i=0;i<source.samples;++i) {
-                const auto value=observable.evaluate(source.values.data()+i*source.dimension)[output];
-                result.values.push_back(part=="real"?value.real():value.imag());
-            }
-            return result;
-        }
-        if (!system) {
-            system=c::createSystem(systemConfiguration(source));
-            if (system->descriptor().stateDimension!=source.dimension)
-                throw std::invalid_argument("Hankel observable and source state dimensions differ");
-            catalog=system->observableCatalog();
-        }
-        const auto& base=catalog->at(selector.string());
-        if (base.outputDimension()!=1 || base.descriptor().complexValued)
-            throw std::invalid_argument("Hankel channels require real scalar observables");
-        const bool missingInput=source.inputs.empty() && datasetDynamics(source)=="forced"
-            && system->configuration().driver.amplitude==0.;
-        std::optional<double> constantInput;
-        if (!source.inputs.empty()) {
-            if (source.inputDimension==1 && std::all_of(source.inputs.begin(),source.inputs.end(),
-                [&](double u){return u==source.inputs.front();})) constantInput=source.inputs.front();
-        } else if (!missingInput && system->configuration().driver.amplitude==0.) constantInput=0.;
-        auto plan=c::resolveObservableDerivative(*system,*catalog,base.descriptor().name,order,constantInput);
-        Signal result{plan.name,base.descriptor().name,plan.method,plan.pushForward?"":plan.map.descriptor().units,{}};
-        if (plan.pushForward) {
-            if (missingInput) throw std::invalid_argument("Hankel derivative needs the recorded forcing or a prescribed driver");
-            if (!velocities) velocities=exactVelocities(source,true);
-            result.values=plan.map.pushForwardRealBatch(source.values,*velocities,source.samples,c::ObservableJacobianBackend::analytic);
-        } else result.values=plan.map.evaluateRealBatch(source.values,source.samples);
+        // Index selectors on a physical record keep the historical state_k label;
+        // otherwise a channel carries its column name (state_0 -> position).
+        const bool numeric=std::holds_alternative<double>(selector.storage());
+        Signal result{numeric&&!named?"state_"+std::to_string(k):names[k],names[k],"none",{},{}};
+        result.values.reserve(source.samples);
+        for (std::size_t i=0;i<source.samples;++i) result.values.push_back(source.values[i*source.dimension+k]);
         return result;
     }
 private:
+    std::string join() const { std::string s; for (const auto& n:names) s+=(s.empty()?"":", ")+n; return s; }
     const SourceData& source;
-    std::unique_ptr<c::ODESystem> system;
-    std::optional<c::ObservableCatalog> catalog;
-    std::optional<std::vector<double>> velocities;
+    std::vector<std::string> names;
+    bool named{};
 };
 }
 
-HankelAnalysis prepareHankel(const SourceData& source,const J& settings,bool paired) {
+SourceData hankelTimeWindow(const SourceData& full,const J& settings,std::size_t& first) {
+    first=0;
+    const auto& window=settings.at("time_window");
+    if (window.isNull()) return full;
+    if (!std::holds_alternative<J::Array>(window.storage()) || window.array().size()!=2)
+        throw std::invalid_argument("Hankel time_window must be [start, stop]");
+    const double start=window.array()[0].number(), stop=window.array()[1].number();
+    if (!(stop>start)) throw std::invalid_argument("Hankel time_window needs stop > start");
+    std::size_t last=0; bool any=false;
+    for (std::size_t i=0;i<full.samples;++i) if (full.time[i]>=start && full.time[i]<=stop) {
+        if (!any) first=i; last=i; any=true; }
+    if (!any || last-first<2) throw std::invalid_argument("Hankel time_window leaves fewer than three samples");
+    SourceData rows=full;
+    const auto n=last-first+1;
+    rows.time.assign(full.time.begin()+std::ptrdiff_t(first),full.time.begin()+std::ptrdiff_t(last+1));
+    rows.values.assign(full.values.begin()+std::ptrdiff_t(first*full.dimension),
+                       full.values.begin()+std::ptrdiff_t((last+1)*full.dimension));
+    if (!full.inputs.empty())
+        rows.inputs.assign(full.inputs.begin()+std::ptrdiff_t(first*full.inputDimension),
+                           full.inputs.begin()+std::ptrdiff_t((last+1)*full.inputDimension));
+    rows.samples=n;
+    return rows;
+}
+
+HankelAnalysis prepareHankel(const SourceData& source,const J& settings,bool paired,bool windowHandled) {
+    if (!windowHandled && !settings.at("time_window").isNull())
+        throw std::invalid_argument("time_window is supported only by hdmd among the Hankel methods");
     const auto& saved=settings.at("hankel_archive");
     if (!saved.isNull()) {
         if (saved.string().empty()) throw std::invalid_argument("expected a Hankel matrix archive path");
@@ -144,7 +140,7 @@ HankelAnalysis prepareHankel(const SourceData& source,const J& settings,bool pai
     } else if (!single.isNull() && !(std::holds_alternative<std::string>(single.storage()) && single.string().empty()))
         requested.push_back(single);
     else for (std::size_t k=0;k<(paired?1:source.dimension);++k) requested.emplace_back(double(k));
-    Signals resolver(source);
+    Columns resolver(source);
     std::map<std::pair<std::string,std::size_t>,std::size_t> cache;
     std::vector<Signal> signals;
     std::vector<c::HankelChannel> channels;
@@ -166,7 +162,7 @@ HankelAnalysis prepareHankel(const SourceData& source,const J& settings,bool pai
         if (order>8) throw std::invalid_argument("Hankel derivative_order exceeds 8");
         auto key=std::make_pair(json::dump(selector),order);
         auto entry=cache.emplace(key,signals.size());
-        if (entry.second) signals.push_back(resolver.resolve(selector,order));
+        if (entry.second) signals.push_back(resolver.resolve(item,selector,order));
         const auto index=entry.first->second;
         const auto& s=signals[index];
         const auto& tv=item.at("taps");

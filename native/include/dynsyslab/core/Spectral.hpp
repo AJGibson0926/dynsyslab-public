@@ -23,6 +23,10 @@ struct DMDOptions {
     std::size_t rank{};              // zero selects numerical rank
     double singularValueTolerance{}; // zero selects the numerical threshold
     bool exactModes{true};
+    // Gavish & Donoho (2014) optimal hard threshold for unknown white noise:
+    // keep singular values above omega(beta) * median(sigma), beta = min(m,n)/max(m,n).
+    // Applied before `rank` (which still caps the result).
+    bool optimalHardThreshold{false};
 };
 
 struct DMDResult {

@@ -115,6 +115,38 @@ raw A plus C and/or B arrays. Settings are `analysis_method`, `blocks`, `horizon
 `sample_time`, and `relative_tolerance`; output includes matrices, Gramians,
 spectra, directions, and metadata. This diagnostic does not require an LQE solve.
 
+`analysis_method: "modal-matrix"` (K-ROM source) forms the observability matrix in
+discrete modal coordinates, `O = [C; CM; …; CM^(n−1)]` with `M = diag(exp(λΔt))`, one
+complex coordinate per eigenfunction (a conjugate pair is two modes, not four split real
+states), and takes its direct complex SVD (`modalObservabilityMatrix`,
+`ModalObservability.hpp`). Settings: `measurement`, `sample_time` (default: the K-ROM's
+sample interval; required when it records none), `blocks` (default: the mode count),
+`output_rows`. Arrays: `modal_observability_matrix`, `modal_singular_values`,
+`modal_directions` (complex, column k = direction k), `modal_direction_magnitudes`,
+`modal_multipliers`, `continuous_eigenvalues`. The singular values depend on Δt and the
+block count: n blocks span only nΔt of output, so with a data-rate Δt neighbouring
+directions differ by tiny phase increments and the spectrum falls off steeply.
+
+`analysis_method: "eigenfunction-observability"` (K-ROM source) answers how well each
+eigenfunction can be determined from the measurement when every other eigenfunction is
+also unknown (`eigenfunctionObservability`, `EigenfunctionObservability.hpp`). With the
+finite-horizon modal gramian `G` over `[0, horizon]` and output noise intensity `V`, it
+reports per eigenfunction: `signal = sqrt(G_nn)` (how strongly ψₙ alone moves the output),
+`distinguishable = 1/sqrt((G⁻¹)_nn)` (the part of ψₙ's output no combination of the other
+eigenfunctions can imitate), `isolation` (their ratio, 0–1), the Cramér–Rao `bound_std =
+sqrt(V (G⁻¹)_nn)`, `pair_bound_std` (the worst direction of a conjugate pair, which a real
+output determines jointly), and with `process_covariance` W > 0 the KLQE's steady-state
+`kalman_std` of the conjugate-consistent estimate ½(ψₙ + conj ψ_partner). Settings:
+`measurement`, `horizon` (default 1), `noise_intensity` (1e-4), `regularization` (relative
+Tikhonov floor on G, 1e-12), `process_covariance` (0 = skip). Rows of V from the
+observability SVD carry the same information: `(G⁻¹)_nn = Σₖ |V_nk|²/σₖ²`. The case-study
+driver `observability/eigenfunction_observability.py` plots both panels as stems for any
+list of K-ROMs (`--krom name=path`).
+
+The fuller classical toolkit (balanced truncation, Kalman decomposition, norms,
+zeros, design) and its `linear_systems` method are described in the
+[linear-systems toolkit](LINEAR_SYSTEMS_TOOLKIT.md).
+
 ## Subset selection and real realization
 
 `makeRealModalRealization` verifies sampled real/conjugate relationships,

@@ -69,7 +69,12 @@ int main(){try{
     rejects([&]{core::windowIntegralCoordinates(ramp,0);});
     rejects([&]{core::windowIntegralCoordinates(ramp,5);});
     rejects([&]{core::windowIntegralCoordinates(coordinates,1);});
-    rejects([&]{core::fitSindyDynamics(coordinates,core::TimeSeries(t,std::vector<double>(400),1),library);});
+    {   // Fewer outputs than inputs is a cross-coordinate rate law, not a vector field.
+        const auto law=core::fitSindyDynamics(coordinates,core::TimeSeries(t,std::vector<double>(400),1),library);
+        check(law.outputs()==1&&!law.isVectorField(),"cross-coordinate rate law shape");
+        rejects([&]{(void)law.vectorField();});
+        check(core::SindyDynamicsModel::fromDefinition(law.definition()).outputs()==1,"rate-law definition round trip");
+    }
     // Public workflow integration with an exact oscillator and model-free rates.
     std::vector<double> orbit,clock;for(std::size_t k=0;k<=2000;++k) {
         const double time=.01*k;clock.push_back(time);orbit.push_back(std::exp(-.05*time)*std::cos(time));
@@ -106,7 +111,13 @@ int main(){try{
     const auto validation=core::readNpz(workflow::executePostprocess(validateJob,root,{}).archives.front());
     check(core::json::parse(validation.metadataJson()).at("model_comparison").at("rmse").array()[0].number()==0,"model comparison must use the same native evaluation");
     validateJob.at("schema")="dynsyslab.compute-job/v1";
+    // Run from the temp root's parent so a relative path to it exists even when the
+    // working directory is on another drive (hosted Windows runners: checkout on D:,
+    // temp on C:), where std::filesystem::relative would return an empty path.
+    const auto previousDirectory=std::filesystem::current_path();
+    std::filesystem::current_path(root.parent_path());
     const auto published=workflow::executeJob(validateJob,std::filesystem::relative(root,std::filesystem::current_path()));
+    std::filesystem::current_path(previousDirectory);
     bool indexed=false;
     for(const auto& entry:core::loadArchiveIndex(root))
         indexed=indexed||std::filesystem::weakly_canonical(entry.path)==std::filesystem::weakly_canonical(published.archives.front());

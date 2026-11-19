@@ -1,6 +1,9 @@
 #include "dynsyslab_viewer/ViewerSession.hpp"
 #include "dynsyslab_viewer/PlotCanvas.hpp"
 #include "dynsyslab_viewer/PlotDragToolbar.hpp"
+#include "dynsyslab_viewer/PlotScale.hpp"
+#include <cmath>
+#include <limits>
 #include <gdiplus.h>
 #include <stdexcept>
 #include <algorithm>
@@ -52,8 +55,10 @@ json::Value renderPlotPng(const Payload& input, const std::filesystem::path& out
         payload->pageLabels.clear(); payload->layout.clear(); payload->view = "single_figure";
     }
     if (payload->figures.empty()) throw std::runtime_error("There are no figures to render");
+    if (!(options.fontScale >= 0.5 && options.fontScale <= 4.0))
+        throw std::runtime_error("Font scale must be 0.5..4");
     GraphicsRuntime runtime;
-    theme::Fonts fonts;
+    theme::Fonts fonts(options.fontScale);
     InvisibleSurface surface;
     PlotCanvas canvas; PlotDragToolbar toolbar;
     if (!surface.window || !PlotCanvas::registerClass(GetModuleHandleW(nullptr))
@@ -82,6 +87,33 @@ json::Value renderPlotPng(const Payload& input, const std::filesystem::path& out
         SendMessageW(canvas.handle(),WM_PRINTCLIENT,reinterpret_cast<WPARAM>(dc),PRF_CLIENT);
         return std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
     };
+    if (options.xRange || options.yRange) {
+        redraw();  // lays out the page so its visible panels are known
+        const auto visible = canvas.visibleFigureIndices();
+        for (std::size_t panel = 0; panel < visible.size(); ++panel) {
+            const auto& figure = payload->figures[visible[panel]];
+            const bool logarithmic = ordinateScale(figure).kind == ValueScaleKind::logarithmic;
+            constexpr double inf = std::numeric_limits<double>::infinity();
+            double x0 = inf, x1 = -inf, y0 = inf, y1 = -inf;
+            for (const auto& trace : figure.traces) for (std::size_t i = 0; i < trace.x.size() && i < trace.y.size(); ++i) {
+                const double x = trace.x[i], y = trace.y[i];
+                if (!std::isfinite(x) || !std::isfinite(y)) continue;
+                x0 = std::min(x0, x); x1 = std::max(x1, x);
+                if (options.xRange && (x < options.xRange->first || x > options.xRange->second)) continue;
+                if (logarithmic && y <= 0) continue;
+                y0 = std::min(y0, y); y1 = std::max(y1, y);
+            }
+            AxisLimits limits;
+            if (options.xRange) { limits.xMin = options.xRange->first; limits.xMax = options.xRange->second; }
+            else { const double pad = 0.02 * (x1 - x0); limits.xMin = x0 - pad; limits.xMax = x1 + pad; }
+            if (options.yRange) { limits.yMin = options.yRange->first; limits.yMax = options.yRange->second; }
+            else if (logarithmic) { limits.yMin = y0 / 1.5; limits.yMax = y1 * 1.5; }
+            else { const double pad = 0.05 * std::max(y1 - y0, 1e-12 * std::max(1.0, std::abs(y1))); limits.yMin = y0 - pad; limits.yMax = y1 + pad; }
+            if (!canvas.setAxisLimits(panel, limits))
+                throw std::runtime_error("Invalid axis range for panel " + std::to_string(panel)
+                    + (logarithmic ? " (a logarithmic ordinate needs positive bounds)" : ""));
+        }
+    }
     const double initialMilliseconds = redraw();
     std::vector<double> timings;
     const int initialPosition = canvas.scrollPosition();

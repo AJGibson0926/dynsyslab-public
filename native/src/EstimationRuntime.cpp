@@ -32,7 +32,10 @@ KoopmanLQEObserver::KoopmanLQEObserver(const KoopmanModel& model,
      offsetY_(std::move(offsetY)),offsetX_(std::move(offsetX)) {
     if(representation=="exact")
         throw std::invalid_argument("Measurement-only KLQE requires a fitted control map");
-    requireContinuousControlModel(*model_,representation);
+    // "none" (or empty): the estimator does not model inputs. Use it for unforced
+    // estimation; any applied input is then ignored by the prediction step.
+    const bool modelsInput=!representation.empty()&&representation!="none";
+    if(modelsInput)requireContinuousControlModel(*model_,representation);
     const auto n=model_->splitDimension(),m=model_->inputDimension();
     const auto p=design_.solution.measurementDimension;
     const auto q=design_.outputDimension?design_.outputDimension:design_.physicalStateDimension;
@@ -50,6 +53,9 @@ KoopmanLQEObserver::KoopmanLQEObserver(const KoopmanModel& model,
             *model_,model_->reconstruction(design_.stateObservable))))
         throw std::invalid_argument("KLQE design matrices differ from deployment KROM");
     finite(initial,n,"KLQE initial lifted values");
+    // Default to the reconstruction intercepts carried by the design.
+    if(offsetY_.empty())offsetY_=design_.measurementOffset;
+    if(offsetX_.empty())offsetX_=design_.outputOffset;
     if(offsetY_.empty())offsetY_.assign(p,0);
     if(offsetX_.empty())offsetX_.assign(q,0);
     finite(offsetY_,p,"KLQE measurement offset");
@@ -66,6 +72,7 @@ KoopmanLQEObserver::KoopmanLQEObserver(const KoopmanModel& model,
         return model_->realControlMap(model_->controlMapFromLifted(
             model_->valuesFromSplit(z),representation));
     };
+    if(!modelsInput) { offsetInput_.assign(n*m,0.0); bilinear_=false; return; }
     offsetInput_=inputAt(zero);
     bilinear_=std::holds_alternative<BilinearControlMap>(model_->storedControlMap(representation));
     if(bilinear_) {
@@ -81,6 +88,15 @@ KoopmanLQEObserver::KoopmanLQEObserver(const KoopmanModel& model,
     }
 }
 
+void KoopmanLQEObserver::setMeasurementFeedthrough(std::vector<double> feedthrough,int scaleOutput) {
+    const auto m=model_->inputDimension(),p=design_.solution.measurementDimension;
+    if(!feedthrough.empty())finite(feedthrough,p*m,"KLQE measurement feedthrough");
+    const auto q=estimate_.output.size();
+    if(scaleOutput>=0&&static_cast<std::size_t>(scaleOutput)>=q)
+        throw std::invalid_argument("KLQE feedthrough scale names a missing output component");
+    feedthrough_=std::move(feedthrough);feedthroughScale_=scaleOutput;
+}
+
 KoopmanEstimate KoopmanLQEObserver::observe(double time,
     const std::vector<double>& y,const std::vector<double>& applied) {
     const auto n=model_->splitDimension(),m=model_->inputDimension();
@@ -89,6 +105,13 @@ KoopmanEstimate KoopmanLQEObserver::observe(double time,
     if(!std::isfinite(time)||(initialized_&&time<=estimate_.time))
         throw std::invalid_argument("KLQE measurement times must strictly increase");
     auto next=estimate_;
+    // Input seen directly by the sensor over the held interval: D u (optionally scaled).
+    std::vector<double> direct(p,0.0);
+    if(!feedthrough_.empty()) {
+        const double scale=feedthroughScale_>=0?estimate_.output[static_cast<std::size_t>(feedthroughScale_)]:1.0;
+        for(std::size_t a=0;a<p;++a)for(std::size_t b=0;b<m;++b)
+            direct[a]+=scale*feedthrough_[a*m+b]*applied[b];
+    }
     if(initialized_) {
         const double dt=time-estimate_.time;
         const double tolerance=64*std::numeric_limits<double>::epsilon()
@@ -116,7 +139,7 @@ KoopmanEstimate KoopmanLQEObserver::observe(double time,
                 next.lifted[row]+=heldTransition_[row*n+col]*estimate_.lifted[col];
             for(std::size_t a=0;a<p;++a)
                 next.lifted[row]+=heldResponse_[row*(p+m)+a]
-                    *(previousMeasurement_[a]-offsetY_[a]);
+                    *(previousMeasurement_[a]-offsetY_[a]-direct[a]);
             for(std::size_t a=0;a<m;++a)
                 next.lifted[row]+=heldResponse_[row*(p+m)+p+a]*applied[a];
         }
@@ -124,6 +147,7 @@ KoopmanEstimate KoopmanLQEObserver::observe(double time,
     }
     next.time=time;
     next.measurement=decode(design_.measurementMatrix,next.lifted,offsetY_);
+    for(std::size_t a=0;a<p;++a)next.measurement[a]+=direct[a];
     next.output=decode(design_.stateReconstructionMatrix,next.lifted,offsetX_);
     next.innovation.resize(p);
     for(std::size_t a=0;a<p;++a)next.innovation[a]=y[a]-next.measurement[a];

@@ -1,0 +1,16 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "rpe-echo-linear-systems / klqe echo krom",
+  "sources": ["archives/derived/koopman-krom-extract/rpe-viscous-echo-long-training-five-ics-trajectory-0__20~fcaf7af863cc~T075655Z__krom-extract__20261114T075715Z.npz"],
+  "methods": [{"name": "linear_systems", "enabled": true, "settings": {
+    "measurements": ["far_field_acoustic_echo"],
+    "balancing_input": "process_noise",
+    "reduction_order": 4,
+    "reduction_method": "truncation",
+    "frequency_points": 400,
+    "lqe_process_weight": 1.0,
+    "lqe_measurement_weight": 1.0e-4
+  }}],
+  "archive": {"enabled": true}
+}

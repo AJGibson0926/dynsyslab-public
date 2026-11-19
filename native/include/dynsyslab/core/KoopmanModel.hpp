@@ -119,6 +119,11 @@ public:
         const std::vector<std::complex<double>>& matrix) const;
     [[nodiscard]] std::vector<double> generatorSplit() const;
     [[nodiscard]] std::vector<std::complex<double>> exactControlMap(const double* state) const;
+    // Chain rule for coordinate KROMs: B[mode,input] = sum_c dpsi_mode/dq_c(q) *
+    // sensitivity[c*inputs+input], where sensitivity = d(qdot)/du supplied by the
+    // caller (e.g. a history transform's newest-sample weight times L_g y).
+    [[nodiscard]] std::vector<std::complex<double>> controlMapFromCoordinateSensitivity(
+        const double* coordinates, const std::vector<double>& sensitivity) const;
     [[nodiscard]] std::vector<std::complex<double>> controlMap(
         const double* state, const std::string& representation = "exact") const;
     [[nodiscard]] std::vector<std::complex<double>> controlMapCoordinates(

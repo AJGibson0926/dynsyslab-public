@@ -1,6 +1,9 @@
+#include "KlqrAugmentation.hpp"
 #include "EstimatedControl.hpp"
 #include "ModelBindingOptions.hpp"
+#include "BalancedTruncationSettings.hpp"
 #include <dynsyslab/workflow/KoopmanFeedback.hpp>
+#include <dynsyslab/workflow/EstimatorFactory.hpp>
 #include <dynsyslab/workflow/ControlTargets.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/core/ScientificCompatibility.hpp>
@@ -54,12 +57,14 @@ struct Stream {
     std::unique_ptr<KoopmanFeedback> feedback;
     double applied{};
     Trace trace;
+    SensorDifferentiator derivative;
 };
 }
 
 ControllerSetup buildEstimatedController(const json::Value& source,
     const json::Value& solver,const core::ODESystem& system,
-    std::size_t count,double defaultStep) {
+    std::size_t count,double defaultStep,
+    std::function<double(std::size_t,double,const double*)> appliedOverride) {
     if(source.at("kind").string()!="klqr"||!count)
         throw std::invalid_argument("Online KLQE composition currently requires KLQR");
     const auto& settings=source.at("settings");
@@ -92,36 +97,25 @@ ControllerSetup buildEstimatedController(const json::Value& source,
     if(!mapPath.empty())model.setControlMap(representation,core::loadApproximateControlMap(
         core::wide(mapPath),settings.at("control_map_prefix").string(),model,
         settings.at("unverified_control_map_reason").string()));
-    const auto measurementName=estimator.at("measurement").string();
-    const auto outputName=estimator.at("output").string();
-    if(measurementName.empty())
-        throw std::invalid_argument("KLQE requires a named measurement reconstruction");
+    // KLQE binding shared with the Estimator module (design, sensors, initial estimate, intercepts).
+    auto bound=bindKlqe(estimator,model,system);
+    bound.sampleTime=dt;
+    const auto& measurementName=bound.measurement;
+    const auto& outputName=bound.output;
     const auto n=model.splitDimension(),p=model.reconstruction(measurementName).outputs;
-    const auto design=core::designKoopmanLQEFromMeasurements(model,measurementName,
-        square(estimator.at("process_covariance"),n,"process covariance"),
-        square(estimator.at("measurement_covariance"),p,"measurement covariance"),outputName);
-    std::vector<core::Observable> sensors;
-    const auto catalog=system.observableCatalog();
-    if(!estimator.at("measurement_observables").array().empty()) {
-        for(const auto& name:estimator.at("measurement_observables").array())
-            sensors.push_back(catalog.at(name.string()));
-    } else sensors.push_back(catalog.at(
-        estimator.at("measurement_observable").string(measurementName)));
-    std::size_t sensorWidth=0;
-    for(const auto& sensor:sensors)sensorWidth+=sensor.outputDimension();
-    if(sensorWidth!=p)
-        throw std::invalid_argument("Simulated sensor outputs differ from C_y row count");
-    auto initial=numbers(estimator.at("initial_lifted"));
-    if(initial.empty())initial.assign(n,0);
-    const auto offsetY=numbers(estimator.at("measurement_offset"));
-    const auto offsetX=numbers(estimator.at("output_offset"));
+    const auto design=bound.design;
+    auto sensors=std::move(bound.sensors);
+    const auto initial=bound.initial;
+    const auto offsetY=bound.measurementOffset;
+    const auto offsetX=bound.outputOffset;
+    const auto feedthrough=bound.measurementFeedthrough;
+    const int feedthroughScale=bound.feedthroughScaleOutput;
+    const bool lift=bound.liftSensors;
+    const auto liftModel=std::make_shared<const core::KoopmanModel>(model);
     const auto Q=square(settings.at("Q"),n,"Q"),R=square(settings.at("R"),1,"R");
-    double limit=(std::numeric_limits<double>::infinity)();
-    if(!settings.at("control_limit").isNull()) {
-        limit=settings.at("control_limit").number(-1);
-        if(!std::isfinite(limit)||limit<=0)
-            throw std::invalid_argument("KLQE scalar control_limit must be positive");
-    }
+    const auto cap=controlCap(settings.at("control_limit"));
+    const double lowLimit=cap?cap->first:-(std::numeric_limits<double>::infinity)();
+    const double highLimit=cap?cap->second:(std::numeric_limits<double>::infinity)();
     const auto window=numbers(settings.at("active_time_window"));
     if(!window.empty()&&(window.size()!=2||!std::isfinite(window[0])
         ||!std::isfinite(window[1])||window[0]>window[1]))
@@ -153,10 +147,20 @@ ControllerSetup buildEstimatedController(const json::Value& source,
                 result.targetObservableNames.push_back("z"+std::to_string(k));
         }
     }
+    const auto controllerReduction=parseBalancedTruncation(settings.at("balanced_truncation"));
     auto streams=std::make_shared<std::vector<Stream>>(count);
-    for(auto& stream:*streams)stream.feedback=std::make_unique<KoopmanFeedback>(
-        model,design,representation,initial,Q,R,target,targetSpace,offsetY,offsetX);
-    result.policy.value=[streams,sensors=std::move(sensors),limit,window](
+    for(auto& stream:*streams) {
+        stream.feedback=std::make_unique<KoopmanFeedback>(
+            model,design,representation,initial,Q,R,target,targetSpace,offsetY,offsetX);
+        stream.feedback->setMeasurementFeedthrough(feedthrough,feedthroughScale);
+        if(controllerReduction)stream.feedback->setBalancedReduction(*controllerReduction);
+        // Integral action / PID on a KROM readout of the estimate z_hat (e.g. r_hat).
+        applyKlqrAugmentations(stream.feedback->controller(),model,settings);
+        stream.derivative=SensorDifferentiator(bound,std::size_t(&stream-&streams->front()));
+    }
+    const bool shadow=static_cast<bool>(appliedOverride);
+    result.policy.value=[streams,sensors=std::move(sensors),lowLimit,highLimit,window,lift,liftModel,
+        appliedOverride=std::move(appliedOverride)](
         std::size_t trajectory,double time,const double* state) {
         auto& stream=streams->at(trajectory);
         std::vector<double> y;
@@ -164,17 +168,24 @@ ControllerSetup buildEstimatedController(const json::Value& source,
         for(const auto& sensor:sensors) {
             const auto values=sensor.evaluateReal(state);y.insert(y.end(),values.begin(),values.end());
         }
+        stream.derivative.append(y,time);  // numerically differentiated sensor outputs
+        if(lift)y=liftModel->evaluateCoordinatesSplit(y.data());  // psi of the sensor values
         const auto sample=stream.feedback->sample(time,y,{stream.applied});
-        double applied=std::clamp(sample.commandedInput.front(),-limit,limit);
+        double applied=std::clamp(sample.commandedInput.front(),lowLimit,highLimit);
         // Gating happens AFTER observation, so estimator memory is never frozen
         // outside the control window and the actual zero input is accounted for.
         if(!window.empty()&&(time<window[0]||time>window[1]))applied=0;
+        // applied_controller (shadow mode): the plant receives the reference drive instead; the
+        // KLQE predicts with that drive and the KLQR command is only archived (commanded_input).
+        if(appliedOverride)applied=appliedOverride(trajectory,time,state);
         stream.trace.append(sample,applied);stream.applied=applied;
         return applied;
     };
     result.appendDiagnostics=[streams,design,n,p](std::size_t trajectory,core::NpzRecord& archive) {
         streams->at(trajectory).trace.store(archive);
+        storeKlqrReduction(streams->at(trajectory).feedback->controller(),archive);
         archive.arrays["estimator_gain"]=core::NpyArray::fromDoubles({n,p},design.solution.gain);
+        archive.arrays["observer_poles"]=core::NpyArray::fromComplex({n},design.solution.observerPoles);
         archive.arrays["measurement_matrix"]=core::NpyArray::fromDoubles({p,n},design.measurementMatrix);
         if(design.outputDimension)archive.arrays["state_reconstruction_matrix"]
             =core::NpyArray::fromDoubles({design.outputDimension,n},design.stateReconstructionMatrix);
@@ -184,7 +195,9 @@ ControllerSetup buildEstimatedController(const json::Value& source,
     result.policy.evaluation=core::ControlEvaluationMode::sampled;
     result.modelBindingEvidence=json::parse(model.bindingEvidenceJson());
     auto& evidence=result.modelBindingEvidence.object();
-    evidence["feedback_architecture"]="klqe-estimated-lifted-klqr/v1";
+    evidence["feedback_architecture"]=shadow?"klqe-klqr-shadow-of-applied-controller/v1"
+                                            :"klqe-estimated-lifted-klqr/v1";
+    if(shadow)evidence["applied_controller"]=settings.at("applied_controller");
     evidence["model_identity"]=core::koopmanModelIdentity(model);
     evidence["measurement_reconstruction"]=measurementName;
     evidence["output_reconstruction"]=outputName;
@@ -192,6 +205,10 @@ ControllerSetup buildEstimatedController(const json::Value& source,
     evidence["control_map_provenance"]=std::visit(
         [](const auto& map){return map.provenance;},model.storedControlMap(representation));
     evidence["estimator_clock"]="estimator_time";
+    if(klqrIsStateful(settings))evidence["klqr_augmentations"]=klqrAugmentationEvidence(settings);
+    if(!bound.reduction.isNull())evidence["estimator_balanced_truncation"]=bound.reduction;
+    if(!bound.processCovariance.isNull())evidence["estimator_process_covariance"]=bound.processCovariance;
+    if(controllerReduction)evidence["controller_balanced_truncation"]=balancedTruncationRequest(*controllerReduction);
     return result;
 }
 } // namespace dynsyslab::workflow::detail

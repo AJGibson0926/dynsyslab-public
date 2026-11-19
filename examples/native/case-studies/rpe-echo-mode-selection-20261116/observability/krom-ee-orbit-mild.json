@@ -1,0 +1,30 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "echo observability / K-ROM ee-orbit-mild",
+  "description": "Observability of the KLQE's K-ROM through the echo: observability gramian singular values and directions, their (r, r-dot) readout signature, and the Kalman filter's own predicted r and r-dot uncertainty (the run's W, V = 1e-4).",
+  "sources": [
+    "archives/derived/koopman-mode-selection/experiment-ee-ic0p37-split-krom__mode-selection-krom__20261117T002607Z.npz"
+  ],
+  "methods": [
+    {
+      "name": "linear_systems",
+      "enabled": true,
+      "settings": {
+        "measurements": [
+          "far_field_acoustic_echo"
+        ],
+        "control_map": "constant",
+        "readouts": [
+          "state"
+        ],
+        "lqe_process_weight": 10000.0,
+        "lqe_measurement_weight": 0.0001,
+        "frequency_points": 400
+      }
+    }
+  ],
+  "archive": {
+    "enabled": true
+  }
+}

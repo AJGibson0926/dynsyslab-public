@@ -1,3 +1,4 @@
+#include <dynsyslab/core/PathSimplification.hpp>
 #include "dynsyslab_viewer/NativePayload.hpp"
 #include "KromPayload.hpp"
 #include "ObservablePayload.hpp"
@@ -11,6 +12,10 @@
 #include "TrajectoryPresentation.hpp"
 #include "AnalyticOverlay.hpp"
 #include "FieldPayload.hpp"
+#include "SpectralMeasurePayload.hpp"
+#include "ModeWeightPayload.hpp"
+#include "LinearSystemsPayload.hpp"
+#include "LinearSystemsLoopPayload.hpp"
 
 #include "dynsyslab_viewer/Json.hpp"
 
@@ -23,6 +28,7 @@
 #include <complex>
 #include <initializer_list>
 #include <iterator>
+#include <optional>
 #include <stdexcept>
 
 namespace dsl {
@@ -55,6 +61,15 @@ std::vector<std::size_t> displayIndices(std::size_t count, std::size_t maximum =
     for (std::size_t index = 0; index < maximum; ++index)
         result.push_back(index * (count - 1) / (maximum - 1));
     return result;
+}
+
+// Error-bounded display subset of a long trajectory (core PathSimplification,
+// after the trajectory-resolution side-car): fast excursions keep their
+// vertices, smooth stretches are thinned; scientific data is untouched.
+std::vector<std::size_t> trajectoryDisplayIndices(const NpyArray& states, std::size_t maximum) {
+    const std::size_t count = states.shape[0], width = states.shape.size() > 1 ? states.shape[1] : 1;
+    if (count <= maximum || width == 0) return displayIndices(count, maximum);
+    return dynsyslab::core::simplifiedPathIndices(states.doubles(), count, width, maximum);
 }
 
 std::vector<double> sampledVector(const NpyArray* array, std::size_t count,
@@ -107,11 +122,20 @@ Trace line(std::string label, const std::vector<double>& x, std::vector<double> 
     return result;
 }
 
+// The estimator's state estimate on its own (controller) clock, in display coordinates.
+struct EstimateOverlay {
+    std::vector<double> time;
+    NpyArray states;
+    std::vector<std::size_t> indices;
+};
+constexpr const char* kEstimateColor = "#DE9B00";
+
 Figure componentFigure(const std::string& label, const std::string& suffix,
                        const std::string& timeLabel,
                        const std::vector<double>& time, const NpyArray& states,
                        std::size_t component, const std::vector<std::size_t>& indices,
-                       const NpyArray* target, const NpyArray* truth) {
+                       const NpyArray* target, const NpyArray* truth,
+                       const EstimateOverlay* estimate = nullptr) {
     Figure figure{"time", label + " versus time", timeLabel, label + suffix, false};
     figure.traces.push_back(line(label, time, sampledColumn(states, component, indices)));
     if (target && target->shape.size() == 2 && component < target->shape[1])
@@ -120,12 +144,16 @@ Figure componentFigure(const std::string& label, const std::string& suffix,
     if (truth && truth->shape.size()==2 && component<truth->shape[1])
         figure.traces.push_back(line("true state",time,sampledColumn(*truth,component,indices),
                                      "truth","#94a3b8","dash"));
+    if (estimate && component < estimate->states.shape[1])
+        figure.traces.push_back(line("estimate", estimate->time,
+            sampledColumn(estimate->states, component, estimate->indices), "estimate", kEstimateColor, "dash"));
     return figure;
 }
 
 Figure phaseFigure(const std::string& suffix, const std::vector<std::string>& labels,
                    const NpyArray& states, const std::vector<std::size_t>& indices,
-                   const NpyArray* target, const NpyArray* truth) {
+                   const NpyArray* target, const NpyArray* truth,
+                   const EstimateOverlay* estimate = nullptr) {
     Figure figure{"phase", "Phase space", labels[0] + suffix, labels[1] + suffix, true};
     figure.traces.push_back(line("solution", sampledColumn(states, 0, indices),
                                  sampledColumn(states, 1, indices)));
@@ -135,6 +163,9 @@ Figure phaseFigure(const std::string& suffix, const std::vector<std::string>& la
     if (truth && truth->shape.size()==2 && truth->shape[1]>=2)
         figure.traces.push_back(line("true state",sampledColumn(*truth,0,indices),
             sampledColumn(*truth,1,indices),"truth","#94a3b8","dash"));
+    if (estimate && estimate->states.shape[1] >= 2)
+        figure.traces.push_back(line("estimate", sampledColumn(estimate->states, 0, estimate->indices),
+            sampledColumn(estimate->states, 1, estimate->indices), "estimate", kEstimateColor, "dash"));
     return figure;
 }
 
@@ -175,7 +206,7 @@ Payload trajectoryPayload(const std::filesystem::path& source, const std::string
     const auto coordinates = displayCoordinateTransform(metadata, archivedStates->shape[1]);
     const auto transformedStates = transformDisplayStates(*archivedStates, coordinates);
     const NpyArray* states = &transformedStates;
-    const auto indices = displayIndices(states->shape[0], 100000);
+    const auto indices = trajectoryDisplayIndices(*states, 100000);
     const NpyArray* timeArray = select(record,
         {"time", "controlled_time", "control_time", "free_time"}, 1);
     const auto time = transformDisplayTime(
@@ -191,6 +222,31 @@ Payload trajectoryPayload(const std::filesystem::path& source, const std::string
     const NpyArray* truth = archivedTruth ? &transformedTruth : nullptr;
     const NpyArray* controls = select(record,
         {"control_values", "controls", "controlled_controls", "controlled_controls_sample_aligned"});
+    // Sampled controllers archive the input actually applied at every controller step
+    // on their own clock; prefer it to the output-grid samples in control_values.
+    const NpyArray* controlClock = select(record, {"estimator_time", "controller_time"}, 1);
+    const NpyArray* applied = select(record, {"applied_input"});
+    const bool controllerClock = controlClock && applied && !applied->shape.empty()
+        && applied->shape[0] == controlClock->shape[0];
+    std::vector<double> controlTime = time;
+    std::vector<std::size_t> controlIndices = indices;
+    if (controllerClock) {
+        controls = applied;
+        controlIndices = displayIndices(controlClock->shape[0], 200000);
+        controlTime = transformDisplayTime(
+            sampledVector(controlClock, controlClock->shape[0], controlIndices), coordinates);
+    }
+    std::optional<EstimateOverlay> estimate;
+    if (const NpyArray* estimated = select(record, {"state_estimate"}, 2);
+        estimated && controlClock && estimated->shape[0] == controlClock->shape[0]
+        && estimated->shape[1] == states->shape[1]) {
+        estimate = EstimateOverlay{};
+        estimate->indices = displayIndices(estimated->shape[0], 100000);
+        estimate->time = transformDisplayTime(
+            sampledVector(controlClock, controlClock->shape[0], estimate->indices), coordinates);
+        estimate->states = transformDisplayStates(*estimated, coordinates);
+    }
+    const EstimateOverlay* estimateOverlay = estimate ? &*estimate : nullptr;
     const std::string& suffix = coordinates.suffix;
     const auto& labels = coordinates.stateLabels;
 
@@ -198,7 +254,7 @@ Payload trajectoryPayload(const std::filesystem::path& source, const std::string
     if (!coordinates.warning.empty()) payload.warnings.push_back(coordinates.warning);
     if (view == "phase") {
         if (states->shape[1] < 2) throw std::runtime_error("phase view requires two state components");
-        payload.figures.push_back(phaseFigure(suffix, labels, *states, indices, target, truth));
+        payload.figures.push_back(phaseFigure(suffix, labels, *states, indices, target, truth, estimateOverlay));
         appendAnalyticOverlay(payload, record, coordinates, time, indices, states->shape[0], states->shape[1]);
         decorateTrajectory(payload, metadata, coordinates, time);
         return payload;
@@ -213,13 +269,14 @@ Payload trajectoryPayload(const std::filesystem::path& source, const std::string
     if (view == "control" && !controls)
         payload.warnings.push_back("This archive has no saved control history.");
     if (controls) payload.figures.push_back(controlFigure(controlAxisSuffix(metadata),
-        coordinates.timeLabel, time, *controls, indices));
+        coordinates.timeLabel, controlTime, *controls, controlIndices));
     for (std::size_t component = 0; component < states->shape[1]; ++component)
         payload.figures.push_back(componentFigure(labels[component], suffix,
                                                   coordinates.timeLabel,
-                                                  time, *states, component, indices, target, truth));
+                                                  time, *states, component, indices, target, truth,
+                                                  estimateOverlay));
     if ((view == "control" || view == "data_overview") && states->shape[1] >= 2)
-        payload.figures.push_back(phaseFigure(suffix, labels, *states, indices, target, truth));
+        payload.figures.push_back(phaseFigure(suffix, labels, *states, indices, target, truth, estimateOverlay));
     appendAnalyticOverlay(payload, record, coordinates, time, indices, states->shape[0], states->shape[1]);
     decorateTrajectory(payload, metadata, coordinates, time);
     return payload;
@@ -239,14 +296,17 @@ Payload spectrumPayload(const std::filesystem::path& source, const std::string& 
     std::vector<std::complex<double>> spectrum;
     if (values->type == dynsyslab::core::ArrayType::complex128) spectrum = values->complexDoubles();
     else for (const double value : values->doubles()) spectrum.emplace_back(value, 0.0);
-    Trace trace; trace.label = "eigenvalues"; trace.marker = true;
+    Trace trace; trace.label = "eigenvalues"; trace.marker = true; trace.lineStyle = "none";
     for (const auto value : spectrum) { trace.x.push_back(value.real()); trace.y.push_back(value.imag()); }
     Figure figure{"koopman_spectrum", discrete ? "Discrete-time Koopman spectrum" :
                   "Continuous-time Koopman spectrum", discrete ? "Re(mu)" : "Re(lambda)",
                   discrete ? "Im(mu)" : "Im(lambda)", true};
     figure.traces.push_back(std::move(trace));
-    Payload payload{source.u8string(), view, archiveLabel(metadata, source), 1};
+    auto measures = spectralMeasureFigures(record, metadata);
+    Payload payload{source.u8string(), view, archiveLabel(metadata, source),
+                    measures.empty() ? 1 : 2};
     payload.figures.push_back(std::move(figure));
+    for (auto& measure : measures) payload.figures.push_back(std::move(measure));
     return payload;
 }
 
@@ -282,7 +342,8 @@ Payload controlErrorPayload(const std::filesystem::path& source, const std::stri
 Payload observabilityPayload(const std::filesystem::path& source,const std::string& view,
                              const NpzRecord& record,const json::Value& metadata) {
     const auto& singular=record.at("observability_singular_values");
-    const auto& directions=record.at("observable_directions");
+    const auto& directions=record.contains("observable_directions")?record.at("observable_directions")
+        :record.at("observability_directions");
     if (singular.shape.size()!=1 || directions.shape.size()!=2)
         throw std::runtime_error("archive has no native observability analysis");
     Trace spectrum; spectrum.label="observability singular values"; spectrum.marker=true;
@@ -402,10 +463,46 @@ Payload decompositionPayload(const std::filesystem::path& source,
     return payload;
 }
 
+// Online estimator record: the measurement it received, the measurement it predicted
+// from its lifted estimate, and the innovation, all on the estimator clock.
+Payload estimatorPayload(const std::filesystem::path& source, const std::string& view,
+                         const NpzRecord& record, const json::Value& metadata) {
+    const NpyArray* clock = select(record, {"estimator_time"}, 1);
+    const NpyArray* measured = select(record, {"measurement_values"});
+    const NpyArray* predicted = select(record, {"measurement_estimate"});
+    if (!clock || !measured || !predicted || measured->shape.empty() || predicted->shape != measured->shape
+        || measured->shape[0] != clock->shape[0])
+        throw std::runtime_error("archive has no estimator measurement record");
+    const auto coordinates = displayCoordinateTransform(metadata, 0);
+    const auto indices = displayIndices(clock->shape[0], 200000);
+    const auto time = transformDisplayTime(sampledVector(clock, clock->shape[0], indices), coordinates);
+    const auto column = [&](const NpyArray& array, std::size_t j) {
+        return array.shape.size() == 2 ? sampledColumn(array, j, indices)
+                                       : sampledVector(&array, array.elementCount(), indices);
+    };
+    const std::size_t width = measured->shape.size() == 2 ? measured->shape[1] : 1;
+    Payload payload{source.u8string(), view, archiveLabel(metadata, source), 2};
+    for (std::size_t j = 0; j < width; ++j) {
+        const std::string name = width == 1 ? "y" : "y_{" + std::to_string(j) + "}";
+        Figure figure{"time", "Measurement and estimator prediction", coordinates.timeLabel, name, false};
+        figure.traces.push_back(line("measured", time, column(*measured, j), "data"));
+        figure.traces.push_back(line("predicted", time, column(*predicted, j), "estimate", kEstimateColor, "dash"));
+        payload.figures.push_back(std::move(figure));
+        if (const NpyArray* innovation = select(record, {"innovation"});
+            innovation && innovation->shape == measured->shape) {
+            Figure residual{"time", "Innovation", coordinates.timeLabel, name + " - predicted", false};
+            residual.traces.push_back(line("innovation", time, column(*innovation, j), "data"));
+            payload.figures.push_back(std::move(residual));
+        }
+    }
+    return payload;
+}
+
 }  // namespace
 
 Payload buildNativePayload(const std::filesystem::path& source, const std::string& view,
                            const NpzRecord& record, const json::Value& metadata) {
+    if (view == "estimator") return estimatorPayload(source, view, record, metadata);
     if(view=="sindy_dynamics"||view=="sindy_dynamics_transient")
         return buildSindyDynamicsPayload(source,view,record,metadata);
     if (view == "control_map_error" || view == "control_error")
@@ -437,8 +534,12 @@ Payload buildNativePayload(const std::filesystem::path& source, const std::strin
     }
     if (view=="observability")
         return observabilityPayload(source,view,record,metadata);
+    if (view=="hankel_spectrum" || view=="gramian_spectrum" || view=="frequency_response" || view=="pole_zero"
+        || isClassicalLinearSystemsView(view))
+        return buildLinearSystemsPayload(source,view,record,metadata);
     if (record.contains("low_rank") || record.contains("singular_values"))
         return decompositionPayload(source,view,record,metadata);
+    if (view == "mode_weights") return modeWeightPayload(source, view, record, metadata);
     if (view == "koopman_spectrum" || view == "krom")
         return spectrumPayload(source, view, record, metadata);
     if (view == "field" || metadataString(metadata, "system_family") == "pde")

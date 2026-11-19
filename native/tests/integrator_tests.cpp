@@ -107,6 +107,40 @@ void testSampledControlClock(dynsyslab::core::IntegrationMethod method) {
                 "sampled controller is right-continuous and held");
 }
 
+void testTruncateOnFailure(dynsyslab::core::IntegrationMethod method) {
+    dynsyslab::core::SystemConfiguration configuration;
+    configuration.identifier = "van_der_pol";
+    auto system = dynsyslab::core::createSystem(configuration);
+    dynsyslab::core::IntegrationOptions options;
+    options.finalTime = 0.5; options.outputStep = 0.05; options.initialStep = 0.01;
+    options.method = method;
+    const auto policy = [] {
+        dynsyslab::core::ScalarControlPolicy control;
+        control.evaluation = dynsyslab::core::ControlEvaluationMode::sampled;
+        control.sampleTime = 0.05;
+        // Trajectory 0 fails at t = 0.2 (a controller blowing up); trajectory 1 runs through.
+        control.value = [](std::size_t trajectory, double time, const double*) {
+            if (trajectory == 0 && time > 0.19) throw std::runtime_error("controller produced a nonfinite input");
+            return 0.0;
+        };
+        return control;
+    };
+    bool aborted = false;
+    try { (void)dynsyslab::core::integrateControlled(*system, {0.1, 0.0, 0.2, 0.0}, 2, options, policy()); }
+    catch (const std::runtime_error&) { aborted = true; }
+    require(aborted, "by default a failure aborts the solve");
+    options.truncateOnFailure = true;
+    const auto solution = dynsyslab::core::integrateControlled(*system, {0.1, 0.0, 0.2, 0.0}, 2, options, policy());
+    require(solution.completedSamples.size() == 2 && solution.completedSamples[1] == solution.sampleCount,
+            "the second trajectory completes");
+    const auto kept = solution.completedSamples[0];
+    require(kept >= 3 && kept < solution.sampleCount, "the failed trajectory keeps its computed samples");
+    require(std::isfinite(solution.state(0, kept - 1)[0]) && std::isnan(solution.state(0, kept)[0]),
+            "samples after the failure are NaN");
+    require(solution.terminationReasons[0].find("nonfinite") != std::string::npos
+            && solution.terminationReasons[1].empty(), "the failure reason is recorded");
+}
+
 void testInvalidSampledControlClock() {
     dynsyslab::core::SystemConfiguration configuration;
     configuration.identifier = "van_der_pol";
@@ -176,6 +210,10 @@ int main() {
         testSampledControlClock(dynsyslab::core::IntegrationMethod::rk4);
 #ifdef DYNSYSLAB_SUNDIALS
         testSampledControlClock(dynsyslab::core::IntegrationMethod::bdf);
+#endif
+        testTruncateOnFailure(dynsyslab::core::IntegrationMethod::rk4);
+#ifdef DYNSYSLAB_SUNDIALS
+        testTruncateOnFailure(dynsyslab::core::IntegrationMethod::bdf);
 #endif
         testInvalidSampledControlClock();
         testCancellation();

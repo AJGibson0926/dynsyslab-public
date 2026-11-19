@@ -196,10 +196,51 @@ void semigroupValidation() {
     close(perfect.modes[0].oneStepChangeRelativeL2,0.,1e-14,"exact exponential change-relative error");
 }
 
+// KLQR adapters on a scalar KROM psi = x0 (lambda = -1), constant B = 1, readout "state".
+void klqrIntegralAndPidAdapters() {
+    namespace core = dynsyslab::core;
+    core::SystemConfiguration system;
+    system.identifier = "duffing"; system.preset = "double_well_reference";
+    auto build = [&] {
+        auto model = std::make_shared<core::KoopmanModel>(core::KoopmanModel::fromPolynomialCoefficients(
+            system, 2, {1, 0}, {{1.0, 0.0}}, {{-1.0, 0.0}}));
+        core::ReconstructionResult state{{{1.0, 0.0}, {0.0, 0.0}}, 2, 1};
+        state.offset = {0.0, 0.0};
+        model->setReconstruction("state", state);
+        model->setControlMap("constant", core::ConstantControlMap{{{1.0, 0.0}}, 1, 1, "adapter test"});
+        return model;
+    };
+    const auto target = [](double) { return std::vector<double>{1.0, 0.0}; };
+    core::LiftedOutputChannel channel{{1.0}, {0.0}, {0}};
+    core::KoopmanLQRController plain(build(), {10.0}, {1.0}, target, "constant");
+    core::KoopmanLQRController integral(build(), {10.0}, {1.0}, target, "constant");
+    integral.setIntegralAction({channel, {10.0}, {}});
+    core::KoopmanPIDCorrection pid{channel, {0.0}, {2.0}, {0.0}};
+    core::KoopmanLQRController corrected(build(), {10.0}, {1.0}, target, "constant");
+    corrected.setPIDCorrection(pid);
+    if (!integral.stateful() || !corrected.stateful() || plain.stateful())
+        throw std::runtime_error("KLQR augmentation flags");
+    // Plant psi' = -psi + u + d (an input disturbance the KROM does not know).
+    const double d = 0.5, dt = 1e-3;
+    double a = 0.0, b = 0.0, c = 0.0;
+    for (int k = 0; k < 40000; ++k) {
+        const double t = k * dt;
+        const double ua = plain.valueFromLifted(t, {{a, 0.0}}).front();
+        const double ub = integral.valueFromLifted(t, {{b, 0.0}}).front();
+        const double uc = corrected.valueFromLifted(t, {{c, 0.0}}).front();
+        a += dt * (-a + ua + d); b += dt * (-b + ub + d); c += dt * (-c + uc + d);
+    }
+    if (std::abs(a - 1.0) < 0.05) throw std::runtime_error("plain KLQR should keep an offset");
+    close(b, 1.0, 1e-5, "KLQR integral action removes the offset");
+    close(c, 1.0, 1e-5, "KLQR PID correction removes the offset");
+    if (integral.lastSolution().gain.size() != 2) throw std::runtime_error("LQI gain on the augmented KROM");
+}
+
 }  // namespace
 
 int main() {
     try {
+        klqrIntegralAndPidAdapters();
         auto model = velocityModel(); const double point[]{0.25, -0.5};
         legacyArchiveCompatibility();
         selfContainedArchiveRoundTrip();

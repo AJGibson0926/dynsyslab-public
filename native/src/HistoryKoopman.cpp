@@ -1,10 +1,9 @@
 #include <dynsyslab/core/HistoryKoopman.hpp>
-#include "HistoryCorrelation.hpp"
+#include <dynsyslab/core/HankelOperator.hpp>
 
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 #include <Eigen/QR>
-#include <unsupported/Eigen/FFT>
 
 #include <algorithm>
 #include <cmath>
@@ -24,54 +23,6 @@ using ComplexMatrix = Eigen::Matrix<std::complex<double>, Eigen::Dynamic,
     Eigen::Dynamic, Eigen::RowMajor>;
 using Vector = Eigen::VectorXd;
 
-using detail::CorrelationPlan;
-
-struct HankelBlock {
-    std::size_t columns{};
-    CorrelationPlan adjoint;
-    CorrelationPlan forward;
-
-    HankelBlock(std::vector<double> signal, std::size_t delays)
-        : columns(signal.size() - delays + 1),
-          adjoint(signal, delays), forward(signal, columns) {}
-
-    [[nodiscard]] Matrix applyAdjoint(const Matrix& values) const {
-        Matrix result(static_cast<Eigen::Index>(columns), values.cols());
-        for (Eigen::Index column = 0; column < values.cols(); ++column) {
-            const Vector kernel = values.col(column);
-            result.col(column) = adjoint.correlate(kernel);
-        }
-        return result;
-    }
-
-    [[nodiscard]] Matrix apply(const Matrix& values) const {
-        Matrix result(static_cast<Eigen::Index>(adjoint.kernelSize), values.cols());
-        for (Eigen::Index column = 0; column < values.cols(); ++column) {
-            const Vector kernel = values.col(column);
-            result.col(column) = forward.correlate(kernel);
-        }
-        return result;
-    }
-};
-
-Matrix orthonormalize(const Matrix& values) {
-    Eigen::HouseholderQR<Matrix> qr(values);
-    return qr.householderQ()
-        * Matrix::Identity(values.rows(), values.cols());
-}
-
-double hankelEnergy(const std::vector<double>& signal, std::size_t delays) {
-    const std::size_t columns = signal.size() - delays + 1;
-    double result = 0.0;
-    for (std::size_t sample = 0; sample < signal.size(); ++sample) {
-        const std::size_t firstDelay = sample >= columns ? sample - columns + 1 : 0;
-        const std::size_t lastDelay = std::min(sample, delays - 1);
-        const std::size_t count = lastDelay >= firstDelay
-            ? lastDelay - firstDelay + 1 : 0;
-        result += static_cast<double>(count) * signal[sample] * signal[sample];
-    }
-    return result;
-}
 
 double power(double value, std::size_t exponent) {
     double result = 1.0;
@@ -164,81 +115,23 @@ PooledHankelBasis fitPooledHankelBasis(
         ? std::sqrt(squared / static_cast<double>(observationCount)) : 1.0;
     if (!(scale > std::numeric_limits<double>::epsilon()))
         throw std::invalid_argument("pooled Hankel observations have zero scale");
-
-    std::vector<HankelBlock> blocks;
-    blocks.reserve(observations.size());
-    double totalEnergy = 0.0;
-    std::size_t windows = 0;
-    for (const auto& source : observations) {
-        std::vector<double> normalized(source.size());
-        std::transform(source.begin(), source.end(), normalized.begin(),
-            [scale](double value) { return value / scale; });
-        totalEnergy += hankelEnergy(normalized, options.delays);
-        windows += normalized.size() - options.delays + 1;
-        blocks.emplace_back(std::move(normalized), options.delays);
-    }
-
-    const std::size_t subspace = std::min(options.delays,
-        options.rank + options.oversampling);
-    if (subspace < options.rank)
-        throw std::invalid_argument("pooled Hankel rank exceeds the delay dimension");
-    std::mt19937_64 generator(options.seed);
-    std::normal_distribution<double> normal;
-    Matrix q(static_cast<Eigen::Index>(options.delays),
-             static_cast<Eigen::Index>(subspace));
-    for (Eigen::Index row = 0; row < q.rows(); ++row)
-        for (Eigen::Index column = 0; column < q.cols(); ++column)
-            q(row, column) = normal(generator);
-    q = orthonormalize(q);
-    auto applyGram = [&blocks](const Matrix& values) {
-        Matrix result = Matrix::Zero(values.rows(), values.cols());
-        for (const auto& block : blocks)
-            result += block.apply(block.applyAdjoint(values));
-        return result;
-    };
-    for (std::size_t iteration = 0; iteration < options.subspaceIterations; ++iteration)
-        q = orthonormalize(applyGram(q));
-    const Matrix gramQ = applyGram(q);
-    const Matrix rayleigh = q.transpose() * gramQ;
-    Eigen::SelfAdjointEigenSolver<Matrix> eigensolver(rayleigh);
-    if (eigensolver.info() != Eigen::Success)
-        throw std::runtime_error("pooled Hankel Rayleigh-Ritz solve did not converge");
-    Matrix ritz(static_cast<Eigen::Index>(subspace),
-                static_cast<Eigen::Index>(options.rank));
-    Vector selectedValues(static_cast<Eigen::Index>(options.rank));
-    for (std::size_t mode = 0; mode < options.rank; ++mode) {
-        const Eigen::Index source = static_cast<Eigen::Index>(subspace - 1 - mode);
-        ritz.col(static_cast<Eigen::Index>(mode)) = eigensolver.eigenvectors().col(source);
-        selectedValues[static_cast<Eigen::Index>(mode)] = eigensolver.eigenvalues()[source];
-    }
-    Matrix left = q * ritz;
-
+    // The shared Hankel module: one scalar channel scaled by the pooled RMS.
+    std::vector<HankelSegment> segments;
+    segments.reserve(observations.size());
+    for (const auto& source : observations) segments.push_back({source, source.size(), 1});
+    const HankelOperator hankel(segments, {{0, 0, scale}}, options.delays);
+    const auto fitted = fitHankelLeftBasis(hankel, {options.rank, options.oversampling,
+        options.subspaceIterations, options.seed});
     PooledHankelBasis result;
     result.delays = options.delays;
     result.rank = options.rank;
     result.trainingTrajectories = observations.size();
-    result.trainingWindows = windows;
+    result.trainingWindows = hankel.columns();
     result.observationScale = scale;
-    result.totalHankelEnergy = totalEnergy;
-    result.leftSingularVectors.resize(options.delays * options.rank);
-    result.singularValues.resize(options.rank);
-    result.cumulativeEnergy.resize(options.rank);
-    double captured = 0.0;
-    for (std::size_t mode = 0; mode < options.rank; ++mode) {
-        Eigen::Index pivot = 0;
-        left.col(static_cast<Eigen::Index>(mode)).cwiseAbs().maxCoeff(&pivot);
-        if (left(pivot, static_cast<Eigen::Index>(mode)) < 0.0)
-            left.col(static_cast<Eigen::Index>(mode)) *= -1.0;
-        const double singular = std::sqrt(std::max(
-            selectedValues[static_cast<Eigen::Index>(mode)], 0.0));
-        result.singularValues[mode] = singular;
-        captured += singular * singular;
-        result.cumulativeEnergy[mode] = captured / totalEnergy;
-    }
-    for (std::size_t delay = 0; delay < options.delays; ++delay)
-        for (std::size_t mode = 0; mode < options.rank; ++mode)
-            result.leftSingularVectors[delay * options.rank + mode]
-                = left(static_cast<Eigen::Index>(delay), static_cast<Eigen::Index>(mode));
+    result.totalHankelEnergy = fitted.totalEnergy;
+    result.leftSingularVectors = fitted.leftSingularVectors;
+    result.singularValues = fitted.singularValues;
+    result.cumulativeEnergy = fitted.cumulativeEnergy;
     return result;
 }
 

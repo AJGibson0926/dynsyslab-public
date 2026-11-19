@@ -171,9 +171,84 @@ std::wstring cameraText(const Plot3DCameraState& state) {
 
 }  // namespace
 
-void drawPlot3D(Gdiplus::Graphics& graphics, const Figure& figure,
+// About `target` round-valued ticks (1, 2 or 5 times a power of ten) inside [low, high].
+static std::vector<double> niceTicks(double low, double high, int target) {
+    std::vector<double> ticks;
+    if (!(high > low) || !std::isfinite(low) || !std::isfinite(high)) return ticks;
+    const double raw = (high - low) / std::max(1, target);
+    const double power = std::pow(10.0, std::floor(std::log10(raw)));
+    double step = power;
+    for (const double m : {1.0, 2.0, 5.0, 10.0}) { step = m * power; if (step >= raw) break; }
+    for (double v = std::ceil(low / step) * step; v <= high + 1e-9 * step; v += step)
+        ticks.push_back(std::abs(v) < 1e-12 * step ? 0.0 : v);
+    return ticks;
+}
+
+static std::wstring tickText(double value) {
+    wchar_t text[40]{};
+    const double magnitude = std::abs(value);
+    if (magnitude != 0 && (magnitude >= 1e4 || magnitude < 1e-3)) {
+        const int k = static_cast<int>(std::floor(std::log10(magnitude)));
+        const double mantissa = value / std::pow(10.0, k);
+        if (std::abs(std::abs(mantissa) - 1.0) < 1e-9) return (value < 0 ? L"-10^{" : L"10^{") + std::to_wstring(k) + L"}";
+        swprintf_s(text, L"%.2g\times10^{%d}", mantissa, k);
+        return text;
+    }
+    swprintf_s(text, L"%.4g", value);
+    return text;
+}
+
+// Centred text on a near-opaque plot-coloured backing, so labels stay readable where
+// they cross stems or curves.
+static void drawBackedText(Gdiplus::Graphics& graphics, const std::wstring& text, const Gdiplus::RectF& box,
+                           HFONT font, COLORREF color) {
+    const auto size = measureMathText(graphics, text, font);
+    const COLORREF fill = theme::plotBackground;
+    Gdiplus::SolidBrush backing(Gdiplus::Color(225, GetRValue(fill), GetGValue(fill), GetBValue(fill)));
+    const float w = std::min(box.Width, size.Width + 6.0f), h = std::min(box.Height, size.Height + 2.0f);
+    graphics.FillRectangle(&backing, box.X + (box.Width - w) / 2, box.Y + (box.Height - h) / 2, w, h);
+    drawMathText(graphics, text, box, font, color, Gdiplus::StringAlignmentCenter);
+}
+
+// Tick marks and labels along one box axis through `start` (data coordinates; the
+// `axis` component varies). Labels sit on the side away from the box centre; height
+// ticks point sideways. Ticks within 22 px of `skipNear` (a corner another axis
+// already labels) are left out.
+static void drawAxisTicks(Gdiplus::Graphics& graphics, const Plot3DCamera& camera, const Plot3DBounds& bounds,
+                   const Plot3DViewport& viewport, Plot3DPoint start, int axis,
+                   const std::vector<std::pair<double, std::wstring>>& ticks, COLORREF color,
+                   const theme::Fonts& fonts, const Plot3DPoint* skipNear = nullptr) {
+    const Plot3DPoint centre{(bounds.minimum.x + bounds.maximum.x) / 2, (bounds.minimum.y + bounds.maximum.y) / 2,
+                             (bounds.minimum.z + bounds.maximum.z) / 2};
+    const auto mid = camera.project(centre, bounds, viewport);
+    Gdiplus::Pen pen(theme::color(color), 1.2f);
+    const auto origin = camera.project(skipNear ? *skipNear : start, bounds, viewport);
+    float lastX = -1e9f, lastY = -1e9f;
+    for (const auto& [value, text] : ticks) {
+        Plot3DPoint p = start;
+        (axis == 0 ? p.x : axis == 1 ? p.y : p.z) = value;
+        const auto at = camera.project(p, bounds, viewport);
+        if (!at.visible) continue;
+        if (skipNear && std::hypot(at.x - origin.x, at.y - origin.y) < 22) continue;
+        double dx = at.x - mid.x, dy = at.y - mid.y;
+        if (axis == 2) { dx = at.x <= mid.x ? -1 : 1; dy = 0; }   // height ticks point sideways
+        const double length = std::max(1e-9, std::hypot(dx, dy));
+        dx /= length; dy /= length;
+        const float tx = static_cast<float>(at.x + 6 * dx), ty = static_cast<float>(at.y + 6 * dy);
+        if (std::hypot(tx - lastX, ty - lastY) < 26) continue;   // keep labels apart
+        lastX = tx; lastY = ty;
+        graphics.DrawLine(&pen, static_cast<float>(at.x), static_cast<float>(at.y), tx, ty);
+        const float lx = static_cast<float>(at.x + 26 * dx), ly = static_cast<float>(at.y + 16 * dy);
+        drawBackedText(graphics, text, {lx - 40, ly - 10, 80, 20}, fonts.caption, theme::plotMuted);
+    }
+}
+
+void drawPlot3D(Gdiplus::Graphics& graphics, const Figure& sourceFigure,
                 const Plot3DViewport& viewport, const Plot3DCamera& camera,
                 Plot3DControl hoveredControl, const theme::Fonts& fonts) {
+    // Box-axis plots (stems) honour the value-scale control on their height axis.
+    const auto heightScale = plot3DHeightScale(sourceFigure);
+    const Figure figure = plot3DDisplayFigure(sourceFigure);
     const auto bounds = plot3DBounds(figure);
     const auto saved = graphics.Save();
     const Gdiplus::RectF clip(static_cast<float>(viewport.left),
@@ -236,25 +311,67 @@ void drawPlot3D(Gdiplus::Graphics& graphics, const Figure& figure,
         graphics.DrawLine(&pen, point(segment.first), point(segment.second));
     }
 
-    const Plot3DPoint axisStart{bounds.minimum.x, bounds.minimum.y, bounds.minimum.z};
-    const std::array<Plot3DPoint, 3> axisEnds{{
-        {bounds.maximum.x, bounds.minimum.y, bounds.minimum.z},
-        {bounds.minimum.x, bounds.maximum.y, bounds.minimum.z},
-        {bounds.minimum.x, bounds.minimum.y, bounds.maximum.z}}};
     const std::array<COLORREF, 3> axisColors{{theme::accentStrong, theme::blue, theme::danger}};
     const std::array<std::string, 3> axisLabels{{figure.xLabel, figure.yLabel,
-        figure.zLabel.empty() ? "z" : figure.zLabel}};
-    const auto start = camera.project(axisStart, bounds, viewport);
-    for (std::size_t index = 0; index < axisEnds.size(); ++index) {
+        (figure.zLabel.empty() ? std::string("z") : figure.zLabel)
+            + (heightScale.logarithmic ? std::string(" (log)") : std::string())}};
+    // Axis lines (start, end). Trajectory plots keep one shared corner. Box plots (stems)
+    // put each base axis on the floor edge nearest the viewer, so stems never hide it,
+    // and the height axis on the floor corner furthest left on screen.
+    std::array<Plot3DPoint, 3> axisStarts{}, axisEnds{};
+    const double x0 = bounds.minimum.x, x1 = bounds.maximum.x, y0 = bounds.minimum.y, y1 = bounds.maximum.y;
+    const double z0 = bounds.minimum.z, z1 = bounds.maximum.z;
+    Plot3DPoint baseCorner{x0, y0, z0};
+    if (figure.boxAxes3D) {
+        const auto depth = [&](Plot3DPoint p) { return camera.project(p, bounds, viewport).depth; };
+        const double yFront = depth({(x0 + x1) / 2, y0, z0}) >= depth({(x0 + x1) / 2, y1, z0}) ? y0 : y1;
+        const double xFront = depth({x0, (y0 + y1) / 2, z0}) >= depth({x1, (y0 + y1) / 2, z0}) ? x0 : x1;
+        axisStarts[0] = {x0, yFront, z0}; axisEnds[0] = {x1, yFront, z0};
+        axisStarts[1] = {xFront, y0, z0}; axisEnds[1] = {xFront, y1, z0};
+        baseCorner = {xFront, yFront, z0};
+        Plot3DPoint left{x0, y0, z0}; double leftX = std::numeric_limits<double>::infinity();
+        for (const Plot3DPoint c : {Plot3DPoint{x0, y0, z0}, Plot3DPoint{x1, y0, z0}, Plot3DPoint{x0, y1, z0}, Plot3DPoint{x1, y1, z0}}) {
+            const double sx = camera.project(c, bounds, viewport).x;
+            if (sx < leftX) { leftX = sx; left = c; }
+        }
+        axisStarts[2] = left; axisEnds[2] = {left.x, left.y, z1};
+    } else {
+        axisStarts = {Plot3DPoint{x0, y0, z0}, Plot3DPoint{x0, y0, z0}, Plot3DPoint{x0, y0, z0}};
+        axisEnds = {Plot3DPoint{x1, y0, z0}, Plot3DPoint{x0, y1, z0}, Plot3DPoint{x0, y0, z1}};
+    }
+    for (std::size_t index = 0; index < 3; ++index) {
+        const auto start = camera.project(axisStarts[index], bounds, viewport);
         const auto end = camera.project(axisEnds[index], bounds, viewport);
         Gdiplus::Pen pen(theme::color(axisColors[index]), 2.0f);
         graphics.DrawLine(&pen, point(start), point(end));
-        drawMathText(graphics, wide(scientificMathLabel(axisLabels[index])),
-            {static_cast<float>(end.x - 40), static_cast<float>(end.y - 23), 80, 22},
+        const Gdiplus::RectF titleBox{static_cast<float>(end.x - 60), static_cast<float>(end.y - 25), 120, 22};
+        if (figure.boxAxes3D) drawBackedText(graphics, wide(scientificMathLabel(axisLabels[index])), titleBox, fonts.body, axisColors[index]);
+        else drawMathText(graphics, wide(scientificMathLabel(axisLabels[index])), titleBox,
             fonts.body, axisColors[index], Gdiplus::StringAlignmentCenter);
     }
+    if (figure.boxAxes3D) {   // tick marks with physical values on all three axes
+        const double lows[3] = {bounds.minimum.x, bounds.minimum.y, bounds.minimum.z};
+        const double highs[3] = {bounds.maximum.x, bounds.maximum.y, bounds.maximum.z};
+        for (int axis = 0; axis < 3; ++axis) {
+            std::vector<std::pair<double, std::wstring>> ticks;
+            if (axis == 2 && heightScale.logarithmic) {
+                const int first = static_cast<int>(std::ceil(lows[2] - 1e-9));
+                const int last = static_cast<int>(std::floor(highs[2] + 1e-9));
+                const int stride = std::max(1, (last - first + 5) / 6);
+                for (int k = last; k >= first; k -= stride)
+                    ticks.emplace_back(double(k), L"10^{" + std::to_wstring(k) + L"}");
+            } else {
+                for (const double v : niceTicks(lows[axis], highs[axis], 4)) ticks.emplace_back(v, tickText(v));
+            }
+            // The x axis labels the corner it shares with the y axis; the height axis
+            // leaves out its floor tick (a base axis may label that corner).
+            const Plot3DPoint* skip = axis == 1 ? &baseCorner : axis == 2 ? &axisStarts[2] : nullptr;
+            drawAxisTicks(graphics, camera, bounds, viewport, axisStarts[axis], axis, ticks, axisColors[axis], fonts, skip);
+        }
+    }
 
-    if (!figure.traces.empty()) {
+    (void)sourceFigure;
+    if (!figure.traces.empty() && !figure.boxAxes3D) {  // IC marker: trajectories only
         const auto& trace = figure.traces.front();
         if (!trace.x.empty() && !trace.y.empty() && !trace.z.empty()) {
             const auto initial = camera.project({trace.x.front(), trace.y.front(), trace.z.front()},

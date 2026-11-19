@@ -1,0 +1,32 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "postprocess",
+ "label": "range-selection / rr-local-pair",
+ "sources": [
+  "archives/solutions/rpe/rpe-echo-jet-klqr-rediscovery-20kpa-train__20261115T001627Z.npz",
+  "archives/solutions/rpe/rpe-viscous-echo-long-validation-five-ics-trajectory-0__20261002T001403Z.npz",
+  "archives/solutions/rpe/klqe-klqr-ee-ic37-mild-full-R0-01-ramp0__20261115T014805Z.npz",
+  "archives/solutions/rpe/klqe-klqr-ee-ic37-strong-full-R0-01-ramp0__20261115T014807Z.npz",
+  "archives/solutions/rpe/klqe-klqr-ee-ic37-hard-full-R0-01-ramp0__20261115T014820Z.npz"
+ ],
+ "methods": [
+  {
+   "name": "mode_selection",
+   "settings": {
+    "krom": "archives/derived/koopman-krom-extract/experiment-rr-ic0p37-recentred-local-pair-krom.npz",
+    "measurement": "far_field_acoustic_echo",
+    "forced_time_window": [
+     5,
+     300
+    ],
+    "pool_size": 10,
+    "max_units": 3,
+    "sensor_noise": 0.01,
+    "write_krom": true
+   }
+  }
+ ],
+ "archive": {
+  "enabled": true
+ }
+}

@@ -1,4 +1,6 @@
 #include "HankelAnalysis.hpp"
+#include <cmath>
+#include <complex>
 #include "KoopmanSpectralSettings.hpp"
 #include <dynsyslab/core/SpectralKromArchive.hpp>
 namespace dynsyslab::workflow::postprocess_detail {
@@ -40,6 +42,26 @@ std::filesystem::path runKoopmanSpectral(const SourceData& source,const json::Va
     auto archive=c::makeSpectralKromArchive(model,metadata(source,method,label,""));
     archiveHankelLayout(archive,input,settings.at("save_matrix").boolean());
     archive.arrays["eigenfunction_values"]=c::NpyArray::fromComplex({data.samples,model.rank},model.evaluateEigenfunctions(data.x));
+    // The same K-ROM contract as H-DMD: eigenfunction values at each training
+    // column, the physical state there and continuous rates. Any spectral
+    // method's result can then feed SINDy as a spectrum or be interpolated
+    // into a K-ROM directly.
+    const double dt=uniformDeltaTime(source)*double(h.window.sampleStride);
+    std::vector<std::complex<double>> rates;
+    for(const auto mu:model.multipliers)rates.push_back(std::log(mu)/dt);
+    archive.arrays["continuous_eigenvalues"]=c::NpyArray::fromComplex({rates.size()},rates);
+    const auto record=c::readNpz(source.path);
+    const bool carried=record.contains("source_states");
+    const auto physical=carried?record.at("source_states").doubles():source.values;
+    const std::size_t width=carried?record.at("source_states").shape.at(1):source.dimension;
+    std::vector<double> times,states;
+    for(std::size_t j=0;j<h.columns;++j) {
+        const auto tick=input.alignEnd?h.ends.at(j):h.starts.at(j);
+        times.push_back(source.time.at(tick));
+        states.insert(states.end(),physical.begin()+std::ptrdiff_t(tick*width),physical.begin()+std::ptrdiff_t((tick+1)*width));
+    }
+    archive.arrays["training_time"]=c::NpyArray::fromDoubles({h.columns},times);
+    archive.arrays["training_states"]=c::NpyArray::fromDoubles({h.columns,width},states);
     return publish(root,source,"koopman-"+method,label,std::move(archive));
 }
 }

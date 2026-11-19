@@ -9,6 +9,7 @@
 #include <dynsyslab/workflow/LatticeSolve.hpp>
 #include <dynsyslab/workflow/KromControlSearch.hpp>
 #include <dynsyslab/workflow/PDESolve.hpp>
+#include <dynsyslab/workflow/Pipeline.hpp>
 #include <dynsyslab/workflow/Run.hpp>
 #include <dynsyslab/workflow/SystemResolution.hpp>
 
@@ -65,6 +66,22 @@ void validateController(const json::Value& job) {
         throw std::invalid_argument("Online KLQE composition requires KLQR");
     if (!supported.count(kind))
         throw std::invalid_argument("unknown native controller kind: " + kind);
+    if (!job.at("controller").at("settings").at("applied_controller").isNull()
+        && (kind != "klqr" || (job.at("controller").at("settings").at("feedback").string() != "estimate"
+                               && job.at("controller").at("settings").at("estimator").isNull())))
+        throw std::invalid_argument("applied_controller (shadow KLQR) requires KLQR with estimate feedback");
+    const auto& estimator = job.at("estimator");
+    if (estimator.isNull() && job.at("controller").at("settings").at("feedback").string() == "estimated_state")
+        throw std::invalid_argument("estimated_state feedback needs an estimator");
+    if (!estimator.isNull()) {
+        if (estimator.at("kind").string("klqe") != "klqe")
+            throw std::invalid_argument("unknown native estimator kind: " + estimator.at("kind").string());
+        if (job.at("controller").at("settings").at("feedback").string() == "estimate" && kind != "klqr")
+            throw std::invalid_argument("estimate feedback (KLQE -> controller) requires KLQR");
+        if (job.at("controller").at("settings").at("feedback").string() == "estimated_state"
+            && estimator.at("output").string().empty())
+            throw std::invalid_argument("estimated_state feedback needs an estimator output reconstruction (e.g. state)");
+    }
 }
 
 bool supportedMethod(const json::Value& stage) {
@@ -73,9 +90,10 @@ bool supportedMethod(const json::Value& stage) {
         "dmd", "dmdc", "edmdc", "hdmd", "hankel_dmd", "sindy", "edmd", "havok",
         "koopman_spectral", "resdmd", "mpedmd", "hermitian_dmd", "tlsdmd", "multdmd", "stochastic_resdmd", "specrkhs",
         "control_regression", "krom_extract", "koopman_validation", "observable_reconstruction",
-        "echo_history_koopman", "history_basis", "history_projection", "coordinate_transform", "sindy_dynamics", "dynamics_validation",
+        "echo_history_koopman", "history_basis", "history_projection", "history_control_regression", "input_map", "control_target", "derivative_benchmark", "mode_selection",
+        "coordinate_transform", "sindy_dynamics", "dynamics_validation",
         "boundary_eigenfunctions", "eigenvalue_optimization",
-        "observability", "klqe", "linear_analysis", "controllability",
+        "observability", "klqe", "linear_analysis", "linear_systems", "controllability", "empirical_observability",
     };
     const std::string method = stage.at("name").string();
     return supported.count(method) || !stage.at("extension").string().empty();
@@ -239,8 +257,9 @@ json::Value postprocessPlan(const json::Value& job) {
 
 json::Value planJob(const json::Value& job) {
     validateJob(job);
-    detail::loadExtensions(job);
     const auto kind=job.at("kind").string();
+    if(kind=="pipeline")return planPipeline(job);
+    detail::loadExtensions(job);
     if(kind=="krom_control_search")return planKromControlSearch(job);
     if(kind=="solve_set")return solveSetPlan(job);
     return kind == "solve" ? solvePlan(job) : postprocessPlan(job);

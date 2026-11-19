@@ -15,10 +15,15 @@ std::size_t countSetting(const json::Value& settings,const char* name,double fal
     return static_cast<std::size_t>(value);
 }
 }
-std::filesystem::path runHdmd(const SourceData& source, const json::Value& settings,
+std::filesystem::path runHdmd(const SourceData& full, const json::Value& settings,
                               const std::filesystem::path& root, const std::string& label) {
     dynsyslab::core::HankelDMDOptions options;
-    auto input=prepareHankel(source,settings,true);
+    // "time_window" [start, stop] restricts the Hankel matrix to that stretch of the record
+    // (e.g. the late, small-amplitude part of a free decay). "first" maps rows back to the file.
+    std::size_t first=0;
+    const SourceData source=hankelTimeWindow(full,settings,first);
+    auto input=prepareHankel(source,settings,true,true);
+    if(!settings.at("time_window").isNull())input.provenance.object()["time_window"]=settings.at("time_window");
     options.matrixSize=input.matrix.columns;
     options.samplingWindow=countSetting(settings,"sampling_window",input.matrix.window.delays,1);
     options.snapshotStride=input.matrix.window.snapshotStride;
@@ -27,6 +32,12 @@ std::filesystem::path runHdmd(const SourceData& source, const json::Value& setti
     options.channelScales=input.scales;
     options.rank=countSetting(settings,"rank",0);
     options.singularValueTolerance=settings.at("svd_tolerance").number(1.0e-10);
+    {   // "rank_rule": "optimal_hard_threshold" (Gavish-Donoho) truncates the noise floor of noisy data
+        const auto rule=settings.at("rank_rule").string("tolerance");
+        if(rule!="tolerance"&&rule!="optimal_hard_threshold")
+            throw std::invalid_argument("hdmd rank_rule must be tolerance or optimal_hard_threshold");
+        options.optimalHardThreshold=rule=="optimal_hard_threshold";
+    }
     options.terminalAmplitudeEnergySort=settings.at("mode_sort").string("terminal-amplitude-energy")!="none";
     dynsyslab::core::NpzRecord archive;
     archiveHankelLayout(archive,input,settings.at("save_matrix").boolean());
@@ -37,19 +48,30 @@ std::filesystem::path runHdmd(const SourceData& source, const json::Value& setti
     archive.arrays["modes"] = dynsyslab::core::NpyArray::fromComplex({result.featureDimension, result.rank}, result.modes);
     archive.arrays["eigenfunction_values"] = dynsyslab::core::NpyArray::fromComplex(
         {result.samples,result.rank},result.coordinates);
-    std::vector<double> alignedTime,alignedStates;
-    alignedTime.reserve(result.samples);alignedStates.reserve(result.samples*source.dimension);
+    // The input is any time series. A coordinate-change archive also carries
+    // the physical states at its samples; those stay the model's state.
+    const auto record=dynsyslab::core::readNpz(full.path);
+    const bool coordinates=record.contains("source_states");
+    const auto physical=coordinates?record.at("source_states").doubles():std::vector<double>{};
+    const std::size_t stateDimension=coordinates?record.at("source_states").shape.at(1):source.dimension;
+    const auto& stateValues=coordinates?physical:full.values;
+    std::vector<double> alignedTime,alignedStates,alignedCoordinates;
+    alignedTime.reserve(result.samples);alignedStates.reserve(result.samples*stateDimension);
+    auto rows=[](std::vector<double>& out,const std::vector<double>& from,std::size_t sample,std::size_t width){
+        out.insert(out.end(),from.begin()+static_cast<std::ptrdiff_t>(sample*width),
+                   from.begin()+static_cast<std::ptrdiff_t>((sample+1)*width));};
     for(std::size_t sample=0;sample<result.samples;++sample){
         const std::size_t sourceSample=result.coordinateSampleOffsets.at(sample);
         alignedTime.push_back(source.time.at(sourceSample));
-        alignedStates.insert(alignedStates.end(),
-            source.values.begin()+static_cast<std::ptrdiff_t>(sourceSample*source.dimension),
-            source.values.begin()+static_cast<std::ptrdiff_t>((sourceSample+1)*source.dimension));
+        rows(alignedStates,stateValues,first+sourceSample,stateDimension);
+        if(coordinates)rows(alignedCoordinates,source.values,sourceSample,source.dimension);
     }
     archive.arrays["training_time"]=dynsyslab::core::NpyArray::fromDoubles(
         {result.samples},alignedTime);
     archive.arrays["training_states"]=dynsyslab::core::NpyArray::fromDoubles(
-        {result.samples,source.dimension},alignedStates);
+        {result.samples,stateDimension},alignedStates);
+    if(coordinates)archive.arrays["training_coordinates"]=dynsyslab::core::NpyArray::fromDoubles(
+        {result.samples,source.dimension},alignedCoordinates);
     const auto channels=result.observableNames.size();
     archive.arrays["reconstruction_matrix"]=dynsyslab::core::NpyArray::fromComplex(
         {channels,result.rank},result.reconstructionMatrix);

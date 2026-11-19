@@ -104,6 +104,15 @@ int main(){std::filesystem::path root;try{
     const auto estimate=c::readNpz(observer.archives[0]);
     check(!estimate.contains("true_states")&&!estimate.contains("state_reconstruction_matrix"),"Measured observer invented physical outputs");
     check(estimate.at("lifted_estimate").shape==std::vector<std::size_t>{640,2},"Measured observer output shape wrong");
+    const auto reducedObserver=w::executeJob(job({paths[0]},"klqe",j::Value::Object{
+        {"krom",estimatorModel.generic_u8string()},{"measurement","echo"},{"balanced_truncation",1.},
+        {"initial_lifted_values",j::Value::Array{0.,0.}}}),root/"archives",{});
+    const auto reducedEstimate=c::readNpz(reducedObserver.archives[0]);
+    const auto reducedMeta=j::parse(reducedEstimate.metadataJson());
+    check(reducedMeta.at("balanced_truncation").at("order").number()==1
+        &&reducedMeta.at("balanced_truncation").at("full_order").number()==2,"KLQE balanced_truncation evidence missing");
+    check(reducedEstimate.at("lifted_estimate").shape==std::vector<std::size_t>{640,2},
+        "Reduced-gain KLQE must still estimate the full lifted state");
     physical.setReconstruction("echo",{{1.},1,1,0,0,0});
     physical.setReconstruction("state",{{1.,{0,1}},2,1,0,0,0});
     const auto physicalObserver=root/"physical-observer.npz";c::saveKoopmanModel(physicalObserver,physical);

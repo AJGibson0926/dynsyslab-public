@@ -14,6 +14,9 @@ struct RunResult {
     std::wstring summary;
     std::vector<std::filesystem::path> archives;
     std::filesystem::path manifest;
+    // Method that produced each archive, when the job kind records it
+    // (postprocess stages); empty otherwise. Used by pipeline references.
+    std::vector<std::string> methods;
 };
 
 void validateJob(const json::Value& job);

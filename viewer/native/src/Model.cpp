@@ -9,6 +9,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace dsl {
 namespace {
@@ -84,6 +85,11 @@ Figure figureFrom(const json::Value& value) {
     result.inset = insetFrom(value.at("detail_inset"));
     result.coordinates = value.at("coordinates").string();
     result.colorLabel = value.at("color_label").string();
+    result.boxAxes3D = value.at("box_axes").boolean(false);
+    if (const auto& camera = value.at("camera"); !camera.isNull()) {
+        result.cameraAzimuthDegrees = camera.at("azimuth_degrees").number(42.0);
+        result.cameraElevationDegrees = camera.at("elevation_degrees").number(24.0);
+    }
     const auto& alternate = value.at("alternate_coordinates");
     if (!alternate.isNull()) {
         Figure::CoordinateAxes axes;
@@ -106,6 +112,16 @@ Figure figureFrom(const json::Value& value) {
     return result;
 }
 
+struct EpisodeRecord {
+    std::size_t index = 0;
+    std::vector<double> x;
+    std::vector<double> y;
+    double lower = 0.0;
+    double upper = 0.0;
+    double robustSpan = 0.0;
+    double fullSpan = 0.0;
+};
+
 std::string lower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char item) {
         return static_cast<char>(std::tolower(item));
@@ -122,6 +138,69 @@ std::string systemToken(std::string value) {
     return result;
 }
 
+// The transient episode of a time figure as [start, end], if there is one. Off-scale
+// samples (beyond the robust band by more than one band width) must all fall inside it, and
+// it may cover at most 30% of the record.
+std::optional<std::pair<double, double>> transientEpisode(
+    const std::vector<EpisodeRecord>& records, double lower, double upper) {
+    const double band = upper - lower;
+    if (!(band > 0)) return std::nullopt;
+    const double low = lower - band, high = upper + band;
+    double allMin = std::numeric_limits<double>::infinity(), allMax = -allMin;
+    double firstBurst = allMin, lastBurst = -allMin;
+    for (const auto& record : records)
+        for (std::size_t index = 0; index < record.x.size(); ++index) {
+            allMin = std::min(allMin, record.x[index]); allMax = std::max(allMax, record.x[index]);
+            if (record.y[index] < low || record.y[index] > high) {
+                firstBurst = std::min(firstBurst, record.x[index]);
+                lastBurst = std::max(lastBurst, record.x[index]);
+            }
+        }
+    const double total = allMax - allMin;
+    if (!(total > 0) || !std::isfinite(firstBurst)) return std::nullopt;
+    // Disagreement between the traces, sampled on a common grid.
+    constexpr std::size_t grid = 800;
+    std::vector<double> spread(grid, 0.0);
+    std::vector<bool> offscale(grid, false);
+    for (std::size_t k = 0; k < grid; ++k) {
+        const double x = allMin + total * static_cast<double>(k) / (grid - 1);
+        double lo = std::numeric_limits<double>::infinity(), hi = -lo;
+        int seen = 0;
+        for (const auto& record : records) {
+            if (record.x.empty() || x < record.x.front() || x > record.x.back()) continue;
+            const auto it = std::lower_bound(record.x.begin(), record.x.end(), x);
+            if (it == record.x.end()) continue;
+            const std::size_t j = static_cast<std::size_t>(it - record.x.begin());
+            double y = record.y[j];
+            if (j > 0 && record.x[j] > record.x[j - 1]) {
+                const double w = (x - record.x[j - 1]) / (record.x[j] - record.x[j - 1]);
+                y = record.y[j - 1] * (1 - w) + record.y[j] * w;
+            }
+            lo = std::min(lo, y); hi = std::max(hi, y); ++seen;
+        }
+        if (seen >= 2) spread[k] = hi - lo;
+        const double cell = total / (grid - 1);
+        offscale[k] = x >= firstBurst - cell && x <= lastBurst + cell;
+    }
+    std::vector<double> sorted = spread;
+    std::nth_element(sorted.begin(), sorted.begin() + grid / 2, sorted.end());
+    const double threshold = std::max(0.10 * band, 3.0 * sorted[grid / 2]);
+    std::size_t start = grid, end = 0, lull = 0;
+    const std::size_t tolerance = grid * 3 / 100;
+    for (std::size_t k = 0; k < grid; ++k) {
+        const bool active = offscale[k] || spread[k] > threshold;
+        if (start == grid) { if (active) start = end = k; continue; }
+        if (active) { end = k; lull = 0; }
+        else if (++lull > tolerance) break;
+    }
+    if (start == grid) return std::nullopt;
+    const double pad = 0.01 * total;
+    const double x0 = std::max(allMin, allMin + total * start / (grid - 1) - pad);
+    const double x1 = std::min(allMax, allMin + total * end / (grid - 1) + pad);
+    if (lastBurst > x1 || firstBurst < x0 || x1 - x0 > 0.30 * total) return std::nullopt;
+    return std::make_pair(x0, x1);
+}
+
 }  // namespace
 
 std::optional<DetailInset> automaticDetailInset(
@@ -129,15 +208,7 @@ std::optional<DetailInset> automaticDetailInset(
     const std::string kind = lower(figure.kind);
     if (kind != "time" && kind != "observable_time" && kind != "klqe")
         return std::nullopt;
-    struct Record {
-        std::size_t index = 0;
-        std::vector<double> x;
-        std::vector<double> y;
-        double lower = 0.0;
-        double upper = 0.0;
-        double robustSpan = 0.0;
-        double fullSpan = 0.0;
-    };
+    using Record = EpisodeRecord;
     auto quantile = [](std::vector<double> values, double probability) {
         std::sort(values.begin(), values.end());
         const double position = probability * static_cast<double>(values.size() - 1);
@@ -180,6 +251,60 @@ std::optional<DetailInset> automaticDetailInset(
             result.traceIndices.push_back(record.index);
             result.yMin = std::min(result.yMin, record.lower);
             result.yMax = std::max(result.yMax, record.upper);
+        }
+        // Transient episode: if the off-scale samples sit inside one short episode (a start-up
+        // spike and the settling that follows it), the inset shows that whole episode and the
+        // main panel keeps the robust range, so both panels carry visible information. The
+        // episode runs from the first off-scale sample for as long as the traces disagree
+        // with one another markedly (for example a controller ringing as it attaches to its
+        // target), tolerating short lulls.
+        if (const auto episode = transientEpisode(records, result.yMin, result.yMax)) {
+            const double x0 = episode->first, x1 = episode->second;
+            const double band = result.yMax - result.yMin;
+            double y0 = std::numeric_limits<double>::infinity(), y1 = -y0;
+            for (const auto& record : records)
+                for (std::size_t index = 0; index < record.x.size(); ++index)
+                    if (record.x[index] >= x0 && record.x[index] <= x1) {
+                        y0 = std::min(y0, record.y[index]); y1 = std::max(y1, record.y[index]);
+                    }
+            const double settled = std::max(std::abs(result.yMin), std::abs(result.yMax));
+            if (x1 > x0 && y1 > y0) {
+                result.transientWindow = true;
+                result.mainYMin = result.yMin - 0.08 * band;
+                result.mainYMax = result.yMax + 0.08 * band;
+                result.xMin = x0; result.xMax = x1;
+                // Spikes spanning decades beyond the settled level read best on a symmetric
+                // log ordinate whose linear core is the settled range.
+                // The linear core holds the episode's on-scale behaviour (e.g. ringing); the
+                // off-scale spike goes to compressed decades beyond it.
+                double core = 0.0;
+                for (const auto& record : records)
+                    for (std::size_t index = 0; index < record.x.size(); ++index)
+                        if (record.x[index] >= x0 && record.x[index] <= x1
+                            && record.y[index] >= result.yMin - band && record.y[index] <= result.yMax + band)
+                            core = std::max(core, std::abs(record.y[index]));
+                if (!(core > epsilon)) core = settled;
+                if (core > epsilon && std::max(std::abs(y0), std::abs(y1)) > 30.0 * core) {
+                    constexpr double weight = 0.35;
+                    result.symmetricLog = true; result.linearThreshold = core; result.decadeWeight = weight;
+                    // Centre the core vertically: limits symmetric about zero in the
+                    // transformed coordinate, with a little headroom.
+                    auto forward = [core](double v) {
+                        const double q = std::abs(v) / core;
+                        return std::copysign(q <= 1 ? q : 1 + weight * std::log10(q), v);
+                    };
+                    auto inverse = [core](double u) {
+                        const double q = std::abs(u);
+                        return std::copysign(core * (q <= 1 ? q : std::pow(10., std::min((q - 1) / weight, 307.))), u);
+                    };
+                    const double reach = 1.06 * std::max(std::abs(forward(y0)), std::abs(forward(y1)));
+                    result.yMin = inverse(-reach); result.yMax = inverse(reach);
+                } else {
+                    const double span = y1 - y0;
+                    result.yMin = y0 - 0.06 * span; result.yMax = y1 + 0.06 * span;
+                }
+                return result;
+            }
         }
         bool found = false;
         for (std::size_t index = 0; index < focus->x.size(); ++index) {

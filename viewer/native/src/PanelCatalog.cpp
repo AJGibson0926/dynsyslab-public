@@ -14,8 +14,11 @@ std::string family(const std::string& route, const Figure& figure) {
     if (route == "control_fourier" || figure.kind == "control_fourier")
         return "Control spectra";
     if (figure.title == "Control history") return "Control";
+    if (route == "estimator") return "Estimator";
     if (route == "fourier" || figure.kind == "fourier") return "Fourier spectra";
     if (figure.kind == "time") return "Time series";
+    // Spectral stem plots are 3-D figures but belong with the Koopman panels.
+    if (route == "koopman_spectrum" || route == "mode_weights") return "Koopman";
     if (figure.kind == "phase" || figure.kind == "three_d") return "State space";
     if (route.find("observable") != std::string::npos) return "Observables";
     if (figure.kind.find("koopman") != std::string::npos ||
@@ -36,12 +39,14 @@ std::string fingerprint(const Figure& figure) {
 
 std::vector<std::string> panelSourceViews(const CatalogItem& item) {
     static const std::vector<std::string> preferred{
-        "time", "phase", "three_d", "fourier", "control_fourier",
+        "time", "phase", "three_d", "fourier", "control_fourier", "estimator",
         "observable_time", "observable_heatmap", "field", "lattice",
         "ensemble_control", "ensemble_time", "ensemble_phase",
         "campaign_summary", "campaign_bifurcation",
-        "koopman_spectrum", "krom_dashboard", "control_map_error",
-        "observability", "koopman_validation", "eigenvalue_optimization",
+        "koopman_spectrum", "mode_weights", "krom_dashboard", "control_map_error",
+        "observability", "hankel_spectrum", "gramian_spectrum", "frequency_response", "pole_zero",
+        "bode", "nyquist", "loop_bode", "sensitivity",
+        "koopman_validation", "eigenvalue_optimization",
         "krom_control_campaign", "data_overview"};
     std::vector<std::string> result;
     for (const auto& view : preferred)
@@ -67,6 +72,9 @@ std::vector<std::string> panelSourceViews(const CatalogItem& item) {
         result.push_back("fourier");
     if (trajectoryLike && !contains(result, "control_fourier"))
         result.push_back("control_fourier");
+    // Estimator records (closed-loop KLQE) likewise, for catalogs indexed before the route.
+    if (trajectoryLike && !contains(result, "estimator"))
+        result.push_back("estimator");
     if (!contains(item.views, "time") && contains(item.views, "control"))
         result.insert(result.begin(), "control");
     return result;

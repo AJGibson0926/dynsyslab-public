@@ -27,6 +27,17 @@ RMatrix matrix(const std::vector<double>& values,std::size_t rows,
     return {values,rows,columns};
 }
 
+std::size_t optimalHardThresholdRank(std::vector<double> singular,std::size_t rows,std::size_t columns) {
+    if(singular.empty())return 0;
+    const double beta=double(std::min(rows,columns))/double(std::max(rows,columns));
+    const double omega=0.56*beta*beta*beta-0.95*beta*beta+1.82*beta+1.43;
+    auto sorted=singular;const auto mid=sorted.begin()+std::ptrdiff_t(sorted.size()/2);
+    std::nth_element(sorted.begin(),mid,sorted.end());
+    const double threshold=omega*(*mid);
+    std::size_t k=0;while(k<singular.size()&&singular[k]>threshold)++k;
+    return std::max<std::size_t>(k,1);
+}
+
 std::size_t retainedRank(const std::vector<double>& singular,std::size_t rows,
                          std::size_t columns,std::size_t requested,
                          double tolerance) {
@@ -91,9 +102,11 @@ DMDResult dmdPair(const RMatrix& x,const RMatrix& y,double deltaTime,
     const auto svd=numerics::singularValueDecomposition(
         x.values,x.rows,x.columns);
     if(singularValues)*singularValues=svd.singularValues;
-    const std::size_t rank=retainedRank(
+    std::size_t rank=retainedRank(
         svd.singularValues,x.rows,x.columns,options.rank,
         options.singularValueTolerance);
+    if(options.optimalHardThreshold)
+        rank=std::min(rank,optimalHardThresholdRank(svd.singularValues,x.rows,x.columns));
     if(!rank)throw std::runtime_error("DMD snapshot matrix has numerical rank zero");
     RMatrix left(x.rows,rank),rightTranspose(rank,x.columns);
     for(std::size_t row=0;row<x.rows;++row)

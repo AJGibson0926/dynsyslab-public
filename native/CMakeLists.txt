@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(dynsyslab_native VERSION 0.5.2 LANGUAGES CXX)
+project(dynsyslab_native VERSION 0.6.0 LANGUAGES CXX)
 
 include(CTest)
 option(DYNSYSLAB_BUILD_PYTHON "Build optional Python bindings" OFF)
@@ -55,7 +55,7 @@ endfunction()
 add_library(dynsyslab_foundation ${DYNSYSLAB_LIBRARY_KIND}
   src/Models.cpp src/Npy.cpp src/Json.cpp src/Text.cpp src/FileDigest.cpp
   src/LegacyCsv.cpp src/LegacyCsvImport.cpp
-  src/TimeSeries.cpp src/Fourier.cpp src/DiscreteFourier.cpp src/TimeSeriesArchive.cpp
+  src/TimeSeries.cpp src/Fourier.cpp src/DiscreteFourier.cpp src/NumericalDifferentiation.cpp src/TimeSeriesArchive.cpp
   src/Extension.cpp src/ODE.cpp src/Integrator.cpp src/Hierarchy.cpp
   src/AnalyticExpression.cpp src/ObservableExpressions.cpp
   src/SpecialFunctions.cpp src/Lauricella.cpp src/QuarticOrbit.cpp src/AnalyticSolution.cpp
@@ -63,7 +63,7 @@ add_library(dynsyslab_foundation ${DYNSYSLAB_LIBRARY_KIND}
   src/NeuralKnowledge.cpp src/CoupledKnowledge.cpp src/BubbleKnowledge.cpp
   src/AnalyticHenonHeiles.cpp src/AnalyticOscillators.cpp src/AnalyticRPE.cpp src/AnalyticOtherSystems.cpp
   src/SystemsHarmonic.cpp src/ResearchPapers.cpp src/ResearchPapersExtra.cpp src/DynamicalKnowledge.cpp src/RpeDynamicalKnowledge.cpp src/DoublePendulumKnowledge.cpp
-  src/Hankel.cpp src/ObservableDerivative.cpp src/Observable.cpp src/System.cpp src/SystemSupport.cpp src/SystemLabels.cpp src/Targets.cpp
+  src/Hankel.cpp src/PathSimplification.cpp src/ObservableDerivative.cpp src/Observable.cpp src/System.cpp src/SystemSupport.cpp src/SystemLabels.cpp src/Targets.cpp
   src/TrainingDomain.cpp
   src/SystemsBasic.cpp src/SystemsMechanical.cpp src/SystemsBiological.cpp
   src/SystemsBubble.cpp src/SystemsRPE.cpp src/SystemsMarmottant.cpp src/AcousticReceiver.cpp
@@ -146,7 +146,13 @@ if(DYNSYSLAB_ENABLE_LINALG)
     src/EigenNumericsEigen.cpp src/EigenNumericsControl.cpp
     src/EigenNumericsControlFinite.cpp
     src/EigenNumericsMatrixFunctions.cpp src/EigenNumericsDiscreteGramian.cpp src/EigenNumericsHermitian.cpp
-    src/EigenNumericsProductReal.cpp src/EigenNumericsProductComplex.cpp)
+    src/EigenNumericsProductReal.cpp src/EigenNumericsProductComplex.cpp
+    # Classical linear-systems kernels (core/StateSpace.hpp, BalancedTruncation.hpp,
+    # SystemStructure.hpp, ControlDesign.hpp, SystemNorms.hpp): docs/architecture/LINEAR_SYSTEMS_TOOLKIT.md
+    src/EigenNumericsStateSpace.cpp src/EigenNumericsStateSpaceSimulation.cpp
+    src/EigenNumericsBalancedTruncation.cpp src/EigenNumericsSystemStructure.cpp
+    src/EigenNumericsControlDesign.cpp src/EigenNumericsSystemNorms.cpp src/LoopMargins.cpp
+    src/TransferFunction.cpp)
   dynsyslab_eigen_module(dynsyslab_numerics)
 
   add_library(dynsyslab_phase_space ${DYNSYSLAB_LIBRARY_KIND}
@@ -206,7 +212,7 @@ if(DYNSYSLAB_ENABLE_LINALG)
     PRIVATE dynsyslab_numerics)
 
   add_library(dynsyslab_observation ${DYNSYSLAB_LIBRARY_KIND}
-    src/HistoryProjection.cpp src/FrozenHistoryTransform.cpp src/CoordinateTransform.cpp
+    src/HankelOperator.cpp src/PathCrossings.cpp src/HistoryProjection.cpp src/FrozenHistoryTransform.cpp src/CoordinateTransform.cpp
     src/CoordinateClosure.cpp src/jet/GlobalJetClosure.cpp src/jet/JetDecision.cpp)
   dynsyslab_eigen_module(dynsyslab_observation)
   target_link_libraries(dynsyslab_observation PUBLIC dynsyslab_foundation
@@ -252,18 +258,21 @@ if(DYNSYSLAB_ENABLE_LINALG)
     dynsyslab_koopman dynsyslab_spectral)
 
   add_library(dynsyslab_linear_analysis ${DYNSYSLAB_LIBRARY_KIND}
-    src/Observability.cpp src/ModalObservability.cpp src/Pbh.cpp src/Controllability.cpp src/KoopmanLinearAnalysis.cpp)
+    src/Observability.cpp src/ModalObservability.cpp src/Pbh.cpp src/Controllability.cpp src/KoopmanLinearAnalysis.cpp
+    src/SystemStructure.cpp src/KoopmanStateSpace.cpp src/EmpiricalObservability.cpp
+    src/EigenfunctionObservability.cpp)
   dynsyslab_module(dynsyslab_linear_analysis)
-  target_link_libraries(dynsyslab_linear_analysis PUBLIC dynsyslab_koopman PRIVATE dynsyslab_numerics)
+  # The toolkit's dense kernels live in dynsyslab_numerics; their core headers are
+  # part of this module's API, so numerics is a public dependency.
+  target_link_libraries(dynsyslab_linear_analysis PUBLIC dynsyslab_koopman dynsyslab_numerics)
 
-  add_library(dynsyslab_estimation ${DYNSYSLAB_LIBRARY_KIND}
-    src/Estimation.cpp src/EstimationRuntime.cpp src/EstimationSelection.cpp src/EstimationRealization.cpp)
-  dynsyslab_module(dynsyslab_estimation)
-  target_link_libraries(dynsyslab_estimation PUBLIC
-    dynsyslab_koopman dynsyslab_linear_analysis PRIVATE dynsyslab_numerics dynsyslab_reconstruction)
-
+  # Feedback design and runtime: estimation (KLQE) and control (KLQR, classical)
+  # in one module. Gains come from ControlDesign in dynsyslab_linear_analysis;
+  # the estimator/controller split lives in the workflow job format and factories.
   add_library(dynsyslab_control ${DYNSYSLAB_LIBRARY_KIND}
-    src/LQR.cpp src/ClassicalControl.cpp)
+    src/Estimation.cpp src/EstimationRuntime.cpp src/EstimationSelection.cpp src/EstimationRealization.cpp
+    src/ReducedOrderEstimation.cpp
+    src/LQR.cpp src/ClassicalControl.cpp src/ReducedOrderControl.cpp)
   dynsyslab_module(dynsyslab_control)
   target_link_libraries(dynsyslab_control PUBLIC
     dynsyslab_koopman dynsyslab_linear_analysis PRIVATE dynsyslab_numerics)
@@ -310,9 +319,6 @@ endif()
 if(TARGET dynsyslab_control)
   target_link_libraries(dynsyslab_core INTERFACE dynsyslab_control)
 endif()
-if(TARGET dynsyslab_estimation)
-  target_link_libraries(dynsyslab_core INTERFACE dynsyslab_estimation)
-endif()
 
 add_library(dynsyslab_c_api SHARED src/CApi.cpp)
 target_include_directories(dynsyslab_c_api PUBLIC include)
@@ -345,6 +351,10 @@ if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
     target_link_libraries(dynsyslab_${test}_tests PRIVATE dynsyslab_core)
     add_test(NAME dynsyslab_${test}_tests COMMAND dynsyslab_${test}_tests)
   endforeach()
+  add_executable(dynsyslab_numerical_differentiation_tests tests/numerical_differentiation_tests.cpp)
+  target_link_libraries(dynsyslab_numerical_differentiation_tests PRIVATE dynsyslab_foundation)
+  add_test(NAME dynsyslab_numerical_differentiation_tests COMMAND dynsyslab_numerical_differentiation_tests)
+  set_tests_properties(dynsyslab_numerical_differentiation_tests PROPERTIES LABELS "native;differentiation;noise")
   add_executable(dynsyslab_time_series_tests tests/time_series_tests.cpp)
   target_link_libraries(dynsyslab_time_series_tests PRIVATE dynsyslab_foundation)
   add_test(NAME dynsyslab_time_series_tests COMMAND dynsyslab_time_series_tests)
@@ -388,7 +398,7 @@ if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
     endif()
     foreach(test phase_space phase_surface phase_forcing phase_bifurcation observable_expression echo_jet coordinate_closure global_jet spectral sindy reconstruction koopman_control scattered_eigenfunction
                  boundary_eigenfunction eigenvalue_optimization classical_control
-                 estimation estimation_runtime linear_analysis decomposition history_koopman history_input_regression dmd_control edmd_control polynomial_construction eigenfunction_contract scientific_compatibility coordinate_runtime)
+                 estimation estimation_runtime linear_analysis linear_systems loop_robustness empirical_observability reduced_order decomposition history_koopman history_input_regression dmd_control edmd_control polynomial_construction eigenfunction_contract scientific_compatibility coordinate_runtime)
       add_executable(dynsyslab_${test}_tests tests/${test}_tests.cpp)
       target_link_libraries(dynsyslab_${test}_tests PRIVATE dynsyslab_core)
       add_test(NAME dynsyslab_${test}_tests COMMAND dynsyslab_${test}_tests)
@@ -466,9 +476,6 @@ if(TARGET dynsyslab_pca)
 endif()
 if(TARGET dynsyslab_control)
   list(APPEND _dsl_modules dynsyslab_control)
-endif()
-if(TARGET dynsyslab_estimation)
-  list(APPEND _dsl_modules dynsyslab_estimation)
 endif()
 if(TARGET dynsyslab_control_maps)
   list(APPEND _dsl_modules dynsyslab_control_maps)

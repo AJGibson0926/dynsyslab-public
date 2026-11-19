@@ -46,7 +46,7 @@ std::filesystem::path Backend::resolveSource(const CatalogItem& item) const {
 
 std::filesystem::path Backend::payloadPath(const CatalogItem& item,
                                             const std::string& view) const {
-    std::string safe = "presentation-v9-" + item.id + "-" + view;
+    std::string safe = "presentation-v10-" + item.id + "-" + view;
     for (char& value : safe) if (!std::isalnum(static_cast<unsigned char>(value))) value = '-';
     return config_.cache / wide(safe + ".json");
 }
@@ -73,6 +73,19 @@ Payload Backend::loadPayload(const CatalogItem& item, const std::string& view) c
     }
     if (source.extension() == L".npz") return finish(buildNativePayload(source, view));
     throw std::runtime_error("This file type does not provide a native plot payload");
+}
+
+Payload Backend::loadPayload(const CatalogItem& item, const std::string& view,
+                             const TimeWindow& window) const {
+    if (!window.active()) return loadPayload(item, view);
+    const std::filesystem::path source = resolveSource(item);
+    if (source.extension() != L".npz" || item.kind == "batch" || item.kind == "system_run"
+        || item.kind == "cluster" || item.kind == "krom")
+        throw std::runtime_error("A time window applies to a single trajectory archive");
+    const auto archive = windowRecord(dynsyslab::core::readNpz(source), window);
+    dynsyslab::core::json::Value metadata;
+    if (!archive.metadataJson().empty()) metadata = dynsyslab::core::json::parse(archive.metadataJson());
+    return applyPhaseSpace(buildNativePayload(source, view, archive, metadata), {item});
 }
 
 std::vector<PanelChoice> Backend::loadPanelChoices(const CatalogItem& item) const {

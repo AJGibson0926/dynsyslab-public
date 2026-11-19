@@ -2,6 +2,7 @@
 #include "dynsyslab_viewer/MathText.hpp"
 #include "dynsyslab_viewer/PlotPresentation.hpp"
 #include "dynsyslab_viewer/PlotScale.hpp"
+#include "dynsyslab_viewer/Plot3D.hpp"
 #include "PlotSeries.hpp"
 #include <algorithm>
 #include <cmath>
@@ -34,8 +35,19 @@ Value figureValue(const Figure& figure, bool samples) {
         {"dashboard_page",static_cast<double>(figure.dashboardPage)},
         {"grid_span",static_cast<double>(figure.gridSpan)},{"row_span",static_cast<double>(figure.rowSpan)}};
     const auto scale = resolveValueScale(figure);
+    if (figure.cameraAzimuthDegrees || figure.cameraElevationDegrees)
+        result["camera"] = Value::Object{
+            {"azimuth_degrees",figure.cameraAzimuthDegrees.value_or(42.0)},
+            {"elevation_degrees",figure.cameraElevationDegrees.value_or(24.0)}};
+    if (figure.boxAxes3D) result["box_axes"] = true;
     result["value_scale"] = figure.valueScale;
     result["observable_identity"] = figure.observableIdentity;
+    if (figure.kind == "three_d" && figure.boxAxes3D) {
+        const auto heights = plot3DHeightScale(figure);
+        result["effective_value_scale"] = Value::Object{{"kind",heights.logarithmic ? "log" : "linear"},
+            {"target","z"},{"floor",heights.logarithmic ? std::pow(10.0,heights.floorExponent) : 0.0},
+            {"reason",heights.logarithmic ? "Logarithmic stem heights" : "Linear stem heights"}};
+    } else
     result["effective_value_scale"] = Value::Object{{"kind",scale.name()},
         {"target",supportsValueScale(figure) ? scalesColorValues(figure) ? "color" : "y" : "none"},
         {"linear_threshold",scale.linearThreshold},{"reason",scale.reason}};

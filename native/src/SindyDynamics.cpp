@@ -9,38 +9,40 @@
 
 namespace dynsyslab::core {
 namespace {
-void aligned(const TimeSeries& a,const TimeSeries& b) {
-    if(a.sampleCount()!=b.sampleCount()||a.componentCount()!=b.componentCount())
+void aligned(const TimeSeries& a,const TimeSeries& b,bool sameWidth=true) {
+    if(a.sampleCount()!=b.sampleCount()||(sameWidth&&a.componentCount()!=b.componentCount()))
         throw std::invalid_argument("SINDy coordinates and rates must align");
     for(std::size_t k=0;k<a.sampleCount();++k)
         if(a.time(k)!=b.time(k))throw std::invalid_argument("SINDy coordinate and rate clocks differ");
 }
 void finite(double x) {if(!std::isfinite(x))throw std::invalid_argument("SINDy requires finite data");}
 }
-SindyDynamicsModel::SindyDynamicsModel(Observable library,std::vector<double> coefficients)
-    :library_(std::move(library)),coefficients_(std::move(coefficients)) {
-    if(coefficients_.size()!=library_.stateDimension()*library_.outputDimension())
+SindyDynamicsModel::SindyDynamicsModel(Observable library,std::vector<double> coefficients,std::size_t outputs)
+    :library_(std::move(library)),coefficients_(std::move(coefficients)),
+     outputs_(outputs?outputs:library_.stateDimension()) {
+    if(coefficients_.size()!=outputs_*library_.outputDimension())
         throw std::invalid_argument("SINDy coefficient shape mismatch");
     for(double v:coefficients_)finite(v);
 }
 std::vector<double> SindyDynamicsModel::evaluate(const double* q) const {
     const auto theta=library_.evaluateReal(q);
-    std::vector<double> result(dimension(),0);
-    for(std::size_t f=0;f<theta.size();++f)for(std::size_t j=0;j<dimension();++j)
-        result[j]+=theta[f]*coefficients_[f*dimension()+j];
+    std::vector<double> result(outputs_,0);
+    for(std::size_t f=0;f<theta.size();++f)for(std::size_t j=0;j<outputs_;++j)
+        result[j]+=theta[f]*coefficients_[f*outputs_+j];
     return result;
 }
 TimeSeries SindyDynamicsModel::evaluate(const TimeSeries& q) const {
     if(q.componentCount()!=dimension())throw std::invalid_argument("SINDy evaluation dimension mismatch");
-    std::vector<double> result(q.sampleCount()*dimension());
+    std::vector<double> result(q.sampleCount()*outputs_);
     for(std::size_t k=0;k<q.sampleCount();++k) {
         const auto rate=evaluate(q.valuesData()+k*dimension());
-        std::copy(rate.begin(),rate.end(),result.begin()+k*dimension());
+        std::copy(rate.begin(),rate.end(),result.begin()+k*outputs_);
     }
-    return TimeSeries({q.timeData(),q.timeData()+q.sampleCount()},std::move(result),dimension());
+    return TimeSeries({q.timeData(),q.timeData()+q.sampleCount()},std::move(result),outputs_);
 }
 Observable SindyDynamicsModel::vectorField() const {
     if(library_.expressions().empty())throw std::logic_error("Library has no portable expressions");
+    if(!isVectorField())throw std::logic_error("A cross-coordinate rate law is not a closed vector field");
     std::vector<AnalyticExpression> rhs;
     for(std::size_t j=0;j<dimension();++j) {
         auto value=AnalyticExpression::constant(0,dimension());
@@ -53,8 +55,10 @@ Observable SindyDynamicsModel::vectorField() const {
 }
 json::Value SindyDynamicsModel::definition() const {
     json::Value::Array c;for(auto v:coefficients_)c.emplace_back(v);
-    return json::Value::Object{{"schema","dynsyslab.sindy-dynamics/v1"},
+    json::Value::Object out{{"schema","dynsyslab.sindy-dynamics/v1"},
         {"library",library_.expressionDefinition()},{"coefficients",c}};
+    if(!isVectorField())out["outputs"]=double(outputs_);
+    return out;
 }
 SindyDynamicsModel SindyDynamicsModel::fromDefinition(const json::Value& v) {
     if(v.at("schema").string()!="dynsyslab.sindy-dynamics/v1")
@@ -63,7 +67,7 @@ SindyDynamicsModel SindyDynamicsModel::fromDefinition(const json::Value& v) {
         if(!std::holds_alternative<double>(n.storage()))throw std::invalid_argument("SINDy coefficients must be numbers");
         c.push_back(n.number());
     }
-    return {Observable::fromExpressionDefinition(v.at("library")),c};
+    return {Observable::fromExpressionDefinition(v.at("library")),c,std::size_t(v.at("outputs").number(0))};
 }
 Observable polynomialDynamicsLibrary(std::size_t d,std::size_t degree,
     const std::vector<double>& center,const std::vector<double>& scale) {
@@ -79,14 +83,15 @@ Observable polynomialDynamicsLibrary(std::size_t d,std::size_t degree,
 }
 SindyDynamicsModel fitSindyDynamics(const TimeSeries& q,const TimeSeries& rates,
     const Observable& library,const SindyDynamicsOptions& options,SindyDynamicsFitDiagnostics* diagnostics) {
-    aligned(q,rates);const auto n=q.sampleCount(),d=q.componentCount(),p=library.outputDimension();
-    if(library.stateDimension()!=d||n<p||options.threshold<0||!std::isfinite(options.threshold)
+    aligned(q,rates,false);const auto n=q.sampleCount(),p=library.outputDimension();
+    const auto inputs=q.componentCount(),d=rates.componentCount();  // d: fitted outputs
+    if(library.stateDimension()!=inputs||!d||n<p||options.threshold<0||!std::isfinite(options.threshold)
         ||options.singularValueTolerance<0||!std::isfinite(options.singularValueTolerance)||!options.maximumIterations)
         throw std::invalid_argument("Invalid SINDy dimensions, sample count or options");
     std::vector<double> theta(n*p),scales(p,0),outputs(d,0),coefficients(p*d,0);
     for(std::size_t k=0;k<n;++k) {
-        for(std::size_t j=0;j<d;++j)finite(q.value(k,j));
-        const auto row=library.evaluateReal(q.valuesData()+k*d);
+        for(std::size_t j=0;j<inputs;++j)finite(q.value(k,j));
+        const auto row=library.evaluateReal(q.valuesData()+k*inputs);
         for(std::size_t f=0;f<p;++f){finite(row[f]);theta[k*p+f]=row[f];scales[f]+=row[f]*row[f]/n;}
         for(std::size_t j=0;j<d;++j){finite(rates.value(k,j));outputs[j]+=rates.value(k,j)*rates.value(k,j)/n;}
     }
@@ -124,7 +129,7 @@ SindyDynamicsModel fitSindyDynamics(const TimeSeries& q,const TimeSeries& rates,
         for(std::size_t f=0;f<support.size();++f)
             coefficients[support[f]*d+j]=solution[f]*outputs[j]/scales[support[f]];
     }
-    return {library,std::move(coefficients)};
+    return {library,std::move(coefficients),d};
 }
 json::Value SindyDynamicsFitDiagnostics::toJson() const {
     json::Value::Array outputs;

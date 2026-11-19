@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.0 — 2026-11-19
+
+- Classical linear-systems toolkit: gramians, balanced truncation, structure, LQG,
+  transfer functions and Bode data, loop margins (classical, disk, sensitivity) for LQR,
+  Kalman, LQG and loop-transfer-recovery loops; Viewer Bode, Nyquist, loop Bode and
+  sensitivity views.
+- K-ROM observability measures: empirical (nonlinear) observability gramians along
+  trajectories, readout observability, obsv in discrete modal coordinates, and
+  per-eigenfunction observability with Cramér–Rao and KLQE bounds.
+- Estimation and control: Estimator module with echo-only KLQE, `estimated_state`
+  feedback for any controller, shadow KLQE → KLQR runs (`applied_controller`), PID and
+  LQI components with KLQR adapters, KLQE process covariance shaped from K-ROM residuals
+  or the input direction, balanced-truncation KLQE/KLQR.
+- Modelling: `mode_selection` for eigenfunction subsets, smooth polynomial fits of
+  scattered eigenfunctions, offline control-target lifting, noise-robust numerical
+  differentiation, deterministic pipeline jobs with plug-and-play inputs.
+- Solver: `on_failure: "truncate"` archives the computed part of a failed run.
+- Viewer and its CLI: archive figures without scripts, comparisons, time windows,
+  spectra, stem plots (MATLAB-style), integer index ticks, 3-D stem plots, mode weights.
+- Agent front end: a first-run welcome and overview (`docs/AGENT_WELCOME.md`) for
+  Claude Code, Codex and other agents; release now also attaches the Python client wheel.
+
 ## 0.5.2 — 2026-11-04
 
 - Restored Python 3.10 compatibility in the optional reference HTML renderer.

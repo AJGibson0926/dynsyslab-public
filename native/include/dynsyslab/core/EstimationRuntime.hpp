@@ -14,6 +14,8 @@ struct KoopmanEstimate {
 };
 
 // Continuous-gain KLQE driven by sampled, held measurements and known inputs.
+// controlRepresentation names the KROM input map used for prediction, or "none"
+// for an estimator that does not model inputs (unforced estimation).
 // No physical state, measurement function, controller, or solver is required.
 class KoopmanLQEObserver {
 public:
@@ -29,11 +31,16 @@ public:
         const std::vector<double>& previousAppliedInput);
     const KoopmanModel& model() const noexcept { return *model_; }
     const KoopmanEstimate& estimate() const noexcept { return estimate_; }
+    // Direct input feedthrough of the measurement, y = y0 + C_y z + D u (p x m, row
+    // major). With scaleOutput >= 0, D is multiplied by the current decoded output
+    // component x_hat[scaleOutput] (e.g. the RPE echo, whose input term is -p0 R0 r u).
+    void setMeasurementFeedthrough(std::vector<double> feedthrough, int scaleOutput = -1);
 
 private:
     std::shared_ptr<const KoopmanModel> model_; // immutable deployment snapshot
     KoopmanLQEDesign design_;
-    std::vector<double> offsetY_, offsetX_, previousMeasurement_;
+    std::vector<double> offsetY_, offsetX_, previousMeasurement_, feedthrough_;
+    int feedthroughScale_{-1};
     std::vector<double> baseGenerator_, offsetInput_, inputOperators_;
     std::vector<double> heldResponse_, heldTransition_, heldInput_;
     double heldDt_{-1};

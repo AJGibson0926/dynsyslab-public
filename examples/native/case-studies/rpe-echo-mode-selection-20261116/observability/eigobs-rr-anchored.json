@@ -1,0 +1,25 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "eigenfunction observability / rr-anchored",
+  "description": "How well each eigenfunction can be determined from the echo over the window (finite-horizon modal gramian).",
+  "sources": [
+    "archives/derived/koopman-krom-extract/experiment-rr-ic0p37-recentred-anchored-krom.npz"
+  ],
+  "methods": [
+    {
+      "name": "linear_analysis",
+      "enabled": true,
+      "settings": {
+        "measurement": "far_field_acoustic_echo",
+        "analysis_method": "eigenfunction-observability",
+        "horizon": 1.0,
+        "noise_intensity": 0.0001,
+        "process_covariance": 10000.0
+      }
+    }
+  ],
+  "archive": {
+    "enabled": true
+  }
+}

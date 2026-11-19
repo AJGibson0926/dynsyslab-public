@@ -1,0 +1,29 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "echo observability / strong orbit",
+  "description": "Local observability of (r, r-dot) through the far-field echo along the plant trajectory of the shadow run (plant on the ideal true-state KLQR drive): empirical gramian over a one-period window, scaled by the orbit RMS, with Cramer-Rao bounds for the KLQE measurement noise.",
+  "sources": [
+    "archives/solutions/rpe/shadow-strong-ee-orbit__20261119T001246Z.npz"
+  ],
+  "methods": [
+    {
+      "name": "empirical_observability",
+      "enabled": true,
+      "settings": {
+        "observable": "far_field_acoustic_echo",
+        "start": 40,
+        "stop": 95,
+        "points": 56,
+        "horizon": 1.0,
+        "samples": 201,
+        "substeps": 20,
+        "relative_perturbation": 1e-05,
+        "noise_intensity": 0.0001
+      }
+    }
+  ],
+  "archive": {
+    "enabled": true
+  }
+}

@@ -3,6 +3,7 @@
 #include <dynsyslab/workflow/Run.hpp>
 #include <dynsyslab/workflow/Plan.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
+#include "../src/KlqeProcessCovariance.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -99,6 +100,23 @@ int main(int argc,char** argv) {
             std::cout<<"Final state norm="<<finalState<<", estimation error="<<finalError<<'\n';
             check(finalState<1e-4&&finalError<1e-5,"Measured KLQR did not stabilize the exact unstable fixture");
         }
+        {   // KLQE process covariance shaped from the exact fixture's own prediction residual
+            c::json::Value::Array records;
+            for(const auto& path:result.archives)records.push_back(path.generic_u8string());
+            auto spec=c::json::parse(R"({"control_representation":"fit","process_covariance":{"add":1e-3}})");
+            spec.at("process_covariance").at("from_records")=records;
+            const auto shaped=w::klqeProcessCovariance(spec,model);
+            check(shaped.matrix.size()==4&&shaped.matrix[1]==shaped.matrix[2]&&shaped.matrix[0]>0,"residual W symmetric positive");
+            check(shaped.evidence.at("relative_residual").number()<0.05,"exact fixture predicts its own records");
+            spec.at("process_covariance_input_weight")=10.0;
+            const auto withInput=w::klqeProcessCovariance(spec,model);
+            for(int k=0;k<4;++k)check(std::abs(withInput.matrix[k]-shaped.matrix[k]-10.0)<1e-9,"input weight adds q2 B B^T with B = (1, 1)");
+            auto plain=c::json::parse(R"({"control_representation":"none","process_covariance":2})");
+            check(w::klqeProcessCovariance(plain,model).matrix==std::vector<double>({2,0,0,2})&&
+                  w::klqeProcessCovariance(plain,model).evidence.isNull(),"scalar W unchanged");
+            plain.at("process_covariance_input_weight")=1.0;
+            rejects([&]{(void)w::klqeProcessCovariance(plain,model);});
+        }
         auto system=c::createSystem(config);
         auto unsafe=request;
         unsafe.at("solver").at("control_evaluation")="continuous_rhs";
@@ -123,6 +141,54 @@ int main(int argc,char** argv) {
         check(gated==0&&std::abs(saturated)==.01,"Actuator/gating test did not exercise clipping");
         check(trace.at("previous_applied_input").doubles()[2]==saturated,
             "Clipped applied input was replaced by requested command");
+        // Separation (feedback = "estimated_state"): a state-feedback PID acts on the KLQE's x_hat
+        // (job-level estimator, its own KROM). The first command uses x_hat = 0, not the true 0.1.
+        auto separated=request;separated.at("label")="estimated-state-pid";
+        auto estimator=separated.at("controller").at("settings").at("estimator");
+        estimator.at("krom")=modelPath.generic_u8string();
+        estimator.at("control_representation")="fit";
+        separated.at("estimator")=estimator;
+        separated.at("controller")=c::json::parse(R"({"kind":"pid","settings":{"Kp":[6,3],
+            "feedback":"estimated_state","control_limit":0.8},"target":{"kind":"constant","state":[0,0]}})");
+        (void)w::planJob(separated);
+        const auto pidResult=w::executeJob(separated,root);
+        for(const auto& path:pidResult.archives) {
+            const auto archive=c::readNpz(path);
+            const auto truth=archive.at("values").doubles();
+            const auto control=archive.at("control_values").doubles();
+            check(control[0]==0,"estimated_state controller read the true state at the first sample");
+            check(std::hypot(truth[truth.size()-2],truth[truth.size()-1])<1e-4,
+                "PID on the estimated state did not stabilize the unstable fixture");
+            check(archive.metadataJson().find("klqe-estimated-state/v1")!=std::string::npos,
+                "estimated_state architecture not recorded");
+        }
+        auto missing=separated;missing.at("estimator").at("output")="";
+        rejects([&]{(void)w::planJob(missing);});
+        // Shadow mode (applied_controller): the plant receives a prescribed drive; the KLQE predicts
+        // with that drive and the KLQR command is archived only.
+        auto shadow=request;shadow.at("label")="shadow-klqr";shadow.at("time").at("stop")=.5;
+        shadow.at("controller").at("settings").at("applied_controller")=c::json::parse(R"({"kind":"waveform",
+            "settings":{"frequencies":[1],"model_amplitudes":[0.2],"phases_rad":[0.3]}})");
+        (void)w::planJob(shadow);
+        for(const auto& path:w::executeJob(shadow,root).archives) {
+            const auto archive=c::readNpz(path);
+            const auto ticks=archive.at("estimator_time").doubles();
+            const auto applied=archive.at("applied_input").doubles();
+            const auto previous=archive.at("previous_applied_input").doubles();
+            const auto command=archive.at("commanded_input").doubles();
+            bool differs=false;
+            for(std::size_t k=1;k<ticks.size();++k) {
+                check(std::abs(applied[k]-0.2*std::sin(2*3.141592653589793*ticks[k]+0.3))<1e-12,
+                      "Shadow run did not apply the reference drive");
+                check(previous[k]==applied[k-1],"Shadow estimator did not see the applied drive");
+                differs=differs||std::abs(command[k]-applied[k])>1e-6;
+            }
+            check(differs,"Shadow KLQR command was not archived separately");
+            check(archive.metadataJson().find("klqe-klqr-shadow-of-applied-controller/v1")!=std::string::npos,
+                  "Shadow architecture not recorded");
+        }
+        auto orphan=shadow;orphan.at("controller").at("kind")="lqr";
+        rejects([&]{(void)w::planJob(orphan);});
         if(argc==1)std::filesystem::remove_all(root);
         std::cout<<"Koopman observer/controller/solver composition tests passed\n";return 0;
     } catch(const std::exception& e) {

@@ -1,10 +1,12 @@
 #include <dynsyslab/core/SINDy.hpp>
 #include "PolynomialEvaluation.hpp"
+#include <dynsyslab/numerics/MatrixFunctions.hpp>
 #include <dynsyslab/numerics/Nullspace.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <optional>
 #include <stdexcept>
 
 namespace dynsyslab::core {
@@ -132,6 +134,89 @@ std::vector<std::complex<double>> sparseNullVector(
     return result;
 }
 
+// Real feature Gram blocks, formed once per fit: A = ThetaᵀTheta, B = GammaᵀTheta,
+// C = GammaᵀGamma (all features x features, row-major).
+struct GramBlocks { std::vector<double> A, B, C; std::size_t n{}; };
+
+GramBlocks gramBlocks(const std::vector<double>& theta, const std::vector<double>& gamma,
+                      std::size_t rows, std::size_t n) {
+    GramBlocks g{std::vector<double>(n*n), std::vector<double>(n*n), std::vector<double>(n*n), n};
+    for (std::size_t r = 0; r < rows; ++r) {
+        const double* t = theta.data() + r*n; const double* d = gamma.data() + r*n;
+        for (std::size_t i = 0; i < n; ++i)
+            for (std::size_t j = 0; j < n; ++j) {
+                g.A[i*n+j] += t[i]*t[j]; g.B[i*n+j] += d[i]*t[j]; g.C[i*n+j] += d[i]*d[j];
+            }
+    }
+    return g;
+}
+
+// Same thresholded null-vector iteration as sparseNullVector, applied to
+// G(lambda) = (Gamma - lambda Theta)^H (Gamma - lambda Theta)
+//           = C - lambda B - conj(lambda) Bᵀ + |lambda|^2 A.
+// Returns nullopt when the active Gram system is too ill-conditioned (its
+// eigenvalue ratio below ~eps, i.e. singular-value ratio below ~sqrt(eps)).
+std::optional<std::vector<std::complex<double>>> sparseNullVectorGram(
+    const GramBlocks& g, std::complex<double> lambda, double threshold, std::size_t maximumIterations) {
+    const std::size_t n = g.n;
+    std::vector<std::complex<double>> G(n*n);
+    const double magnitude = std::norm(lambda);
+    for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t j = 0; j < n; ++j)
+            G[i*n+j] = g.C[i*n+j] - lambda*g.B[i*n+j] - std::conj(lambda)*g.B[j*n+i] + magnitude*g.A[i*n+j];
+    std::vector<double> scales(n);
+    for (std::size_t c = 0; c < n; ++c) {
+        scales[c] = std::sqrt(std::max(0.0, G[c*n+c].real()));
+        if (scales[c] <= 1e-15) scales[c] = 1.0;
+    }
+    std::vector<std::size_t> active(n); std::iota(active.begin(), active.end(), std::size_t{0});
+    bool trusted = true;
+    auto solve = [&]() {
+        const std::size_t k = active.size();
+        std::vector<std::complex<double>> sub(k*k);
+        for (std::size_t a = 0; a < k; ++a)
+            for (std::size_t b = 0; b < k; ++b)
+                sub[a*k+b] = G[active[a]*n+active[b]] / (scales[active[a]]*scales[active[b]]);
+        const auto eig = numerics::hermitianEigensystem(sub, k);
+        // SINDy needs a small generator residual, not a unique eigenvector. If
+        // the smallest singular value is well separated the Gram eigenvector is
+        // accurate; if it is tiny, the smallest Gram eigenpairs may cluster, but
+        // every vector in the cluster attains a residual at the sqrt(eps) floor,
+        // far below the sparsity threshold. Only non-finite output falls back.
+        const double largest = eig.eigenvalues.back(), smallest = eig.eigenvalues.front();
+        if (!std::isfinite(smallest) || !std::isfinite(largest)) trusted = false;
+        std::vector<std::complex<double>> v(k);
+        for (std::size_t a = 0; a < k; ++a) v[a] = eig.eigenvectors[a*k];  // first (smallest) column
+        return v;
+    };
+    std::vector<std::complex<double>> vector;
+    for (std::size_t iteration = 0; iteration < maximumIterations; ++iteration) {
+        vector = solve(); double largest = 0.0;
+        for (const auto value : vector) largest = std::max(largest, std::abs(value));
+        const double cutoff = threshold * largest;
+        std::vector<std::size_t> retained;
+        for (std::size_t index = 0; index < active.size(); ++index)
+            if (std::abs(vector[index]) >= cutoff) retained.push_back(active[index]);
+        if (retained.empty()) {
+            const auto top = static_cast<std::size_t>(std::distance(vector.begin(),
+                std::max_element(vector.begin(), vector.end(),
+                    [](const auto l, const auto r) { return std::abs(l) < std::abs(r); })));
+            retained.push_back(active[top]);
+        }
+        if (retained == active) break; active = std::move(retained);
+    }
+    vector = solve();
+    if (!trusted) return std::nullopt;
+    std::vector<std::complex<double>> result(n);
+    for (std::size_t index = 0; index < active.size(); ++index)
+        result[active[index]] = vector[index] / scales[active[index]];
+    double norm = 0.0; for (const auto value : result) norm += std::norm(value);
+    norm = std::sqrt(norm);
+    if (!(norm > 0.0)) return std::nullopt;
+    for (auto& value : result) value /= norm;
+    return result;
+}
+
 bool conjugatePartner(std::complex<double> left, std::complex<double> right) {
     return std::abs(right - std::conj(left)) <= 1e-9 + 1e-7 * std::abs(left);
 }
@@ -188,13 +273,21 @@ KoopmanSINDyResult fitKoopmanEigenfunctions(
     result.coefficients.resize(eigenvalues.size() * result.featureCount);
     result.residualRms.resize(eigenvalues.size()); result.residualMaximum.resize(eigenvalues.size());
     std::vector<bool> assigned(eigenvalues.size(), false);
+    std::optional<GramBlocks> gram;
+    if (options.gramNullspace) gram = gramBlocks(theta, gamma, samples, result.featureCount);
     for (std::size_t mode = 0; mode < eigenvalues.size(); ++mode) {
         if (assigned[mode]) continue;
-        std::vector<std::complex<double>> generator(samples*result.featureCount);
-        for(std::size_t index=0;index<generator.size();++index)
-            generator[index]=gamma[index]-eigenvalues[mode]*theta[index];
-        const auto coefficient = sparseNullVector(generator,samples,
-            result.featureCount,options.threshold,options.maximumIterations);
+        std::optional<std::vector<std::complex<double>>> fitted;
+        if (gram) fitted = sparseNullVectorGram(*gram, eigenvalues[mode],
+                                                options.threshold, options.maximumIterations);
+        if (!fitted) {  // tall-SVD reference path (also the fallback for unresolved Gram modes)
+            std::vector<std::complex<double>> generator(samples*result.featureCount);
+            for(std::size_t index=0;index<generator.size();++index)
+                generator[index]=gamma[index]-eigenvalues[mode]*theta[index];
+            fitted = sparseNullVector(generator,samples,
+                result.featureCount,options.threshold,options.maximumIterations);
+        }
+        const auto& coefficient = *fitted;
         std::copy(coefficient.begin(), coefficient.end(),
                   result.coefficients.begin() + static_cast<std::ptrdiff_t>(mode * result.featureCount));
         assigned[mode] = true; ++result.directFits;

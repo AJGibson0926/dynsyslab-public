@@ -47,11 +47,12 @@ Catalog baseCatalog(const std::filesystem::path& projectRoot) {
     result.projectName = "DynSysLab";
     result.projectRoot = projectRoot.generic_u8string();
     result.viewLabels = {{"open", "Open"}, {"data_overview", "Data overview"},
-        {"koopman_spectrum", "Spectrum"}, {"time", "Time series"},
+        {"koopman_spectrum", "Spectrum"}, {"mode_weights", "Mode weights"}, {"time", "Time series"},
         {"krom_dashboard", "KROM dashboard"}, {"phase", "Phase space"},
         {"field", "Space-time field"}, {"three_d", "Three-state view"},
         {"fourier", "Frequency spectra"},
         {"control_fourier", "Control frequency spectra"},
+        {"estimator", "Estimator measurement"},
         {"time_frequency", "Time + frequency"},
         {"ensemble_time", "Ensemble time series"},
         {"ensemble_phase", "Ensemble phase space"},
@@ -63,6 +64,14 @@ Catalog baseCatalog(const std::filesystem::path& projectRoot) {
         {"observable_heatmap", "Observable phase maps"},
         {"control_map_error", "Control-map error"},
         {"observability", "Observability"},
+        {"hankel_spectrum", "Hankel singular values"},
+        {"gramian_spectrum", "Gramians"},
+        {"frequency_response", "Frequency response"},
+        {"pole_zero", "Poles and zeros"},
+        {"bode", "Bode plot"},
+        {"nyquist", "Nyquist plot"},
+        {"loop_bode", "Loop Bode plot"},
+        {"sensitivity", "Sensitivity"},
         {"koopman_validation", "KROM validation"},
         {"eigenvalue_optimization", "Eigenvalue optimization"},
         {"krom_control_campaign", "KROM control campaign"}};
@@ -202,7 +211,7 @@ Catalog Catalog::scan(const std::filesystem::path& projectRoot,
 
 Catalog Catalog::indexed(const std::filesystem::path& projectRoot,
                          const std::filesystem::path& archiveRoot) {
-    constexpr std::uint32_t snapshotVersion = 5;
+    constexpr std::uint32_t snapshotVersion = 8;  // 8: classical linear-systems views (bode, nyquist, loop_bode, sensitivity)
     constexpr const char* consumer = "dynsyslab.viewer.native";
     if (!std::filesystem::is_regular_file(
             dynsyslab::core::archiveIndexPath(archiveRoot)))

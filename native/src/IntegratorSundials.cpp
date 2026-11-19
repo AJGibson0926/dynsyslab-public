@@ -1,4 +1,5 @@
 #include "IntegratorBackend.hpp"
+#include <dynsyslab/core/Execution.hpp>
 
 #include <cvode/cvode.h>
 #include <cvode/cvode_ls.h>
@@ -130,6 +131,8 @@ NativeSolution integrateBDF(ODESystem& system, const std::vector<double>& initia
     result.stateDimension = dimension; result.coordinateSystem = system.descriptor().preferredCoordinates;
     result.values.resize(trajectories * result.sampleCount * dimension);
     if (controller) result.controlValues.resize(trajectories * result.sampleCount);
+    result.completedSamples.assign(trajectories, result.sampleCount);
+    result.terminationReasons.assign(trajectories, {});
     auto lastProgress = std::chrono::steady_clock::now(); double lastFraction = -1.0;
     for (std::size_t trajectory = 0; trajectory < trajectories; ++trajectory) {
         if (execution) execution->checkpoint();
@@ -175,6 +178,8 @@ NativeSolution integrateBDF(ODESystem& system, const std::vector<double>& initia
             ? tickTime(options.initialTime, controller.sampleTime, tick)
             : (std::numeric_limits<double>::infinity)();
         double current = options.initialTime;
+        std::size_t completed = 0;
+        try {
         for (std::size_t sample = 0; sample < result.sampleCount; ++sample) {
             if (sample) {
                 const double target = result.time[sample];
@@ -223,7 +228,19 @@ NativeSolution integrateBDF(ODESystem& system, const std::vector<double>& initia
                     trajectory * result.sampleCount + sample + 1,
                     trajectories * result.sampleCount});
             if (emit) { lastProgress = now; lastFraction = fraction; }
+            completed = sample + 1;
         }
+            } catch (const ExecutionCancelled&) { throw; }
+            catch (const std::exception& failure) {
+                if (!options.truncateOnFailure) throw;
+                const double nan = std::numeric_limits<double>::quiet_NaN();
+                for (std::size_t sample = completed; sample < result.sampleCount; ++sample) {
+                    std::fill_n(result.values.begin() + (trajectory * result.sampleCount + sample) * dimension, dimension, nan);
+                    if (controller) result.controlValues[trajectory * result.sampleCount + sample] = nan;
+                }
+                result.completedSamples[trajectory] = completed;
+                result.terminationReasons[trajectory] = failure.what();
+            }
         accumulateStatistics(resource.cvode, result.statistics);
     }
     return result;

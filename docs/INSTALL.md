@@ -27,15 +27,26 @@ a different data workspace; `-InstallRoot` chooses the application location.
 The installer does not delete scientific data. Verified downloads are retained
 in the temporary directory reported at completion.
 
-Pin a version with `-Version v0.5.2`. For offline installation, download the
+Pin a version with `-Version v0.6.0`. For offline installation, download the
 Windows ZIP and `SHA256SUMS.txt` from the same release, then run:
 
 ```powershell
-.\install.ps1 -PackagePath .\DynSysLab-0.5.2-windows-x64.zip -ChecksumPath .\SHA256SUMS.txt
+.\install.ps1 -PackagePath .\DynSysLab-0.6.0-windows-x64.zip -ChecksumPath .\SHA256SUMS.txt
 ```
 
 Alternatively extract the release ZIP and launch `bin\DynSysLab.exe` directly.
 Both the application and CLI use the same native computational modules.
+
+## Python client from Git (any OS)
+
+The optional, dependency-free `dynsyslab` Python client drives the compiled CLI and can be
+installed straight from this repository, or from the wheel attached to each release:
+
+```powershell
+python -m pip install git+https://github.com/AJGibson0926/dynsyslab-public
+```
+
+It needs a compiled DynSysLab installation (above) to run computations.
 
 ## Ask Codex to set it up
 

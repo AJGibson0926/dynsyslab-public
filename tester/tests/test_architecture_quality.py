@@ -167,6 +167,10 @@ class ArchitectureQualityTests(unittest.TestCase):
             # Matrix-free Hankel kernels; Eigen stays inside these private units.
             "native/src/HistoryKoopman.cpp",
             "native/src/HistoryCorrelation.hpp",
+            # Randomized Hankel operator (dynsyslab_observation); Eigen-free header.
+            "native/src/HankelOperator.cpp",
+            # Private Eigen helpers of the linear-systems kernels in dynsyslab_numerics.
+            "native/src/EigenNumericsLinearSystems.hpp",
         }
         allowed.update(
             path.relative_to(PROJECT_ROOT).as_posix()

@@ -1,4 +1,5 @@
 #include <dynsyslab/numerics/MatrixFunctions.hpp>
+#include "EigenNumericsLinearSystems.hpp"
 
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
@@ -109,24 +110,8 @@ std::vector<double> finiteObservabilityGramian(
             "continuous Gramian horizon must be positive");
     const Matrix A=mapped(generator,states,states,"observability generator");
     const Matrix C=mapped(output,outputs,states,"observability output");
-    const Matrix forcing=C.transpose()*C;
-    Matrix augmented=Matrix::Zero(2*states,2*states);
-    augmented.topLeftCorner(states,states)=-A.transpose();
-    augmented.topRightCorner(states,states)=forcing;
-    augmented.bottomRightCorner(states,states)=A;
-    // Van Loan on a short interval, then double the horizon. Directly
-    // exponentiating -A^T*T can overflow for a perfectly stable stiff system.
-    const double size=A.cwiseAbs().rowwise().sum().maxCoeff()*horizon;
-    if(!std::isfinite(size))throw std::invalid_argument("Gramian time scale overflow");
-    const int squarings=size>0.5?static_cast<int>(std::ceil(std::log2(size/0.5))):0;
-    const double step=std::ldexp(horizon,-squarings);
-    const Matrix propagated=(augmented*step).exp();
-    Matrix flow=(A*step).exp();
-    Matrix gramian=flow.transpose()*propagated.topRightCorner(states,states);
-    for(int i=0;i<squarings;++i) {
-        gramian=(gramian+flow.transpose()*gramian*flow).eval();
-        flow=(flow*flow).eval();
-    }
+    // Shared Van Loan + doubling kernel (linear-systems toolkit), observability form.
+    Matrix gramian=core::linear_detail::finiteContinuousGramian(A.transpose(),C.transpose()*C,horizon);
     return values(symmetric(std::move(gramian),"continuous observability Gramian"));
 }
 
@@ -142,34 +127,9 @@ std::vector<double> infiniteObservabilityGramian(
     if((eigen.eigenvalues().real().array()>=-1.0e-12*scale).any())
         throw std::invalid_argument(
             "infinite observability Gramian requires a strictly stable generator");
-    Eigen::ComplexSchur<Matrix> schur(A);
-    if(schur.info()!=Eigen::Success)
-        throw std::runtime_error("infinite-Gramian Schur decomposition failed");
-    const auto U=schur.matrixU();
-    const auto T=schur.matrixT();
-    const Eigen::MatrixXcd transformed=U.adjoint()
-        *(C.transpose()*C).cast<std::complex<double>>()*U;
-    Eigen::MatrixXcd solution=Eigen::MatrixXcd::Zero(A.rows(),A.cols());
-    for(Eigen::Index row=0;row<A.rows();++row)
-        for(Eigen::Index column=0;column<A.cols();++column) {
-            std::complex<double> value=-transformed(row,column);
-            for(Eigen::Index index=0;index<row;++index)
-                value-=std::conj(T(index,row))*solution(index,column);
-            for(Eigen::Index index=0;index<column;++index)
-                value-=solution(row,index)*T(index,column);
-            const auto denominator=std::conj(T(row,row))+T(column,column);
-            if(std::abs(denominator)<=std::numeric_limits<double>::epsilon()*scale)
-                throw std::runtime_error(
-                    "infinite-Gramian Lyapunov solve is singular");
-            solution(row,column)=value/denominator;
-        }
-    const Eigen::MatrixXcd complexResult=U*solution*U.adjoint();
-    if(complexResult.imag().norm()
-        >1.0e-8*std::max(1.0,complexResult.real().norm()))
-        throw std::runtime_error(
-            "infinite-Gramian Lyapunov solve was not real");
-    const Matrix result=symmetric(
-        complexResult.real(),"infinite observability Gramian");
+    // Shared Bartels-Stewart solver: A^T W + W A + C^T C = 0.
+    const Matrix result=symmetric(core::linear_detail::lyapunov(
+        A.transpose(),C.transpose()*C,false),"infinite observability Gramian");
     const Matrix residual=A.transpose()*result+result*A+C.transpose()*C;
     if(residual.norm()>1.0e-8*std::max(1.0,(C.transpose()*C).norm()))
         throw std::runtime_error(

@@ -3,6 +3,7 @@
 #include "dynsyslab_viewer/Model.hpp"
 #include "dynsyslab_viewer/PanelCatalog.hpp"
 #include "dynsyslab_viewer/PlotPresentation.hpp"
+#include "dynsyslab_viewer/RecordWindow.hpp"
 
 #include <filesystem>
 #include <atomic>
@@ -28,6 +29,9 @@ public:
     Catalog loadCatalog() const;
     Catalog refreshCatalog() const;
     Payload loadPayload(const CatalogItem& item, const std::string& view) const;
+    // A windowed payload is built directly from the archive's rows inside the window
+    // (single .npz archives only) and is never cached.
+    Payload loadPayload(const CatalogItem& item, const std::string& view, const TimeWindow& window) const;
     // Evaluates every system observable on the same selected Main trajectories.
     Payload loadObservables(const std::vector<CatalogItem>& items,
         std::optional<PhaseSpaceDomain> phaseDomain = std::nullopt) const;

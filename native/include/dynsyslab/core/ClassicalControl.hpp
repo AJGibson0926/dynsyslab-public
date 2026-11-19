@@ -1,10 +1,12 @@
 #pragma once
 
 #include <dynsyslab/core/LQR.hpp>
+#include <dynsyslab/core/PIDCompensator.hpp>
 #include <dynsyslab/core/Controllability.hpp>
 
 #include <cstddef>
 #include <functional>
+#include <limits>
 #include <vector>
 
 namespace dynsyslab::core {
@@ -72,23 +74,22 @@ private:
     mutable FiniteHorizonLQRSolution last_;
 };
 
+// State-feedback PID on e = x_target - x (the "pid" controller kind).
 class PIDController {
 public:
     PIDController(
         std::vector<double> proportional, std::vector<double> integral,
         std::vector<double> derivative, std::size_t stateDimension,
-        std::size_t inputDimension, StateTargetFunction target = {});
+        std::size_t inputDimension, StateTargetFunction target = {},
+        PIDOptions options = {});
 
     [[nodiscard]] std::vector<double> value(double time, const double* state);
     void reset() noexcept;
 
 private:
-    std::vector<double> proportional_,integralGain_,derivative_;
-    std::vector<double> accumulated_,previousError_;
-    std::size_t stateDimension_{},inputDimension_{};
+    PIDCompensator compensator_;
+    std::size_t stateDimension_{};
     StateTargetFunction target_;
-    double previousTime_{};
-    bool initialized_{};
 };
 
 }  // namespace dynsyslab::core

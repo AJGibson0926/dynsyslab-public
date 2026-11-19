@@ -189,7 +189,8 @@ void PlotCanvas::paint(HDC target, bool interactive) {
                                const Gdiplus::RectF& card) {
             const Plot3DCameraState* cameraState = nullptr;
             if (entry.second->kind == "three_d")
-                cameraState = &cameras3D_[entry.first];
+                cameraState = &cameras3D_.try_emplace(entry.first,
+                    Plot3DCameraState::initialFor(*entry.second)).first->second;
             const auto hoveredControl = hovered3DFigure_ && *hovered3DFigure_ == entry.first
                 ? hovered3DControl_ : Plot3DControl::none;
             const PlotTransform transform = drawCachedPanel(

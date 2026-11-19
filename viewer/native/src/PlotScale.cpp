@@ -9,13 +9,13 @@ double ValueScale::forward(double value) const {
     if (kind == ValueScaleKind::logarithmic)
         return value > 0 ? std::log10(value) : std::numeric_limits<double>::quiet_NaN();
     const double a = std::abs(value) / linearThreshold;
-    return std::copysign(a <= 1 ? a : 1 + std::log10(a),value);
+    return std::copysign(a <= 1 ? a : 1 + decadeWeight * std::log10(a),value);
 }
 double ValueScale::inverse(double value) const {
     if (kind == ValueScaleKind::linear) return value;
     if (kind == ValueScaleKind::logarithmic) return std::pow(10.,std::clamp(value,-307.,307.));
     const double a = std::abs(value);
-    return std::copysign(linearThreshold*(a <= 1 ? a : std::pow(10.,std::min(a-1,307.))),value);
+    return std::copysign(linearThreshold*(a <= 1 ? a : std::pow(10.,std::min((a-1)/decadeWeight,307.))),value);
 }
 std::string ValueScale::name() const {
     return kind == ValueScaleKind::linear ? "linear" : kind == ValueScaleKind::logarithmic ? "log" : "symlog";
@@ -27,8 +27,13 @@ bool supportsValueScale(const Figure& figure) {
     if (scalesColorValues(figure))
         return !figure.traces.empty() && figure.traces.front().encoding != "domain-color";
     return figure.kind == "time" || figure.kind == "observable_time" || figure.kind == "krom_time"
-        || figure.kind == "stem"
-        || figure.kind == "control" || figure.kind == "klqe";
+        || figure.kind == "stem" || (figure.kind == "three_d" && figure.boxAxes3D)
+        || figure.kind == "control" || figure.kind == "klqe"
+        // Linear-systems spectra (Hankel singular values, gramians, frequency response).
+        || figure.kind == "hankel_spectrum" || figure.kind == "gramian_spectrum"
+        || figure.kind == "frequency_response"
+        // Fourier amplitude spectra (archive routes and time-series --spectrum).
+        || figure.kind == "fourier" || figure.kind == "control_fourier";
 }
 ValueScale resolveValueScale(const Figure& figure) {
     if (!supportsValueScale(figure)) return {ValueScaleKind::linear,1,"Coordinates or complex hue remain linear"};

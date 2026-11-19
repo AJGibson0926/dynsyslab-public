@@ -37,6 +37,7 @@ add_library(dynsyslab_viewer_services STATIC
   src/PlotSnapshot.cpp
   src/PlotRender.cpp
   src/TimeSeriesOverlay.cpp
+  src/RecordWindow.cpp
   src/ComparisonPayload.cpp
   src/DisplayCoordinates.cpp
   src/TrajectoryPresentation.cpp
@@ -52,6 +53,11 @@ add_library(dynsyslab_viewer_services STATIC
   src/KoopmanValidationPayload.cpp
   src/SindyDynamicsPayload.cpp
   src/EigenvalueOptimizationPayload.cpp
+  src/SpectralMeasurePayload.cpp
+  src/ComplexStemPlot.cpp
+  src/ModeWeightPayload.cpp
+  src/LinearSystemsPayload.cpp
+  src/LinearSystemsLoopPayload.cpp
   src/KromControlCampaignPayload.cpp
   src/KromPayload.cpp
   src/KromTraining.cpp
@@ -173,6 +179,9 @@ if(BUILD_TESTING AND DYNSYSLAB_VIEWER_BUILD_TESTS)
   add_test(NAME dynsyslab_sindy_dynamics_payload_tests COMMAND dynsyslab_sindy_dynamics_payload_tests)
   target_link_libraries(dynsyslab_native_payload_tests PRIVATE dynsyslab_viewer_services)
   add_test(NAME dynsyslab_native_payload_tests COMMAND dynsyslab_native_payload_tests)
+  add_executable(dynsyslab_linear_systems_payload_tests tests/linear_systems_payload_tests.cpp)
+  target_link_libraries(dynsyslab_linear_systems_payload_tests PRIVATE dynsyslab_viewer_services)
+  add_test(NAME dynsyslab_linear_systems_payload_tests COMMAND dynsyslab_linear_systems_payload_tests)
   add_executable(dynsyslab_viewer_display_policy_tests tests/display_policy_tests.cpp)
   target_link_libraries(dynsyslab_viewer_display_policy_tests PRIVATE dynsyslab_viewer_services)
   add_test(NAME dynsyslab_viewer_display_policy_tests COMMAND dynsyslab_viewer_display_policy_tests)

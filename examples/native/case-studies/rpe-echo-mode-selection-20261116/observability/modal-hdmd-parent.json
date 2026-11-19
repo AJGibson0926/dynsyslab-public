@@ -1,0 +1,23 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "modal obsv / hdmd-parent",
+  "description": "Observability matrix [C; C M; ...; C M^(n-1)] of the K-ROM in discrete modal coordinates (M = diag(exp(lambda dt)), one complex coordinate per eigenfunction) with the echo output, and its SVD.",
+  "sources": [
+    "archives/derived/koopman-krom-extract/rpe-viscous-echo-long-validation-five-ics-trajectory-0__~32729aacd2d4~T194836Z__krom-extract__20261116T194904Z.npz"
+  ],
+  "methods": [
+    {
+      "name": "linear_analysis",
+      "enabled": true,
+      "settings": {
+        "measurement": "far_field_acoustic_echo",
+        "analysis_method": "modal-matrix",
+        "sample_time": 0.001
+      }
+    }
+  ],
+  "archive": {
+    "enabled": true
+  }
+}

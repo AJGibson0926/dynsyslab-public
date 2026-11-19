@@ -1,0 +1,54 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "pipeline",
+  "label": "rpe-echo-mode-selection-hdmd",
+  "description": "Eigenfunction subset selection (docs/architecture/MODE_SELECTION.md) over a joint H-DMD pool: the 2026-11-14 H-DMD of [radius, radial_velocity, far_field_acoustic_echo] on the late unforced baseline (t 50-80), reduced to its stable, non-constant modes that carry the most radius / velocity / echo energy. Its eigenfunctions are interpolated in state space, so they are evaluated offline on recorded states; no e' enters. Readouts are fitted on the training window; B_psi is regressed on the two forced records that stay inside the eigenfunctions' training region (r 0.88-1.12); a02p05 (r 0.73-1.37) leaves it and is excluded.",
+  "parameters": {
+    "hdmd": "archives/derived/koopman-hankel-dmd/rpe-viscous-echo-long-training-five-ics-trajectory-0__20~d913261ed379~2Z__koopman-hankel-dmd__20261114T075655Z.npz",
+    "training": "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z.npz",
+    "pool_size": 10,
+    "max_units": 4,
+    "sensor_noise": 0.01
+  },
+  "stages": [
+    {
+      "id": "pool_spectrum",
+      "job": {
+        "kind": "postprocess",
+        "label": "rpe-echo-mode-selection-hdmd / pool",
+        "sources": ["${params.hdmd}"],
+        "methods": [{"name": "krom_extract", "settings": {"mode_selection": {
+          "rule": "observable_energy",
+          "reconstructions": ["radius", "radial_velocity", "far_field_acoustic_echo"],
+          "thresholds": [0.9999, 0.9999, 0.9999],
+          "caps": [24, 24, 24],
+          "max_real_part": 0,
+          "exclude_constant": true
+        }}}],
+        "archive": {"enabled": true}
+      }
+    },
+    {
+      "id": "selection",
+      "job": {
+        "kind": "postprocess",
+        "label": "rpe-echo-mode-selection-hdmd / selection",
+        "sources": [
+          "${params.training}",
+          "archives/solutions/rpe/rpe-forced-bpsi-a005p05__20261114T033755Z.npz",
+          "archives/solutions/rpe/rpe-forced-bpsi-a02p2__20261114T033756Z.npz"
+        ],
+        "methods": [{"name": "mode_selection", "settings": {
+          "krom": "${pool_spectrum.archive}",
+          "measurement": "far_field_acoustic_echo",
+          "time_window": [50, 80],
+          "pool_size": "${params.pool_size}",
+          "max_units": "${params.max_units}",
+          "sensor_noise": "${params.sensor_noise}",
+          "write_krom": true
+        }}],
+        "archive": {"enabled": true}
+      }
+    }
+  ]
+}

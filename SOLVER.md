@@ -83,6 +83,14 @@ in this mode. `"automatic"` is the compatibility default: a supplied sample
 time selects sampled control and its absence selects continuous RHS evaluation.
 Scientific runs should declare the policy rather than rely on automatic mode.
 
+A trajectory that fails (leaves the system's validity domain, underflows the
+step size, or meets a controller error) aborts the whole native solve by
+default. With `"solver": {"on_failure": "truncate"}` the solve instead keeps
+each failed trajectory's computed samples, archives only those rows, records
+`integration_terminated` (`completed_samples`, `time`, `reason`) in the
+archive metadata, and continues with the next trajectory. Use it to show where
+a controller or model breaks down; the Viewer draws the computed part.
+
 The solution-aligned control history has accepted solver times. In continuous
 RHS mode it is evaluated on accepted states; `control_call_time` and
 `control_call_values` separately preserve the internal evaluation tape. In

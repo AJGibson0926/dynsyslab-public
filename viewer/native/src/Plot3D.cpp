@@ -76,7 +76,7 @@ bool Plot3DCameraState::operator==(const Plot3DCameraState& other) const {
     return azimuthDegrees == other.azimuthDegrees
         && elevationDegrees == other.elevationDegrees
         && zoom == other.zoom && panX == other.panX && panY == other.panY
-        && projection == other.projection;
+        && projection == other.projection && boxAxes == other.boxAxes;
 }
 
 bool Plot3DControlBounds::contains(double x, double y) const {
@@ -178,9 +178,15 @@ Plot3DProjectedPoint Plot3DCamera::project(
         bounds.maximum.y - bounds.minimum.y,
         bounds.maximum.z - bounds.minimum.z, 1.0e-14});
     Plot3DPoint normalized = subtract(point, center);
-    normalized.x *= 2.0 / span;
-    normalized.y *= 2.0 / span;
-    normalized.z *= 2.0 / span;
+    if (state_.boxAxes) {  // each axis fills the box independently
+        normalized.x *= 2.0 / std::max(bounds.maximum.x - bounds.minimum.x, 1.0e-14);
+        normalized.y *= 2.0 / std::max(bounds.maximum.y - bounds.minimum.y, 1.0e-14);
+        normalized.z *= 2.0 / std::max(bounds.maximum.z - bounds.minimum.z, 1.0e-14);
+    } else {
+        normalized.x *= 2.0 / span;
+        normalized.y *= 2.0 / span;
+        normalized.z *= 2.0 / span;
+    }
 
     const double azimuth = radians(state_.azimuthDegrees);
     const double elevation = radians(state_.elevationDegrees);
@@ -203,6 +209,43 @@ Plot3DProjectedPoint Plot3DCamera::project(
             viewport.top + viewport.height * 0.5
                 - (vertical * perspective + state_.panY) * scale,
             depth, std::isfinite(horizontal) && std::isfinite(vertical)};
+}
+
+double Plot3DHeightScale::forward(double z) const {
+    if (!logarithmic || !std::isfinite(z)) return z;
+    return z > 0 ? std::max(std::log10(z), floorExponent) : floorExponent;
+}
+
+double Plot3DHeightScale::inverse(double z) const {
+    return logarithmic && std::isfinite(z) ? std::pow(10.0, z) : z;
+}
+
+Plot3DHeightScale plot3DHeightScale(const Figure& figure) {
+    Plot3DHeightScale scale;
+    if (figure.kind != "three_d" || !figure.boxAxes3D || figure.valueScale == "linear") return scale;
+    std::vector<double> positive;
+    for (const auto& trace : figure.traces)
+        for (const double z : trace.z) if (std::isfinite(z) && z > 0) positive.push_back(z);
+    if (positive.empty()) return scale;
+    std::sort(positive.begin(), positive.end());
+    const double top = positive.back();
+    if (figure.valueScale != "log" && figure.valueScale != "symlog") {   // auto
+        const double low = positive[(positive.size() - 1) * 5 / 100];
+        const double high = positive[(positive.size() - 1) * 95 / 100];
+        if (!(std::log10(std::max(high, top * 1e-12)) - std::log10(low) >= 3.0)) return scale;
+    }
+    scale.logarithmic = true;
+    scale.floorExponent = std::max(std::floor(std::log10(positive.front())), std::floor(std::log10(top)) - 6.0);
+    return scale;
+}
+
+Figure plot3DDisplayFigure(const Figure& figure) {
+    const auto scale = plot3DHeightScale(figure);
+    if (!scale.logarithmic) return figure;
+    Figure result = figure;
+    for (auto& trace : result.traces)
+        for (auto& z : trace.z) z = scale.forward(z);
+    return result;
 }
 
 Plot3DBounds plot3DBounds(const Figure& figure) {
@@ -238,9 +281,11 @@ Plot3DBounds plot3DBounds(const Figure& figure) {
 }
 
 std::optional<Plot3DProbe> nearestPlot3DProbe(
-    const Figure& figure, const Plot3DCamera& camera,
+    const Figure& sourceFigure, const Plot3DCamera& camera,
     const Plot3DViewport& viewport, double pixelX, double pixelY,
     double maximumDistancePixels, std::optional<std::size_t> onlyTrace) {
+    const auto heightScale = plot3DHeightScale(sourceFigure);
+    const Figure figure = plot3DDisplayFigure(sourceFigure);
     const auto bounds = plot3DBounds(figure);
     std::optional<Plot3DProbe> best;
     for (std::size_t traceIndex = 0; traceIndex < figure.traces.size(); ++traceIndex) {
@@ -265,14 +310,17 @@ std::optional<Plot3DProbe> nearestPlot3DProbe(
         }
     }
     if (!best || best->distancePixels > maximumDistancePixels) return std::nullopt;
+    best->value.z = heightScale.inverse(best->value.z);   // report the physical height
     return best;
 }
 
 std::optional<Plot3DProbe> resolvePlot3DProbe(
-    const Figure& figure, const Plot3DCamera& camera,
+    const Figure& sourceFigure, const Plot3DCamera& camera,
     const Plot3DViewport& viewport, std::size_t traceIndex,
     std::size_t segmentIndex, double segmentFraction) {
-    if (traceIndex >= figure.traces.size()) return std::nullopt;
+    if (traceIndex >= sourceFigure.traces.size()) return std::nullopt;
+    const auto heightScale = plot3DHeightScale(sourceFigure);
+    const Figure figure = plot3DDisplayFigure(sourceFigure);
     const auto& trace = figure.traces[traceIndex];
     const auto count = std::min({trace.x.size(), trace.y.size(), trace.z.size()});
     if (!count) return std::nullopt;
@@ -288,6 +336,7 @@ std::optional<Plot3DProbe> resolvePlot3DProbe(
     result.segmentFraction = std::clamp(segmentFraction, 0.0, 1.0);
     result.value = interpolate(firstValue, secondValue, result.segmentFraction);
     result.projected = camera.project(result.value, bounds, viewport);
+    result.value.z = heightScale.inverse(result.value.z);
     result.distancePixels = 0.0;
     return result.projected.visible ? std::optional<Plot3DProbe>(result)
                                     : std::nullopt;

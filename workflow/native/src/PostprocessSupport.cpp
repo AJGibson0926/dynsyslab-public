@@ -1,3 +1,5 @@
+#include <cstdio>
+#include <cstdint>
 #include <limits>
 #include "PostprocessInternal.hpp"
 #include "KromDatasetSupport.hpp"
@@ -41,7 +43,17 @@ std::string timestamp() {
 std::string safeName(std::string value) {
     for (char& item : value) if (!std::isalnum(static_cast<unsigned char>(item))
         && item != '-' && item != '_') item = '-';
-    return value;
+    // Derived names append their parent's name, so chains (coordinate change ->
+    // H-DMD -> SINDy -> K-ROM ...) grow past Windows' 260-character path limit.
+    // Keep the original run (start) and this step (end), and a stable FNV-1a
+    // hash of the whole name between them; full provenance is in the metadata.
+    constexpr std::size_t limit = 112, head = 56, tail = 40;
+    if (value.size() <= limit) return value;
+    std::uint64_t hash = 1469598103934665603ull;
+    for (unsigned char c : value) { hash ^= c; hash *= 1099511628211ull; }
+    char digest[17];
+    std::snprintf(digest, sizeof digest, "%016llx", static_cast<unsigned long long>(hash));
+    return value.substr(0, head) + "~" + std::string(digest, 12) + "~" + value.substr(value.size() - tail);
 }
 
 std::string safeArrayKey(std::string value) {

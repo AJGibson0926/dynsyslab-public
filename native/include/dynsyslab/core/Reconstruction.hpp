@@ -17,6 +17,10 @@ struct ReconstructionResult {
     double residualRms{};
     double residualMaximum{};
     double relativeResidual{};
+    // Optional real intercept (one per output): h = offset + C Psi. Empty means zero.
+    // An intercept lets a KROM drop a nearly-constant mode (e.g. the equilibrium
+    // offset) that a measurement such as the echo cannot observe.
+    std::vector<double> offset;
 };
 
 // Solve G ~= Psi C^T over samples. Both matrices are row major.

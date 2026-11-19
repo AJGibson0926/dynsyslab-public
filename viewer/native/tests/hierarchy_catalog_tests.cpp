@@ -223,7 +223,7 @@ void legacyHierarchyReference() {
             indexed.indexOf(clusterId + "-trajectory-0000") >= 0,
             "indexed legacy hierarchy summary does not reproduce the archive tree");
     const auto snapshot = dynsyslab::core::loadArchiveCatalogSnapshot(
-        archiveRoot, "dynsyslab.viewer.native", 5);
+        archiveRoot, "dynsyslab.viewer.native", 8);
     require(snapshot.has_value(), "indexed catalog was not retained for startup reuse");
     const auto cached = dsl::Catalog::indexed(root, archiveRoot);
     require(cached.items.size() == indexed.items.size() &&

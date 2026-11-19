@@ -17,6 +17,11 @@ struct KoopmanSINDyOptions {
     bool includeConstant{true};
     bool reuseConjugateFits{true};
     bool materializeTrainingValues{false};
+    // Solve each thresholded null vector from feature-sized Gram blocks formed
+    // once (ThetaᵀTheta, GammaᵀTheta, GammaᵀGamma) instead of a tall SVD per
+    // eigenvalue and iteration. A mode whose Gram system is too ill-conditioned
+    // for its smallest eigenvector to be trusted falls back to the tall SVD.
+    bool gramNullspace{true};
 };
 
 // Compatibility fit DTO. New runtime code uses PolynomialEigenfunctionSet;

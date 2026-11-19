@@ -1,4 +1,6 @@
+#include <set>
 #include "KromDatasetSupport.hpp"
+#include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/ScientificCompatibility.hpp>
 #include <algorithm>
 #include <cmath>
@@ -12,11 +14,57 @@ std::string datasetDynamics(const SourceData& source) {
     const auto meta=source.metadataJson.empty()?json::Value{}:json::parse(source.metadataJson);
     const auto forcing=meta.at("forcing_type").string();
     const auto controller=meta.at("controller_kind").string(meta.at("controller_configuration").at("kind").string());
-    if((!controller.empty()&&controller!="none") || (!forcing.empty()&&forcing!="free"&&forcing!="unforced"&&forcing!="none"))
+    if((!controller.empty()&&controller!="none") || (!forcing.empty()&&forcing!="free"&&forcing!="unforced"&&forcing!="none"&&forcing!="unknown"))
         return "forced";
     if(!source.inputs.empty() || controller=="none" || forcing=="free" || forcing=="unforced")
         return "unforced";
     return "unknown";
+}
+
+std::string trainingDataRole(const std::string& method, const json::Value& settings) {
+    static const std::set<std::string> autonomous{
+        "dmd", "hdmd", "hankel_dmd", "sindy", "edmd", "havok", "koopman_spectral", "resdmd", "mpedmd",
+        "hermitian_dmd", "tlsdmd", "multdmd", "stochastic_resdmd", "specrkhs", "boundary_eigenfunctions",
+        "eigenvalue_optimization", "echo_history_koopman", "history_basis", "sindy_dynamics", "koopman_validation"};
+    if (method == "dmdc" || method == "edmdc") return "forced_allowed";
+    if (method == "control_regression" || method == "history_control_regression") return "forced_required";
+    if (method == "input_map") {
+        const auto& map = settings.at("map");
+        const auto representation = settings.at("representation").string(map.at("representation").string());
+        return representation == "constant" || representation == "bilinear" ? "forced_required" : "any";
+    }
+    return autonomous.count(method) ? "autonomous" : "any";
+}
+
+void requireTrainingDataRole(const std::string& method, const SourceData& source, const json::Value& settings) {
+    const auto role = trainingDataRole(method, settings);
+    if (role == "any" || role == "forced_allowed") return;
+    const auto dynamics = datasetDynamics(source);
+    const auto where = " (" + source.path.filename().u8string() + ")";
+    if (role == "forced_required" && dynamics != "forced")
+        throw std::invalid_argument(method + " regresses an input map and needs forced training data with a "
+                                    "recorded control history; this source is " + dynamics + where);
+    if (role == "autonomous") {
+        if (dynamics == "forced")
+            throw std::invalid_argument(method + " extracts autonomous Koopman eigenfunctions/spectra and must be trained "
+                "on unforced data; this source is forced" + where + ". Use dmdc/edmdc to identify from forced data, "
+                "or input_map to regress B_psi from it.");
+        // "unknown" (no forcing provenance: legacy imports, synthetic or measured records) is accepted;
+        // settings.training_dynamics = "forced" lets a stage declare such a source forced and be refused.
+        if (dynamics == "unknown" && settings.at("training_dynamics").string() == "forced")
+            throw std::invalid_argument(method + " must be trained on unforced data; the stage declares this source forced" + where);
+    }
+}
+
+void requireTrainingDataRole(const std::string& method, const std::filesystem::path& path, const json::Value& settings) {
+    const auto role = trainingDataRole(method, settings);
+    if (role == "any" || role == "forced_allowed") return;
+    const auto archive = dynsyslab::core::readNpz(path);
+    SourceData light; light.path = path;
+    light.metadataJson = archive.metadataJson();
+    for (const char* name : {"control_interval_values", "control_values"})
+        if (archive.contains(name)) { light.inputs = archive.at(name).doubles(); light.inputDimension = 1; break; }
+    requireTrainingDataRole(method, light, settings);
 }
 
 void requireMatchingUnforcedDataset(const dynsyslab::core::KoopmanModel& model,const SourceData& source) {

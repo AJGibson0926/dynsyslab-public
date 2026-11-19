@@ -52,12 +52,13 @@ Gdiplus::Color hsv(double hue, double saturation, double light, BYTE alpha) {
 
 }  // namespace
 
-Fonts::Fonts() {
-    title = makeFont(19, FW_SEMIBOLD, L"Bahnschrift SemiBold");
-    heading = makeFont(11, FW_SEMIBOLD);
-    body = makeFont(10, FW_NORMAL);
-    caption = makeFont(9, FW_NORMAL);
-    mono = makeFont(9, FW_NORMAL, L"Cascadia Mono");
+Fonts::Fonts(double scale) {
+    const auto size = [scale](int points) { return std::max(1, static_cast<int>(std::lround(points * scale))); };
+    title = makeFont(size(19), FW_SEMIBOLD, L"Bahnschrift SemiBold");
+    heading = makeFont(size(11), FW_SEMIBOLD);
+    body = makeFont(size(10), FW_NORMAL);
+    caption = makeFont(size(9), FW_NORMAL);
+    mono = makeFont(size(9), FW_NORMAL, L"Cascadia Mono");
 }
 
 Fonts::~Fonts() {

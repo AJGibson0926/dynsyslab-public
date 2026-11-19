@@ -177,7 +177,10 @@ std::filesystem::path ioPath(const std::filesystem::path& path) {
 
 std::vector<std::string> arrays(const std::string& encoded) {
     std::vector<std::string> result;
-    for (const auto& value : json::parse(encoded).array())
+    // Keep the parsed document alive: iterating parse(...).array() directly would
+    // range over a reference into a destroyed temporary.
+    const auto parsed = json::parse(encoded);
+    for (const auto& value : parsed.array())
         result.push_back(value.string());
     return result;
 }

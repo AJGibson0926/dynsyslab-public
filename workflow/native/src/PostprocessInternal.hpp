@@ -49,6 +49,10 @@ std::filesystem::path runKoopmanSpectral(const SourceData&,const json::Value&,
     const std::filesystem::path&,const std::string&,const std::string&);
 std::filesystem::path runLinearAnalysis(const std::filesystem::path& source,
     const json::Value& settings,const std::filesystem::path& root,const std::string& label);
+std::filesystem::path runLinearSystems(const std::filesystem::path& source,
+    const json::Value& settings,const std::filesystem::path& root,const std::string& label);
+std::filesystem::path runEmpiricalObservability(const std::filesystem::path& source,
+    const json::Value& settings,const std::filesystem::path& root,const std::string& label);
 std::filesystem::path runCoordinateTransform(const SourceData& source,
     const json::Value& settings,const std::filesystem::path& root,const std::string& label);
 std::filesystem::path runSindyDynamics(const SourceData& source,
@@ -77,6 +81,29 @@ std::filesystem::path runPcaPostprocess(
 
 std::filesystem::path runControlRegression(
     const SourceData& source, const json::Value& settings,
+    const std::filesystem::path& root, const std::string& label);
+std::filesystem::path runHistoryControlRegression(
+    const std::vector<std::filesystem::path>& sources, const json::Value& settings,
+    const std::filesystem::path& root, const std::string& label);
+// B_psi for any KROM: exact / history_exact (analytic) or constant / bilinear regressed from forced records.
+std::filesystem::path runInputMap(
+    const std::vector<std::filesystem::path>& sources, const json::Value& settings,
+    const std::filesystem::path& root, const std::string& label);
+// Numerical-differentiation benchmark of a measured channel under measurement noise.
+std::filesystem::path runDerivativeBenchmark(
+    const std::vector<std::filesystem::path>& sources, const json::Value& settings,
+    const std::filesystem::path& root, const std::string& label);
+// Polynomial K-ROM fitted to a K-ROM's scattered (H-DMD) eigenfunction values: same
+// eigenvalues, smooth evaluation. Writes derived/koopman-polynomial-fit; fills report.
+std::filesystem::path fitPolynomialEigenfunctions(const std::filesystem::path& kromPath, std::size_t degree,
+    const std::filesystem::path& root, json::Value::Object& report);
+// Eigenfunction subset selection for echo-only KLQE -> KLQR (docs/architecture/MODE_SELECTION.md).
+std::filesystem::path runModeSelection(
+    const std::vector<std::filesystem::path>& sources, const json::Value& settings,
+    const std::filesystem::path& root, const std::string& label);
+// Offline lifting of a state target into a KROM's coordinates (time, values archive).
+std::filesystem::path runControlTarget(
+    const std::vector<std::filesystem::path>& sources, const json::Value& settings,
     const std::filesystem::path& root, const std::string& label);
 std::filesystem::path runKromExtraction(
     const std::filesystem::path& source, const json::Value& settings,

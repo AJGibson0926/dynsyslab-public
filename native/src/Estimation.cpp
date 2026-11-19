@@ -1,8 +1,8 @@
 #include <dynsyslab/core/Estimation.hpp>
+#include <dynsyslab/core/ControlDesign.hpp>
 #include <dynsyslab/core/ScientificCompatibility.hpp>
 
 #include <dynsyslab/numerics/Control.hpp>
-#include <dynsyslab/numerics/Eigensystem.hpp>
 #include <dynsyslab/numerics/MatrixFunctions.hpp>
 #include <dynsyslab/numerics/Product.hpp>
 #include <dynsyslab/numerics/Svd.hpp>
@@ -35,45 +35,31 @@ Matrix mapped(const std::vector<double>& values,std::size_t rows,
     return {values,rows,columns};
 }
 
-Matrix transpose(const Matrix& source) {
-    Matrix result(source.columns,source.rows);
-    for(std::size_t row=0;row<source.rows;++row)
-        for(std::size_t column=0;column<source.columns;++column)
-            result(column,row)=source(row,column);
-    return result;
-}
-
 } // namespace
 
 ContinuousLQESolution solveContinuousLQE(
     const std::vector<double>& generator,const std::vector<double>& measurement,
     const std::vector<double>& process,const std::vector<double>& noise,
     std::size_t states,std::size_t measurements,bool requireDetectable) {
-    const Matrix A=mapped(generator,states,states,"LQE generator");
-    const Matrix C=mapped(measurement,measurements,states,"LQE measurement");
+    mapped(generator,states,states,"LQE generator");
+    mapped(measurement,measurements,states,"LQE measurement");
     mapped(process,states,states,"LQE process covariance");
     mapped(noise,measurements,measurements,"LQE measurement covariance");
     const bool detectable=numerics::isDetectable(
         generator,measurement,states,measurements);
     if(requireDetectable&&!detectable)
         throw std::invalid_argument("continuous LQE pair (A,C) is not detectable");
-    const auto dual=numerics::solveContinuousLqr(
-        transpose(A).values,transpose(C).values,process,noise,states,measurements);
-    const Matrix gainDual{dual.gain,measurements,states};
-    const Matrix gain=transpose(gainDual);
-    Matrix closed=A;
-    const Matrix feedback=product(gain,C);
-    for(std::size_t index=0;index<closed.values.size();++index)
-        closed.values[index]-=feedback.values[index];
-    const auto poles=numerics::eigensystem(closed.values,states,false);
+    // One gain path for every LQE in DynSysLab: ControlDesign (CARE by duality).
+    const auto design=designLQE(makeStateSpace(generator,{},measurement,{},
+        states,0,measurements),process,noise);
     ContinuousLQESolution result;
     result.stateDimension=states;
     result.measurementDimension=measurements;
     result.detectable=detectable;
-    result.relativeResidual=dual.relativeResidual;
-    result.covariance=dual.riccati;
-    result.gain=gain.values;
-    result.observerPoles=poles.eigenvalues;
+    result.relativeResidual=design.relativeResidual;
+    result.covariance=design.covariance;
+    result.gain=design.gain;
+    result.observerPoles=design.observerPoles;
     return result;
 }
 
@@ -107,10 +93,12 @@ KoopmanLQEDesign designKoopmanLQEFromMeasurements(
     result.stateObservable=outputName;
     result.generator=model.generatorSplit();
     result.measurementMatrix=reconstructionSplitMatrix(model,measurement);
+    result.measurementOffset=measurement.offset.empty()?std::vector<double>(measurement.outputs,0.0):measurement.offset;
     if(!outputName.empty()) {
         const auto& decoder=model.reconstruction(outputName);
         result.stateReconstructionMatrix=reconstructionSplitMatrix(model,decoder);
         result.outputDimension=decoder.outputs;
+        result.outputOffset=decoder.offset.empty()?std::vector<double>(decoder.outputs,0.0):decoder.offset;
     }
     result.solution=solveContinuousLQE(
         result.generator,result.measurementMatrix,process,noise,
@@ -161,6 +149,11 @@ KoopmanLQEResult runKoopmanLQEFromLifted(
     for(std::size_t index=0;index<A.values.size();++index)
         A.values[index]-=feedback.values[index];
     std::vector<double> lifted=initialLifted;
+    // Reconstruction intercepts: y = y0 + C z, x = x0 + C_x z.
+    std::vector<double> y0=design.measurementOffset,x0=design.outputOffset;
+    if(y0.empty())y0.assign(measurements,0.0);
+    if(x0.empty())x0.assign(physical,0.0);
+    if(y0.size()!=measurements||x0.size()!=physical)throw std::invalid_argument("KLQE offsets have wrong size");
     KoopmanLQEResult result;
     result.time=time;
     result.samples=samples;
@@ -191,11 +184,11 @@ KoopmanLQEResult runKoopmanLQEFromLifted(
                     updated[row]+=held.transition[row*states+column]*lifted[column];
                 for(std::size_t measurement=0;measurement<measurements;++measurement)
                     updated[row]+=held.response[row*measurements+measurement]
-                        *observations[(sample-1)*measurements+measurement];
+                        *(observations[(sample-1)*measurements+measurement]-y0[measurement]);
             }
             lifted=std::move(updated);
         }
-        std::vector<double> estimate(physical),predicted(measurements);
+        std::vector<double> estimate(x0.begin(),x0.end()),predicted(y0.begin(),y0.end());
         for(std::size_t row=0;row<physical;++row)
             for(std::size_t column=0;column<states;++column)
                 estimate[row]+=decoder(row,column)*lifted[column];

@@ -1,4 +1,5 @@
 # Generated package/build output is never source.
+/.dynsyslab/
 /build/
 /dist/
 /_CPack_Packages/

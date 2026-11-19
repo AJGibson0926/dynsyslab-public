@@ -1,6 +1,7 @@
 #include <dynsyslab/workflow/Solve.hpp>
 #include "AnalyticArchive.hpp"
 #include <dynsyslab/workflow/ControlFactory.hpp>
+#include <dynsyslab/workflow/EstimatorFactory.hpp>
 #include <dynsyslab/workflow/Hierarchy.hpp>
 
 #include <dynsyslab/core/Archive.hpp>
@@ -112,6 +113,12 @@ dynsyslab::core::IntegrationOptions integrationOptions(const json::Value& job) {
     if (maximumInternalSteps<1.0||std::floor(maximumInternalSteps)!=maximumInternalSteps)
         throw std::invalid_argument("max_internal_steps must be a positive integer");
     result.maximumInternalSteps=static_cast<std::size_t>(maximumInternalSteps);
+    // "on_failure": "error" (default) aborts the solve; "truncate" archives each trajectory up
+    // to its last computed sample and records why it stopped (integration_terminated).
+    const auto onFailure = solver.at("on_failure").string("error");
+    if (onFailure != "error" && onFailure != "truncate")
+        throw std::invalid_argument("solver.on_failure must be error or truncate");
+    result.truncateOnFailure = onFailure == "truncate";
     std::string method = solver.at("method").string("RK45");
     std::transform(method.begin(), method.end(), method.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
@@ -281,8 +288,14 @@ SolveResult executeSolve(const json::Value& job,
             if (execution) execution->report({"solve/screening", message,
                 0.1 * fraction, completed, planned});
         }, execution);
-    const auto control = buildController(job.at("controller"), job.at("solver"),
+    // Controller and Estimator modules: KLQE -> KLQR output feedback shares one KROM and is
+    // composed inside the controller; any other estimator runs beside the input policy.
+    auto control = buildController(controllerSpecWithEstimator(job), job.at("solver"),
         *system, trajectoryCount, options.outputStep, initials);
+    if (!job.at("estimator").isNull() && !usesEstimatedFeedback(job))
+        control = attachEstimator(std::move(control),
+            buildEstimator(job.at("estimator"), job.at("solver"), *system, trajectoryCount, options.outputStep),
+            trajectoryCount, usesEstimatedState(job) ? system->descriptor().stateDimension : 0);
     const std::string stamp = timestamp();
     const auto hierarchy = prepareHierarchy(job, system->configuration(), trajectoryCount,
                                             archiveRoot, stamp);
@@ -361,6 +374,22 @@ SolveResult executeSolve(const json::Value& job,
             metadata(job, *system, itemLabel, initial, trajectory, control, hierarchy,
                      preflight));
         detail::appendAnalyticComparison(archive, *system, states, initial, options.initialTime, job);
+        if (trajectory < solution.completedSamples.size()
+            && solution.completedSamples[trajectory] < solution.sampleCount) {
+            // Truncated on failure: keep the computed rows of every output-grid array.
+            const std::size_t rows = solution.completedSamples[trajectory];
+            for (auto& [name, array] : archive.arrays) {
+                if (array.shape.empty() || array.shape[0] != solution.sampleCount) continue;
+                const std::size_t rowBytes = array.data.size() / array.shape[0];
+                array.data.resize(rows * rowBytes); array.shape[0] = rows;
+            }
+            auto meta = json::parse(archive.at("metadata_json").string());
+            meta.object()["integration_terminated"] = json::Value::Object{
+                {"completed_samples", static_cast<double>(rows)},
+                {"time", rows ? solution.time[rows - 1] : options.initialTime},
+                {"reason", solution.terminationReasons[trajectory]}};
+            archive.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(json::dump(meta));
+        }
         const auto path = directory / dynsyslab::core::wide(safeName(itemLabel) + "__" + stamp + ".npz");
         dynsyslab::core::writeNpzAtomic(path, archive); result.archives.push_back(path);
     }

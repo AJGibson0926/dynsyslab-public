@@ -121,6 +121,55 @@ The RPE comparison uses saved jobs in
 examples/native/case-studies/rpe-vector-field-sindy-20261105. Scientific archives
 remain local. There is no experiment-specific fitter or integrator.
 
+## Coordinate changes, inverses and diagnostics
+
+`coordinate_transform` kinds: `identity`, `observable` (registered observable,
+preset such as `echo_jet2`, or expression), `channels` (observables, their time
+derivatives, KROM observables), `history` (fits its Hankel-SVD basis through the
+shared Hankel module, or applies a frozen one with `transform_archive`, which may
+name the basis or any history-coordinate archive built with it), `columns`
+(a subset of an earlier coordinate archive) and `window_integral`.
+`{"kind":"chain","steps":[...]}` runs any number of these, each on the previous
+output; only a catalog observable must come first. `labels` sets display labels.
+`system_derivatives:true` stores exact rates: the analytic push-forward on a
+physical record, or, for history coordinates of an earlier coordinate archive,
+the frozen projection of that archive's stored measurement rate.
+
+Every coordinate change records `coordinate_inverse`: `exact` (identity),
+`readout` (history coordinates: inverse-distance weighting over the 8 nearest
+training pairs, back to the previous coordinates; approximate, valid within the
+training range) or `none` with the reason (for example, a map the diagnostics
+show is not one-to-one). Call it with
+`dynsyslab-cli coordinate-inverse COORDINATES.npz INPUT.npz OUTPUT.npz`, or from a
+fit with `rollout_inverse`.
+
+`"diagnostics":{"crossings":{"axes":[0,1]}}` finds the path's self-crossings in
+two coordinates (native quadtree search promoted from the miscellaneous-computes
+side-car), lifts each into all coordinates and the physical state, and counts
+genuine crossings, non-injective witnesses and closure obstructions; for an
+analytic map it also runs the observable closure search seeded with those
+witnesses. Results are in metadata `coordinate_diagnostics` and arrays
+`crossing_segments` / `crossing_metrics`.
+
+## Rate laws across coordinate systems
+
+`sindy_dynamics` fits z' = f(z) by default. With `response_source` (and
+`validation_response_sources` paired with `validation_sources`) it fits another
+coordinate archive's rates as a function of these coordinates, w' = g(z), on
+their common sample times, for example [e,e']' = f(r,r') or f(xi). A rate law is
+not a closed vector field, so it has no free rollout.
+
+Rollouts: `rollout_duration` may be `"full"` (to the end of the record);
+integration runs in `rollout_segment` pieces (default 0.5 tau), so a law that
+diverges keeps its valid prefix (`status: diverged`, `valid_until`).
+`rollout_map` (an observable of the physical state, e.g. `echo_jet2`) or
+`rollout_inverse` (a coordinate archive's retained inverse) also stores the
+rollout and its reference in other coordinates. Rollouts are stored with the
+error-bounded vertex selection Viewer uses (`rollout_vertices`, default 60000);
+errors use every sample. The `sindy_dynamics_transient` view shows one page per
+plot type with training and each held-out record side by side. The study in
+`examples/native/pipelines/rpe-coordinate-dynamics/study.json` runs all of this.
+
 ## Interpretation
 
 For q=h(x), the chain rule gives qdot=Dh(x)f(x). Expressing that as f_q(q)

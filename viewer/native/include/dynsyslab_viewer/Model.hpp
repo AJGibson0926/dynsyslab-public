@@ -75,6 +75,8 @@ struct Trace {
     // initializers retain their long-standing field order.
     double opacity = 1.0;
     double lineWidthPoints = 0.0; // Zero selects the role's standard pen.
+    // Marker shape when `marker` is set: "" = small filled dot, "open-circle" = hollow ring.
+    std::string markerShape;
 };
 
 struct DetailInset {
@@ -84,6 +86,17 @@ struct DetailInset {
     double yMax = 0.0;
     std::vector<std::size_t> traceIndices;
     bool automatic = false;
+    // Transient policy: when a short burst (e.g. a start-up spike) would flatten the
+    // whole panel, the inset shows that burst at full scale and the main panel keeps
+    // the meaningful (robust) ordinate range [mainYMin, mainYMax] instead.
+    bool transientWindow = false;
+    double mainYMin = 0.0;
+    double mainYMax = 0.0;
+    // Ordinate of the inset itself: symmetric log with this linear core when the
+    // episode spans decades beyond the settled level (e.g. a start-up spike).
+    bool symmetricLog = false;
+    double linearThreshold = 1.0;
+    double decadeWeight = 1.0;
 };
 
 struct Figure {
@@ -117,6 +130,14 @@ struct Figure {
     std::string valueScale = "auto";
     std::string observableIdentity;
     std::string zLabel;
+    // Optional initial 3-D camera for "three_d" figures; reset returns here.
+    std::optional<double> cameraAzimuthDegrees;
+    std::optional<double> cameraElevationDegrees;
+    // "three_d" figures that are not state-space trajectories (e.g. stem plots):
+    // scale each axis to the box independently and omit the trajectory IC marker.
+    bool boxAxes3D = false;
+    // Index abscissas (singular-value index, mode number): ticks and grid at integers.
+    bool integerXTicks = false;
 };
 
 struct Payload {
@@ -135,7 +156,7 @@ struct Payload {
 };
 
 std::optional<DetailInset> automaticDetailInset(
-    const Figure& figure, double disparityThreshold = 20.0);
+    const Figure& figure, double disparityThreshold = 6.0);
 
 std::wstring wide(const std::string& value);
 std::string narrow(const std::wstring& value);

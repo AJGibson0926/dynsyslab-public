@@ -10,9 +10,7 @@
 
 namespace dynsyslab::core {
 
-// Convert G = C Psi into a real output map over the KROM's split lifted state.
-[[nodiscard]] std::vector<double> reconstructionSplitMatrix(
-    const KoopmanModel& model, const ReconstructionResult& reconstruction);
+// reconstructionSplitMatrix is declared in Observability.hpp (linear analysis).
 
 struct ContinuousLQESolution {
     std::vector<double> covariance;          // state x state
@@ -37,6 +35,8 @@ struct KoopmanLQEDesign {
     std::vector<double> generator;
     std::vector<double> measurementMatrix;
     std::vector<double> stateReconstructionMatrix;
+    std::vector<double> measurementOffset;   // y = y0 + C_y z (reconstruction intercept; zeros if none)
+    std::vector<double> outputOffset;        // x = x0 + C_x z
     ContinuousLQESolution solution;
     std::size_t physicalStateDimension{};
     std::size_t outputDimension{}; // optional decoded output, need not be a physical state

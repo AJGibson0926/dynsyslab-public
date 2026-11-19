@@ -134,6 +134,63 @@ void testExplicitClassicalLqrMatrices() {
             "explicit classical LQR matrices were not accepted");
 }
 
+
+void testTargetRampToggle() {
+    // A ramp works on any target kind; null/false/{"enabled":false} switch it off.
+    const auto plain = dynsyslab::workflow::resolveControlTarget(dynsyslab::core::json::parse(
+        R"({"kind":"constant","state":[1.5,0]})"), 2);
+    close(plain(0.0)[0], 1.5, 0.0, "unramped constant target");
+    for (const char* off : {R"({"kind":"constant","state":[1.5,0],"ramp":null})",
+                            R"({"kind":"constant","state":[1.5,0],"ramp":false})",
+                            R"({"kind":"constant","state":[1.5,0],"ramp":{"enabled":false,"duration":2,"from":[1,0]}})"})
+        close(dynsyslab::workflow::resolveControlTarget(dynsyslab::core::json::parse(off), 2)(0.0)[0],
+              1.5, 0.0, "disabled ramp changed the target");
+    const auto ramped = dynsyslab::workflow::resolveControlTarget(dynsyslab::core::json::parse(
+        R"({"kind":"constant","state":[1.5,0],"ramp":{"duration":2,"from":[1,0]}})"), 2);
+    close(ramped(0.0)[0], 1.0, 1.0e-14, "ramp start");
+    close(ramped(1.0)[0], 1.25, 1.0e-14, "ramp midpoint");
+    close(ramped(1.0)[1], 0.5 * 30.0 * 0.0625 / 2.0, 1.0e-14, "ramp velocity is the exact derivative");
+    close(ramped(3.0)[0], 1.5, 1.0e-14, "ramp end");
+    // Waveform ramp: the velocity stays the derivative of the ramped position.
+    const auto wave = dynsyslab::workflow::resolveControlTarget(dynsyslab::core::json::parse(
+        R"({"kind":"waveform","offset":[1.5,0],"amplitudes":[0.4],"angular_frequencies":[1.9],
+            "phases_rad":[0],"ramp":{"duration":10,"from":[1,0]}})"), 2);
+    const double t = 3.7, h = 1.0e-5;
+    close(wave(t)[1], (wave(t + h)[0] - wave(t - h)[0]) / (2 * h), 1.0e-7, "ramped waveform velocity");
+    bool rejected = false;
+    try { (void)dynsyslab::workflow::resolveControlTarget(dynsyslab::core::json::parse(
+        R"({"kind":"constant","state":[1,0],"ramp":{"duration":0,"from":[1,0]}})"), 2); }
+    catch (const std::invalid_argument&) { rejected = true; }
+    require(rejected, "zero-length ramp accepted");
+}
+
+void testControlCapToggle() {
+    using dynsyslab::workflow::controlCap;
+    const auto parse = [](const char* text) { return dynsyslab::core::json::parse(text); };
+    require(!controlCap(parse("null")) && !controlCap(parse("false")), "null/false must leave the controller uncapped");
+    const auto symmetric = controlCap(parse("0.5"));
+    require(symmetric && symmetric->first == -0.5 && symmetric->second == 0.5, "scalar cap");
+    const auto interval = controlCap(parse("[-1.2,0.3]"));
+    require(interval && interval->first == -1.2 && interval->second == 0.3, "asymmetric cap");
+    for (const char* bad : {"0", "-1", "[1,0]", "[1,2,3]", "true"}) {
+        bool rejected = false;
+        try { (void)controlCap(parse(bad)); } catch (const std::invalid_argument&) { rejected = true; }
+        require(rejected, "invalid control_limit accepted");
+    }
+    // The cap applies to classical controllers too, and is absent unless asked for.
+    const auto system = rpe();
+    const double state[]{5.0, -5.0};
+    const auto uncapped = controller(R"({
+      "kind":"lqr","settings":{"A":[0,1,-1,-1],"B":[0,1],"Q":100,"R":0.01},
+      "target":{"kind":"constant","state":[0,0]}})", *system);
+    const auto capped = controller(R"({
+      "kind":"lqr","settings":{"A":[0,1,-1,-1],"B":[0,1],"Q":100,"R":0.01,"control_limit":[-0.25,0.1]},
+      "target":{"kind":"constant","state":[0,0]}})", *system);
+    const double free = uncapped.policy.value(0, 0.0, state), clipped = capped.policy.value(0, 0.0, state);
+    require(std::abs(free) > 0.25, "test state does not exercise the cap");
+    require(clipped == (free > 0 ? 0.1 : -0.25), "classical LQR cap not applied");
+}
+
 }  // namespace
 
 int main() {
@@ -144,6 +201,8 @@ int main() {
         testWaveformTarget();
         testTrajectoryTarget();
         testExplicitClassicalLqrMatrices();
+        testTargetRampToggle();
+        testControlCapToggle();
         std::cout << "dynsyslab_control_factory_tests: PASS\n";
         return 0;
     } catch (const std::exception& error) {

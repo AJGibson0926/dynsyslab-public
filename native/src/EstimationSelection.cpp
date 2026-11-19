@@ -5,6 +5,20 @@
 #include <cmath>
 #include <stdexcept>
 namespace dynsyslab::core {
+namespace {
+// G = C Psi at every sample. Same product as reconstructObservable, kept local
+// so the feedback module does not link the reconstruction fitters.
+std::vector<std::complex<double>> evaluateReconstruction(const ReconstructionResult& r,
+    const std::vector<std::complex<double>>& psi,std::size_t samples) {
+    if(!samples||r.matrix.size()!=r.outputs*r.modes||psi.size()!=samples*r.modes)
+        throw std::invalid_argument("observable reconstruction shape mismatch");
+    std::vector<std::complex<double>> coefficients(r.modes*r.outputs);
+    for(std::size_t mode=0;mode<r.modes;++mode)
+        for(std::size_t output=0;output<r.outputs;++output)
+            coefficients[mode*r.outputs+output]=r.matrix[output*r.modes+mode];
+    return numerics::multiply(psi,samples,r.modes,coefficients,r.outputs);
+}
+}  // namespace
 EstimationSubsetAssessment assessEstimationSubset(const KoopmanModel& model,
     const std::vector<double>& time,const std::vector<std::complex<double>>& psi,
     const std::vector<double>& x,const std::vector<double>& y,const EstimationSelectionOptions& o) {
@@ -40,7 +54,7 @@ EstimationSubsetAssessment assessEstimationSubset(const KoopmanModel& model,
         Cx[row*n+col]*=splitScales[col]/o.outputScales[row];
     for(std::size_t row=0;row<ry.outputs;++row)for(std::size_t col=0;col<n;++col)
         Cy[row*n+col]*=splitScales[col]/o.measurementStandardDeviation;
-    const auto predictedX=reconstructObservable(rx,psi,N),predictedY=reconstructObservable(ry,psi,N);
+    const auto predictedX=evaluateReconstruction(rx,psi,N),predictedY=evaluateReconstruction(ry,psi,N);
     double yEnergy=0;
     for(std::size_t k=0;k<N;++k) {
         for(std::size_t row=0;row<rx.outputs;++row)

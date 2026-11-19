@@ -1,4 +1,5 @@
 #include "dynsyslab_viewer/NativePayload.hpp"
+#include "dynsyslab_viewer/PlotPresentation.hpp"
 
 #include <dynsyslab/core/Archive.hpp>
 
@@ -35,8 +36,29 @@ void highDimensionalTrajectoryViews(){const auto path=std::filesystem::temp_dire
 void automaticDetailInset(){dsl::Figure transient{"time","control","time","control",false};
     dsl::Trace trace;trace.label="u";for(int index=0;index<1000;++index){trace.x.push_back(index*.01);
         trace.y.push_back(index<5?1000.0:std::sin(index*.03));}transient.traces.push_back(trace);
+    // A short start-up spike: the inset zooms onto the spike at full scale and the
+    // main panel keeps the meaningful range, so neither panel is flat.
     const auto inset=dsl::automaticDetailInset(transient);require(inset&&inset->automatic
-        &&inset->yMax<5.0&&inset->yMin>-5.0,"native automatic transient inset");
+        &&inset->transientWindow&&inset->xMin<=0.0&&inset->xMax<1.0&&inset->yMax>=1000.0
+        &&inset->mainYMax<5.0&&inset->mainYMin>-5.0,"native automatic transient inset");
+    require(inset->symmetricLog,"a spike decades above the settled level uses a symmetric-log inset");
+    // The episode includes the settling after the spike: a second trace rings until x ~ 1.
+    dsl::Figure ringing=transient;dsl::Trace reference;reference.label="exact";
+    for(int index=0;index<1000;++index){reference.x.push_back(index*.01);reference.y.push_back(std::sin(index*.03));
+        if(index>=5&&index<100)ringing.traces[0].y[index]+=0.8*std::sin(index*0.9);}
+    ringing.traces.push_back(reference);
+    const auto episode=dsl::automaticDetailInset(ringing);
+    require(episode&&episode->transientWindow&&episode->xMax>0.9&&episode->xMax<2.5,
+        "the inset window covers the ringing that follows the spike");
+    const auto mainLimits=dsl::automaticAxisLimits(transient);
+    require(mainLimits.yMax<5.0&&mainLimits.yMin>-5.0&&mainLimits.xMax>9.0,
+        "main panel keeps the meaningful range when a transient moves to the inset");
+    // Recurring bursts across the record stay on the main panel; the inset keeps the robust range.
+    dsl::Figure bursts=transient;for(std::size_t index=0;index<bursts.traces[0].y.size();++index)
+        bursts.traces[0].y[index]=index%400<2?1000.0:std::sin(index*.03);
+    const auto recurring=dsl::automaticDetailInset(bursts);require(recurring&&!recurring->transientWindow
+        &&recurring->yMax<5.0&&recurring->yMin>-5.0&&dsl::automaticAxisLimits(bursts).yMax>=1000.0,
+        "recurring bursts keep the full-range main panel");
     dsl::Figure ordinary=transient;for(std::size_t index=0;index<ordinary.traces[0].y.size();++index)
         ordinary.traces[0].y[index]=std::sin(index*.03);require(!dsl::automaticDetailInset(ordinary),
         "ordinary signal should not get an inset");ordinary.kind="phase";ordinary.traces.push_back(trace);

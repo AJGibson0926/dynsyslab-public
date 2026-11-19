@@ -55,7 +55,7 @@ bool PlotCanvas::zoomPlotAt(POINT point, int wheelDelta, bool reset) {
         const double steps = static_cast<double>(wheelDelta) / WHEEL_DELTA;
         auto t = hit.transform;
         if (reset) {
-            if (kind == "three_d") cameras3D_[i] = {};
+            if (kind == "three_d") cameras3D_[i] = Plot3DCameraState::initialFor(payload_->figures[i]);
             else axisLimits_.erase(i);
         } else if (kind == "three_d") {
             Plot3DCamera camera(cameras3D_[i]);

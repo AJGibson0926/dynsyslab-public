@@ -1,0 +1,17 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "rpe-echo-linear-systems / joint hdmd top-40 modes",
+  "sources": ["archives/derived/koopman-hankel-dmd/rpe-viscous-echo-long-training-five-ics-trajectory-0__20~d913261ed379~2Z__koopman-hankel-dmd__20261114T075655Z.npz"],
+  "methods": [{"name": "linear_systems", "enabled": true, "settings": {
+    "selected_modes": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39],
+    "measurements": ["far_field_acoustic_echo"],
+    "balancing_input": "process_noise",
+    "reduction_order": 9,
+    "reduction_method": "truncation",
+    "stability_margin": 1.0e-6,
+    "structure_tolerance": 1.0e-7,
+    "frequency_points": 400
+  }}],
+  "archive": {"enabled": true}
+}

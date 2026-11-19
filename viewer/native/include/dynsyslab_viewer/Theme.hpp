@@ -40,7 +40,7 @@ struct Fonts {
     HFONT caption = nullptr;
     HFONT mono = nullptr;
 
-    Fonts();
+    explicit Fonts(double scale = 1.0);
     ~Fonts();
     Fonts(const Fonts&) = delete;
     Fonts& operator=(const Fonts&) = delete;

@@ -6,6 +6,9 @@ struct ValueScale {
     ValueScaleKind kind = ValueScaleKind::linear;
     double linearThreshold = 1;
     std::string reason;
+    // Symmetric log only: plotted height of one decade beyond the linear core,
+    // relative to the core half-height (1 = standard symlog).
+    double decadeWeight = 1;
     double forward(double value) const;
     double inverse(double value) const;
     std::string name() const;

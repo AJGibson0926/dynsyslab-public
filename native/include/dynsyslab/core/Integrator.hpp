@@ -23,6 +23,11 @@ struct IntegrationOptions {
     double absoluteTolerance{1.0e-9};
     std::size_t maximumInternalSteps{10000000};
     IntegrationMethod method{IntegrationMethod::dormandPrince45};
+    // On an integration failure of one trajectory (left the validity domain, step
+    // underflow, a controller error) keep the samples computed so far, fill the rest with
+    // NaN, record the reason and continue with the next trajectory. Cancellation still
+    // propagates. Default: the failure aborts the whole solve.
+    bool truncateOnFailure{false};
 };
 
 struct IntegrationProgress {
@@ -63,6 +68,10 @@ struct NativeSolution {
     std::size_t stateDimension{};
     IntegrationStatistics statistics;
     std::string coordinateSystem;
+    // Per trajectory: samples actually computed (sampleCount unless truncated on failure)
+    // and the failure that ended it (empty when complete).
+    std::vector<std::size_t> completedSamples;
+    std::vector<std::string> terminationReasons;
 
     [[nodiscard]] const double* state(std::size_t trajectory, std::size_t sample) const;
     [[nodiscard]] double control(std::size_t trajectory, std::size_t sample) const;

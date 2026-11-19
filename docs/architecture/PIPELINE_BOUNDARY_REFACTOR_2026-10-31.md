@@ -76,7 +76,7 @@ public services within the existing foundation build module.
 | `dynsyslab_history_koopman` | Pooled Hankel/EDMD fitting and retained history input regression |
 | `dynsyslab_spectral` | DMD, DMDc and EDMDc identification |
 | `dynsyslab_koopman` | Runtime ROM, validation, input/output maps, archive binding and inspection |
-| `dynsyslab_control` / `dynsyslab_estimation` | Runtime feedback/observer services; no fit or candidate-screening dependency |
+| `dynsyslab_control` | Runtime feedback and observer services (KLQR, classical control, KLQE; `dynsyslab_estimation` was merged into it on 2026-11-15); no fit or candidate-screening dependency |
 | `dynsyslab_workflow` | Typed service composition, jobs and immutable publication |
 
 `dynsyslab_core` remains the umbrella target for existing clients. Deployment

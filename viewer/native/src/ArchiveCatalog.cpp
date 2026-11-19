@@ -1,5 +1,6 @@
 #include "ArchiveCatalog.hpp"
 #include "HierarchyCatalog.hpp"
+#include "ModeWeightPayload.hpp"
 
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/Json.hpp>
@@ -207,7 +208,21 @@ void enrichArchiveCatalogItem(CatalogItem& item,
                 || legacyKrom || scatteredKrom)
             && (archive.contains("discrete_eigenvalues") || archive.contains("eigenvalues")
                 || metadata.at("delta_t").number()>0.0);
-        if(method=="sindy-dynamics") {
+        if(method=="linear-systems"
+            || metadata.at("schema").string()=="dynsyslab.linear-systems/v1") {
+            if(item.parentId.empty())item.category="Linear systems";
+            item.kind="linear_systems";
+            item.subtitle="Classical LTI analysis: gramians, balanced truncation, norms, transfer functions, loop margins";
+            item.views.clear();
+            for(const char* view:{"hankel_spectrum","gramian_spectrum","frequency_response","pole_zero"})
+                appendUnique(item.views,view);
+            if(archive.contains("bode_magnitude_db"))appendUnique(item.views,"bode");
+            if(std::any_of(archive.arrays.begin(),archive.arrays.end(),[](const std::string& a){return a.rfind("loop__",0)==0;}))
+                for(const char* view:{"nyquist","loop_bode","sensitivity"})appendUnique(item.views,view);
+            item.properties["time domain"]=metadata.at("time_domain").string();
+            item.properties["reduced order"]=std::to_string(static_cast<std::size_t>(
+                metadata.at("reduction").at("order").number()));
+        } else if(method=="sindy-dynamics") {
             if(item.parentId.empty())item.category="Post-processing";
             item.kind="sindy_dynamics";item.subtitle="Identified autonomous vector field";
             item.views.clear();appendUnique(item.views,"sindy_dynamics");appendUnique(item.views,"sindy_dynamics_transient");
@@ -233,12 +248,14 @@ void enrichArchiveCatalogItem(CatalogItem& item,
                 "data_overview"), item.views.end());
             if (dashboardReady) prependUnique(item.views,"krom_dashboard");
             appendUnique(item.views,"koopman_spectrum");
+            if (hasModeWeights(archive)) appendUnique(item.views,"mode_weights");
         } else if (spectrumMethod(method) || archive.contains("continuous_eigenvalues")
                    || archive.contains("eigenvalues")) {
             if (item.parentId.empty()) item.category="Koopman spectra";
             item.kind="koopman_spectrum";
             item.subtitle="Koopman spectral result (not a control-ready KROM)";
             item.views.clear(); appendUnique(item.views,"koopman_spectrum");
+            if (hasModeWeights(archive)) appendUnique(item.views,"mode_weights");
             if(method=="dmdc"||method=="edmdc") {
                 item.subtitle=method=="edmdc"?"Polynomial EDMDc input/output model (not a control-ready KROM)"
                     :"DMDc input/output model (not a control-ready KROM)";
@@ -306,6 +323,9 @@ void enrichArchiveCatalogItem(CatalogItem& item,
             appendUnique(item.views, "observable_time");
             if (observableDimension == 2) appendUnique(item.views, "observable_heatmap");
         }
+        if (archive.contains("measurement_values") && archive.contains("measurement_estimate")
+            && archive.contains("estimator_time"))
+            appendUnique(item.views, "estimator");
         if (archive.contains("lattice_initial") && archive.contains("lattice_final"))
             appendUnique(item.views, "lattice");
         relation(item,metadata.at("source_archive").string(),

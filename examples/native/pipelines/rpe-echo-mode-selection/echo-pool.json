@@ -1,0 +1,72 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "pipeline",
+  "label": "rpe-echo-mode-selection",
+  "description": "Eigenfunction subset selection for echo-only KLQE -> KLQR (docs/architecture/MODE_SELECTION.md). Pool: the stable echo H-DMD pairs ('pool_pairs') of the noisy-echo (e, e') record, each refitted as a polynomial psi(e, e') by SINDy with gamma from the measured (numerically differentiated) coordinates. Selection: every subset of up to 'max_units' of the 'pool_size' units that explain the most echo, scored on echo readout error, predicted echo-only KLQE state error, constant B_psi regression residual and drive-to-state reach; the best Pareto subset is written as a ready K-ROM (readouts far_field_acoustic_echo and state, map 'constant'). e' enters only offline: the coordinate records and psi' (see the archive's e_dot_entry_points).",
+  "parameters": {
+    "echo_hdmd": "archives/derived/koopman-hankel-dmd/rpe-echo-jet-klqr-rediscovery-20kpa-train__20261115T0016~a3450045500e~3Z__koopman-hankel-dmd__20261115T062915Z.npz",
+    "unforced_coordinates": "archives/derived/coordinate-transform/rpe-echo-jet-klqr-rediscovery-20kpa-train__20261115T001627Z__coordinate-transform__20261115T062913Z.npz",
+    "pool_pairs": 12,
+    "sindy_degree": 3,
+    "pool_size": 10,
+    "max_units": 4,
+    "sensor_noise": 0.01
+  },
+  "stages": [
+    {
+      "id": "pool_spectrum",
+      "job": {
+        "kind": "postprocess",
+        "label": "rpe-echo-mode-selection / pool spectrum",
+        "sources": ["${params.echo_hdmd}"],
+        "methods": [{"name": "krom_extract", "settings": {"mode_selection": {"rule": "oscillatory_pairs", "count": "${params.pool_pairs}", "max_real_part": 0}}}],
+        "archive": {"enabled": true}
+      }
+    },
+    {
+      "id": "pool_sindy",
+      "job": {
+        "kind": "postprocess",
+        "label": "rpe-echo-mode-selection / pool psi(e, e')",
+        "sources": ["${params.unforced_coordinates}"],
+        "methods": [{"name": "sindy", "settings": {
+          "spectrum_archive": "${pool_spectrum.archive}",
+          "input_space": "coordinates",
+          "polynomial_degree": "${params.sindy_degree}",
+          "include_constant": false,
+          "threshold": 1e-06,
+          "max_iterations": 1,
+          "normalize": true,
+          "reuse_conjugate_fits": true,
+          "compute_training_values": false,
+          "gamma_method": "measured",
+          "include_input_terms": false,
+          "reconstruction": "none"
+        }}],
+        "archive": {"enabled": true}
+      }
+    },
+    {
+      "id": "selection",
+      "job": {
+        "kind": "postprocess",
+        "label": "rpe-echo-mode-selection / selection",
+        "sources": [
+          "${params.unforced_coordinates}",
+          "archives/derived/coordinate-transform/rpe-forced-bpsi-a005p05__20261114T033755Z__coordinate-transform__20261115T062920Z.npz",
+          "archives/derived/coordinate-transform/rpe-forced-bpsi-a02p05__20261114T033755Z__coordinate-transform__20261115T062922Z.npz",
+          "archives/derived/coordinate-transform/rpe-forced-bpsi-a02p2__20261114T033756Z__coordinate-transform__20261115T062924Z.npz"
+        ],
+        "methods": [{"name": "mode_selection", "settings": {
+          "krom": "${pool_sindy.archive}",
+          "measurement": "far_field_acoustic_echo",
+          "pool_size": "${params.pool_size}",
+          "max_units": "${params.max_units}",
+          "sensor_noise": "${params.sensor_noise}",
+          "write_krom": true
+        }}],
+        "archive": {"enabled": true}
+      }
+    }
+  ]
+}

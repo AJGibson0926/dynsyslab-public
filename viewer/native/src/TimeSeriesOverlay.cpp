@@ -1,8 +1,11 @@
 #include "dynsyslab_viewer/TimeSeriesOverlay.hpp"
 #include <dynsyslab/core/Archive.hpp>
+#include <dynsyslab/core/TimeSeries.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
+#include <set>
 #include <stdexcept>
 
 namespace dsl {
@@ -29,19 +32,25 @@ Trace timeTrace(const TimeSeriesCurve& curve,const std::vector<double>& t,const 
                 std::size_t firstRow,std::size_t width,std::size_t component,const std::vector<Range>& bins) {
     Trace trace;
     trace.label=curve.label.empty()?curve.key:curve.label;
-    trace.color=curve.color; trace.lineStyle=curve.lineStyle;
+    trace.color=component<curve.componentColors.size()?curve.componentColors[component]:curve.color;
+    trace.lineStyle=curve.lineStyle;
     trace.lineWidthPoints=curve.lineWidthPoints;
     const auto value=[&](std::size_t i){return data[(i+firstRow)*width+component];};
-    const auto append=[&](std::size_t i){trace.x.push_back(t[i]); trace.y.push_back(value(i));};
+    // Nonfinite samples (e.g. after a run was truncated on failure) are not drawn.
+    const auto append=[&](std::size_t i){
+        if (!std::isfinite(value(i))) return;
+        trace.x.push_back(t[i]); trace.y.push_back(value(i));
+    };
     if (bins.empty()) {
         trace.x.reserve(t.size()); trace.y.reserve(t.size());
         for (std::size_t i=0;i<t.size();++i) append(i);
     } else {
         for (const auto& [first,last]:bins) {
             auto low=first,high=first;
-            for (auto i=first+1;i<last;++i) {
-                if (value(i)<value(low)) low=i;
-                if (value(i)>value(high)) high=i;
+            for (auto i=first;i<last;++i) {
+                if (!std::isfinite(value(i))) continue;
+                if (!std::isfinite(value(low)) || value(i)<value(low)) low=i;
+                if (!std::isfinite(value(high)) || value(i)>value(high)) high=i;
             }
             std::array<std::size_t,4> keep{first,low,high,last-1};
             std::sort(keep.begin(),keep.end());
@@ -51,6 +60,33 @@ Trace timeTrace(const TimeSeriesCurve& curve,const std::vector<double>& t,const 
     }
     return trace;
 }
+}
+
+// Stems: (t, base) -> (t, y) segments separated by NaN breaks, plus a tip-marker trace.
+std::pair<Trace,Trace> stemTraces(const TimeSeriesCurve& curve,const std::vector<double>& t,const std::vector<double>& data,
+                                  std::size_t firstRow,std::size_t width,std::size_t component,double base) {
+    Trace stems=timeTrace(curve,{},{},0,1,0,{});
+    stems.lineStyle="solid"; stems.x.clear(); stems.y.clear();
+    if (!(curve.lineWidthPoints>0.)) stems.lineWidthPoints=0.75;  // thin stems, as in a classic stem plot
+    Trace tips=stems; tips.label.clear(); tips.marker=true; tips.lineStyle="none"; tips.markerShape="open-circle";
+    const auto value=[&](std::size_t i){return data[(i+firstRow)*width+component];};
+    const double gap=std::numeric_limits<double>::quiet_NaN();
+    for (std::size_t i=0;i<t.size();++i) {
+        const double y=value(i);
+        if (!std::isfinite(y)) continue;
+        stems.x.insert(stems.x.end(),{t[i],t[i],gap}); stems.y.insert(stems.y.end(),{base,y,gap});
+        tips.x.push_back(t[i]); tips.y.push_back(y);
+    }
+    return {std::move(stems),std::move(tips)};
+}
+
+// Thin dark baseline under a stem panel, spanning the stems' abscissa range.
+Trace stemBaseline(const std::vector<double>& t,double base) {
+    Trace line; line.color="#3A3F4A"; line.lineStyle="solid"; line.lineWidthPoints=0.75;
+    if (t.empty()) return line;
+    const double pad=t.size()>1?0.5*(t.back()-t.front())/double(t.size()-1):0.5;
+    line.x={t.front()-pad,t.back()+pad}; line.y={base,base};
+    return line;
 }
 
 Payload timeSeriesOverlay(const std::filesystem::path& source,const TimeSeriesOverlay& req,std::size_t horizontalBins) {
@@ -70,8 +106,28 @@ Payload timeSeriesOverlay(const std::filesystem::path& source,const TimeSeriesOv
     const auto bins=timeBins(t,horizontalBins);
     Payload result;
     result.source=std::filesystem::absolute(source).u8string(); result.view="time"; result.tileName=req.title;
+    // One stem baseline for the whole figure: given, 0, or (log axis) a decade below the
+    // smallest positive sample of any stem curve in the window.
+    double stemBase=req.stemBaseline.value_or(0.0);
+    if (!req.stemBaseline && req.logBaseline) {
+        double low=std::numeric_limits<double>::infinity();
+        const auto row0=static_cast<std::size_t>(first-times.begin());
+        for (const auto& curve:req.curves) {
+            if (curve.lineStyle!="stem" || !record.contains(curve.key)) continue;
+            const auto& a=record.at(curve.key);
+            const std::size_t w=a.shape.size()==2?a.shape[1]:1;
+            const auto v=a.doubles();
+            for (std::size_t i=row0*w;i<(row0+t.size())*w && i<v.size();++i) if (std::isfinite(v[i]) && v[i]>0) low=std::min(low,v[i]);
+        }
+        stemBase=std::isfinite(low)?std::pow(10.0,std::floor(std::log10(low))-1.0):1.0;
+    }
+    std::set<std::size_t> baselined;  // panels that already carry a stem baseline
     for (const auto& curve:req.curves) {
-        const auto& array=record.at(curve.key);
+        const auto comma=curve.key.find(',');
+        const bool phase=comma!=std::string::npos;
+        const std::string xKey=phase?curve.key.substr(0,comma):std::string{};
+        const std::string yKey=phase?curve.key.substr(comma+1):curve.key;
+        const auto& array=record.at(yKey);
         if (array.shape.empty() || array.shape.size()>2 || array.shape[0]!=times.size())
             throw std::invalid_argument("Expected an N or N-by-C series on the time grid: "+curve.key);
         const auto width=array.shape.size()==2?array.shape[1]:1;
@@ -79,20 +135,73 @@ Payload timeSeriesOverlay(const std::filesystem::path& source,const TimeSeriesOv
             (!result.figures.empty() && result.figures.size()!=width))
             throw std::invalid_argument("Component count mismatch: "+curve.key);
         const auto values=array.doubles();
-        if (!std::all_of(values.begin(),values.end(),[](double y){return std::isfinite(y);}))
-            throw std::invalid_argument("Nonfinite series: "+curve.key);
+        if (std::none_of(values.begin(),values.end(),[](double y){return std::isfinite(y);}))
+            throw std::invalid_argument("Series has no finite samples: "+curve.key);
         if (result.figures.empty()) {
             for (std::size_t j=0;j<width;++j) {
                 Figure panel;
                 panel.kind="time"; panel.valueScale="linear"; panel.xLabel=req.timeLabel;
+                panel.integerXTicks=req.integerTicks;
                 panel.yLabel=req.componentLabels.empty()?"Component "+std::to_string(j+1):req.componentLabels[j];
                 panel.title=req.title.empty()?panel.yLabel:req.title+" | "+panel.yLabel;
-                panel.gridSpan=2; panel.dashboardPage=static_cast<int>(j/2);
+                if (!req.valueLabel.empty()) panel.yLabel=req.valueLabel;
+                if (req.columns>=2) {
+                    panel.gridSpan=1; panel.dashboardPage=static_cast<int>(j/(req.columns*req.columns));
+                } else { panel.gridSpan=2; panel.dashboardPage=static_cast<int>(j/2); }
                 result.figures.push_back(std::move(panel));
             }
         }
-        for (std::size_t j=0;j<width;++j)
-            result.figures[j].traces.push_back(timeTrace(curve,t,values,first-times.begin(),width,j,bins));
+        std::vector<double> xValues;
+        if (phase) {
+            const auto& xArray=record.at(xKey);
+            if (xArray.shape!=array.shape) throw std::invalid_argument("Phase abscissa shape differs from ordinate: "+xKey);
+            xValues=xArray.doubles();
+        }
+        if (req.spectrum) {
+            if (phase) throw std::invalid_argument("Spectra apply to time curves, not phase curves: "+curve.key);
+            const auto row0=static_cast<std::size_t>(first-times.begin());
+            for (std::size_t j=0;j<width;++j) {
+                std::vector<double> column(t.size());
+                for (std::size_t i=0;i<t.size();++i) column[i]=values[(i+row0)*width+j];
+                if (!std::all_of(column.begin(),column.end(),[](double v){return std::isfinite(v);}))
+                    throw std::invalid_argument("Spectra need finite samples in the window: "+curve.key);
+                const dynsyslab::core::TimeSeries series(t,std::move(column),1);
+                if (!series.uniformTimeSteps()) throw std::invalid_argument("Spectra need a uniform clock: "+curve.key);
+                dynsyslab::core::FourierOptions options;
+                options.oneSided=true; options.removeMean=true; options.window=dynsyslab::core::FourierWindow::hann;
+                const auto transform=series.fourier().transform(options);
+                std::vector<double> frequency,amplitude;
+                for (std::size_t bin=1;bin<transform->binCount;++bin) {
+                    frequency.push_back(transform->frequencies[bin]*req.frequencyScale);
+                    amplitude.push_back(transform->amplitude(bin,0));
+                }
+                auto& panel=result.figures[j];
+                panel.kind="fourier";
+                panel.traces.push_back(timeTrace(curve,frequency,amplitude,0,1,0,timeBins(frequency,horizontalBins)));
+            }
+            continue;
+        }
+        for (std::size_t j=0;j<width;++j) {
+            if (!phase && curve.lineStyle=="stem") {
+                auto [stems,tips]=stemTraces(curve,t,values,first-times.begin(),width,j,stemBase);
+                auto& traces=result.figures[j].traces;
+                if (!req.logBaseline && baselined.insert(j).second) traces.push_back(stemBaseline(t,stemBase));
+                traces.push_back(std::move(stems)); traces.push_back(std::move(tips));
+                continue;
+            }
+            if (!phase) { result.figures[j].traces.push_back(timeTrace(curve,t,values,first-times.begin(),width,j,bins)); continue; }
+            // Phase curve: every vertex in the window (no time binning; the abscissa is not monotone).
+            const auto row0=static_cast<std::size_t>(first-times.begin());
+            Trace trace=timeTrace(curve,{},{},0,1,0,{});  // style only; points below
+            trace.x.clear(); trace.y.clear();
+            for (std::size_t i=0;i<t.size();++i) {
+                const double x=xValues[(i+row0)*width+j], y=values[(i+row0)*width+j];
+                if (std::isfinite(x) && std::isfinite(y)) { trace.x.push_back(x); trace.y.push_back(y); }
+            }
+            auto& panel=result.figures[j];
+            panel.kind="phase"; panel.xLabel=req.xLabel.empty()?xKey:req.xLabel;
+            panel.traces.push_back(std::move(trace));
+        }
     }
     return result;
 }

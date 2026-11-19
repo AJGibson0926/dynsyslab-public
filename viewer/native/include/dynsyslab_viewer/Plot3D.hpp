@@ -36,9 +36,24 @@ struct Plot3DCameraState {
     double panX = 0.0;
     double panY = 0.0;
     Plot3DProjection projection = Plot3DProjection::perspective;
+    bool boxAxes = false;  // independent per-axis scaling (stem plots)
 
     bool operator==(const Plot3DCameraState& other) const;
     bool operator!=(const Plot3DCameraState& other) const { return !(*this == other); }
+
+    // Camera a figure opens with (and resets to); defaults unless it sets one.
+    template <class FigureT>
+    static Plot3DCameraState initialFor(const FigureT& figure) {
+        Plot3DCameraState state;
+        if (figure.cameraAzimuthDegrees) state.azimuthDegrees = *figure.cameraAzimuthDegrees;
+        if (figure.cameraElevationDegrees) state.elevationDegrees = *figure.cameraElevationDegrees;
+        state.boxAxes = figure.boxAxes3D;
+        if (state.boxAxes) {  // a full cube must fit the panel; no perspective distortion of heights
+            state.zoom = 0.7;
+            state.projection = Plot3DProjection::orthographic;
+        }
+        return state;
+    }
 };
 
 struct Plot3DProjectedPoint {
@@ -107,6 +122,21 @@ private:
     Plot3DCameraState state_{};
     void normalize();
 };
+
+// Height (z) scale of box-axis 3-D figures (stem plots), chosen by the figure's
+// valueScale: "linear", "log"/"symlog" (logarithmic heights), or "auto" (log when the
+// positive heights span at least three decades). Stems start at zero, so on a log
+// axis every height at or below the floor (at most six decades under the tallest)
+// is drawn at the floor. Trajectory 3-D figures always stay linear.
+struct Plot3DHeightScale {
+    bool logarithmic = false;
+    double floorExponent = 0.0;          // log10 of the floor value
+    [[nodiscard]] double forward(double z) const;
+    [[nodiscard]] double inverse(double z) const;
+};
+[[nodiscard]] Plot3DHeightScale plot3DHeightScale(const Figure& figure);
+// Copy of the figure with z mapped through its height scale (identity when linear).
+[[nodiscard]] Figure plot3DDisplayFigure(const Figure& figure);
 
 [[nodiscard]] Plot3DBounds plot3DBounds(const Figure& figure);
 [[nodiscard]] std::optional<Plot3DProbe> nearestPlot3DProbe(

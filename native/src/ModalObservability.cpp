@@ -1,6 +1,8 @@
 #include <dynsyslab/core/ModalObservability.hpp>
 #include <dynsyslab/core/KoopmanModel.hpp>
 #include <dynsyslab/numerics/MatrixFunctions.hpp>
+#include <dynsyslab/numerics/Svd.hpp>
+#include <dynsyslab/core/Reconstruction.hpp>
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -66,5 +68,28 @@ ModalObservabilityResult analyzeModalObservability(const KoopmanModel& model,
     result.rankTolerance=options.relativeTolerance*double(n)*result.singularValues.front();
     for(double s:result.singularValues)if(s>result.rankTolerance)++result.rank;
     return result;
+}
+ModalObservabilityMatrix modalObservabilityMatrix(const KoopmanModel& model,const std::string& measurement,
+    double dt,std::size_t blocks,const std::vector<std::size_t>& rows) {
+    const auto& map=model.reconstruction(measurement);
+    const std::size_t n=model.continuousEigenvalues().size();
+    if(!n||map.matrix.size()!=map.outputs*n)throw std::invalid_argument("modal observability: readout does not match the modes");
+    std::vector<std::size_t> selected=rows;
+    if(selected.empty())for(std::size_t y=0;y<map.outputs;++y)selected.push_back(y);
+    for(auto y:selected)if(y>=map.outputs)throw std::invalid_argument("modal observability: output row out of range");
+    ModalObservabilityMatrix r;
+    r.modes=n;r.outputs=selected.size();r.blocks=blocks?blocks:n;
+    r.multipliers=model.discreteEigenvalues(dt);
+    r.sampleTime=dt>0?dt:model.spectrum().sampleInterval();
+    r.matrix.assign(r.blocks*r.outputs*n,Complex{});
+    std::vector<Complex> power(n,Complex(1.0,0.0));
+    for(std::size_t k=0;k<r.blocks;++k) {
+        for(std::size_t y=0;y<r.outputs;++y)for(std::size_t j=0;j<n;++j)
+            r.matrix[(k*r.outputs+y)*n+j]=map.matrix[selected[y]*n+j]*power[j];
+        for(std::size_t j=0;j<n;++j)power[j]*=r.multipliers[j];
+    }
+    const auto svd=numerics::complexSingularValueDecomposition(r.matrix,r.blocks*r.outputs,n);
+    r.singularValues=svd.singularValues;r.directions=svd.right;
+    return r;
 }
 } // namespace dynsyslab::core

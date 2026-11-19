@@ -51,6 +51,11 @@ AxisLimits automaticAxisLimits(const Figure& figure) {
     }
     const bool padding = !std::any_of(figure.traces.begin(),figure.traces.end(),[](const auto& t) { return t.heatmap; });
     xr.normalize(padding); yr.normalize(padding);
+    // A short off-scale burst moves to the automatic detail inset; the main panel then
+    // keeps the meaningful ordinate range (see automaticDetailInset).
+    if (!figure.inset && scale.kind == ValueScaleKind::linear)
+        if (const auto detail = automaticDetailInset(figure); detail && detail->transientWindow)
+            return {xr.low, xr.high, detail->mainYMin, detail->mainYMax};
     return {xr.low, xr.high, scale.inverse(yr.low), scale.inverse(yr.high)};
 }
 

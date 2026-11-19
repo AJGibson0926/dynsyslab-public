@@ -242,6 +242,23 @@ std::vector<std::complex<double>> KoopmanModel::exactControlMap(const double* st
     return result;
 }
 
+std::vector<std::complex<double>> KoopmanModel::controlMapFromCoordinateSensitivity(
+    const double* coordinates, const std::vector<double>& sensitivity) const {
+    if (!polynomial_)
+        throw std::logic_error("coordinate-sensitivity control maps need polynomial eigenfunctions");
+    const std::size_t inputs = inputDimension(), dimension = coordinateDimension();
+    if (sensitivity.size() != dimension * inputs)
+        throw std::invalid_argument("coordinate sensitivity must be coordinates x inputs");
+    std::vector<std::complex<double>> result(liftedDimension() * inputs);
+    for (std::size_t mode = 0; mode < liftedDimension(); ++mode) {
+        const auto gradient = polynomial_->gradient(mode, coordinates);
+        for (std::size_t input = 0; input < inputs; ++input)
+            for (std::size_t c = 0; c < dimension; ++c)
+                result[mode * inputs + input] += gradient[c] * sensitivity[c * inputs + input];
+    }
+    return result;
+}
+
 std::vector<std::complex<double>> KoopmanModel::controlMap(
     const double* state, const std::string& representation) const {
     if (representation == "exact") return exactControlMap(state);
@@ -317,7 +334,8 @@ void KoopmanModel::setReconstruction(std::string observable,
                                      ReconstructionResult reconstruction) {
     if (observable.empty() || !reconstruction.outputs
         || reconstruction.modes!=liftedDimension()
-        || reconstruction.matrix.size()!=reconstruction.outputs*liftedDimension())
+        || reconstruction.matrix.size()!=reconstruction.outputs*liftedDimension()
+        || (!reconstruction.offset.empty()&&reconstruction.offset.size()!=reconstruction.outputs))
         throw std::invalid_argument("observable reconstruction dimensions do not match KROM");
     reconstructions_[std::move(observable)]=std::move(reconstruction);
 }
@@ -334,9 +352,11 @@ std::vector<std::complex<double>> KoopmanModel::reconstruct(
         || mapping.matrix.size()!=mapping.outputs*mapping.modes)
         throw std::runtime_error("stored observable reconstruction does not match KROM");
     std::vector<std::complex<double>> result(mapping.outputs);
-    for(std::size_t output=0;output<mapping.outputs;++output)
+    for(std::size_t output=0;output<mapping.outputs;++output) {
+        if(!mapping.offset.empty())result[output]=mapping.offset[output];
         for(std::size_t mode=0;mode<mapping.modes;++mode)
             result[output]+=lifted[mode]*mapping.matrix[output*mapping.modes+mode];
+    }
     return result;
 }
 const std::map<std::string, ReconstructionResult>&

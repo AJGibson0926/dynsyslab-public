@@ -11,6 +11,30 @@ Gdiplus::PointF project(double x,double y,const PlotTransform& t) {
     return {static_cast<float>(t.left+(x-t.xMin)/(t.xMax-t.xMin)*t.width),
         static_cast<float>(plotPixelY(t,y))};
 }
+struct PixelPoint { double x, y; };
+PixelPoint projectExact(double x,double y,const PlotTransform& t) {
+    return {t.left+(x-t.xMin)/(t.xMax-t.xMin)*t.width, plotPixelY(t,y)};
+}
+// Liang-Barsky clip of segment a-b to a box. Points far outside the plot (a run that
+// diverged to 1e7) overflow GDI+ coordinates and make it drop the whole polyline, so
+// every segment is clipped in double precision before it reaches GDI+.
+struct PixelBox { double left, top, right, bottom; };
+bool clipSegment(PixelPoint& a,PixelPoint& b,const PixelBox& box) {
+    double t0=0., t1=1.; const double dx=b.x-a.x, dy=b.y-a.y;
+    const double p[4]={-dx,dx,-dy,dy}, q[4]={a.x-box.left,box.right-a.x,a.y-box.top,box.bottom-a.y};
+    for(int k=0;k<4;++k) {
+        if(p[k]==0.) { if(q[k]<0.) return false; continue; }
+        const double r=q[k]/p[k];
+        if(p[k]<0.) { if(r>t1) return false; t0=std::max(t0,r); }
+        else { if(r<t0) return false; t1=std::min(t1,r); }
+    }
+    const PixelPoint start{a.x+t0*dx,a.y+t0*dy}, end{a.x+t1*dx,a.y+t1*dy};
+    a=start; b=end; return true;
+}
+bool inside(const PixelPoint& p,const PixelBox& box) {
+    return p.x>=box.left&&p.x<=box.right&&p.y>=box.top&&p.y<=box.bottom;
+}
+Gdiplus::PointF toPoint(const PixelPoint& p) { return {static_cast<float>(p.x),static_cast<float>(p.y)}; }
 std::pair<double,double> timeRange(const std::vector<double>& values) {
     double low=std::numeric_limits<double>::infinity(),high=-low;
     for(const auto value:values) if(std::isfinite(value)) { low=std::min(low,value);high=std::max(high,value); }
@@ -32,6 +56,16 @@ void stylePlotSeriesPen(Gdiplus::Pen& pen, const Trace& trace) {
     if (trace.lineStyle == "dash" || trace.lineStyle == "time-dash") {
         if (trace.role == "control_target") pen.SetDashPattern(targetDashPattern,2);
         else pen.SetDashStyle(Gdiplus::DashStyleDash);
+    } else if (trace.lineStyle == "sparse-dash") {
+        // Long dashes with wide gaps (in pen widths): an overlaid reference leaves the curve beneath visible.
+        static const Gdiplus::REAL sparse[] = {5.0f, 4.0f};
+        pen.SetDashPattern(sparse, 2);
+    } else if (trace.lineStyle == "dot") {
+        static const Gdiplus::REAL dots[] = {0.6f, 2.4f};
+        pen.SetDashPattern(dots, 2);
+    } else if (trace.lineStyle == "dash-dot") {
+        static const Gdiplus::REAL dashDot[] = {5.0f, 2.5f, 0.8f, 2.5f};
+        pen.SetDashPattern(dashDot, 4);
     }
 }
 Gdiplus::Color applyPlotSeriesOpacity(Gdiplus::Color color, const Trace& trace) {
@@ -88,14 +122,34 @@ void drawPlotSeries(Gdiplus::Graphics& g,const Trace& trace,std::size_t traceInd
         *std::max_element(trace.magnitudes.begin(),trace.magnitudes.end());
     std::vector<Gdiplus::PointF> points;
     auto flush=[&](){if(points.size()>1) g.DrawLines(&pen,points.data(),static_cast<INT>(points.size()));points.clear();};
-    std::optional<Gdiplus::PointF> previous;
+    // Guard box: the plot area plus one plot size on every side (the visible clip is the plot).
+    const PixelBox box{t.left-t.width,t.top-t.height,t.left+2.*t.width,t.top+2.*t.height};
+    std::optional<PixelPoint> previousExact;
     for(std::size_t i=0;i<count;++i) {
         double x=trace.x[i],y=trace.y[i];
         if(i<trace.z.size()) {x-=.32*trace.z[i];y+=.20*trace.z[i];}
-        if(!std::isfinite(x)||!std::isfinite(y)) {flush();previous.reset();continue;}
-        const auto point=project(x,y,t);
-        if(trace.colorValues.empty()) points.push_back(point);
-        else if(previous) {
+        if(!std::isfinite(x)||!std::isfinite(y)) {flush();previousExact.reset();continue;}
+        const auto exact=projectExact(x,y,t);
+        const bool visible=inside(exact,box);
+        const auto point=toPoint(exact);
+        if(trace.colorValues.empty()) {
+            // A "none" line style is a scatter: points only, never joined in storage order.
+            if(trace.lineStyle!="none") {
+                if(!previousExact) { if(visible) points.push_back(point); }
+                else {
+                    PixelPoint a=*previousExact,b=exact;
+                    if(!clipSegment(a,b,box)) flush();
+                    else {
+                        if(!inside(*previousExact,box)) { flush(); points.push_back(toPoint(a)); }
+                        else if(points.empty()) points.push_back(toPoint(a));
+                        points.push_back(toPoint(b));
+                        if(!visible) flush();
+                    }
+                }
+            }
+        } else if(previousExact) {
+            PixelPoint a=*previousExact,b=exact;
+            const bool drawSegment=clipSegment(a,b,box);
             const auto colorIndex=trace.encoding=="time"?i-1:i;
             const auto value=colorIndex<trace.colorValues.size()?trace.colorValues[colorIndex]:0.;
             if(trace.encoding=="time") pen.SetColor(applyPlotSeriesOpacity(trajectoryTimeColor(
@@ -104,18 +158,21 @@ void drawPlotSeries(Gdiplus::Graphics& g,const Trace& trace,std::size_t traceInd
                 domainColor(value,i<trace.magnitudes.size()?trace.magnitudes[i]:1.),trace));
             else pen.SetColor(applyPlotSeriesOpacity(theme::phaseColor(value,
                 i<trace.magnitudes.size()&&maxMagnitude>0?trace.magnitudes[i]/maxMagnitude:1.),trace));
-            g.DrawLine(&pen,*previous,point);
+            if(drawSegment) g.DrawLine(&pen,toPoint(a),toPoint(b));
         }
-        if(trace.marker||count==1) {
+        if((trace.marker||count==1)&&visible) {
             Gdiplus::SolidBrush brush(plotSeriesColor(trace,traceIndex));
             if (trace.selectionId >= 0) {
                 const float radius = trace.selected ? 5.f : 3.5f;
                 if (trace.selected) g.FillEllipse(&brush,point.X-radius,point.Y-radius,radius*2,radius*2);
                 Gdiplus::Pen ring(trace.selected ? theme::color(theme::plotText) : theme::color(theme::plotMuted),1.2f);
                 g.DrawEllipse(&ring,point.X-radius,point.Y-radius,radius*2,radius*2);
+            } else if (trace.markerShape == "open-circle") {
+                Gdiplus::Pen ring(plotSeriesColor(trace,traceIndex),1.3f);
+                g.DrawEllipse(&ring,point.X-4.5f,point.Y-4.5f,9.f,9.f);
             } else g.FillEllipse(&brush,point.X-2.2f,point.Y-2.2f,4.4f,4.4f);
         }
-        previous=point;
+        previousExact=exact;
     }
     flush();g.Restore(state);
 }

@@ -3,7 +3,10 @@
 #include <dynsyslab/workflow/DecompositionPostprocess.hpp>
 #include <dynsyslab/workflow/EchoHistoryKoopman.hpp>
 #include <dynsyslab/workflow/HistoryPostprocess.hpp>
+#include "HankelShorthand.hpp"
+#include "CoordinateChangeKinds.hpp"
 #include "PostprocessInternal.hpp"
+#include "KromDatasetSupport.hpp"
 #include "HankelAnalysis.hpp"
 #include "ObservationSource.hpp"
 #include "KromEvidence.hpp"
@@ -238,9 +241,54 @@ std::filesystem::path runControlRegression(
     return path;
 }
 
-std::filesystem::path runSindy(const SourceData& source, const json::Value& settings,
+namespace {
+// Methods that read all sources together (one archive per stage, not one per source).
+bool pooledMethod(const std::string& name) {
+    return name == "echo_history_koopman" || name == "history_basis" || name == "history_control_regression"
+        || name == "input_map" || name == "control_target" || name == "derivative_benchmark"
+        || name == "mode_selection";
+}
+// SINDy fits on the rows it is given. "sample_stride" and "time_window" select
+// those rows explicitly so the fit can use the same clock as the H-DMD stage
+// (whose Hankel sample_stride does not otherwise propagate).
+SourceData sindyRows(const SourceData& full, const json::Value& settings) {
+    const double strideValue = settings.at("sample_stride").number(1);
+    if (!std::isfinite(strideValue) || strideValue < 1 || std::floor(strideValue) != strideValue)
+        throw std::invalid_argument("SINDy sample_stride must be a positive integer");
+    const auto stride = static_cast<std::size_t>(strideValue);
+    const auto& window = settings.at("time_window").array();
+    if (!window.empty() && window.size() != 2)
+        throw std::invalid_argument("SINDy time_window must be [start, stop]");
+    if (stride == 1 && window.empty()) return full;
+    // Measured derivative arrays are matched to the kept rows by time (coordinate SINDy).
+    const double start = window.empty() ? -INFINITY : window[0].number();
+    const double stop = window.empty() ? INFINITY : window[1].number();
+    SourceData rows = full; rows.time.clear(); rows.values.clear(); rows.inputs.clear();
+    std::size_t kept = 0;
+    for (std::size_t sample = 0; sample < full.samples; ++sample) {
+        if (full.time[sample] < start || full.time[sample] > stop) continue;
+        if (kept++ % stride) continue;
+        rows.time.push_back(full.time[sample]);
+        rows.values.insert(rows.values.end(), full.values.begin() + sample * full.dimension,
+                           full.values.begin() + (sample + 1) * full.dimension);
+        if (!full.inputs.empty())
+            rows.inputs.insert(rows.inputs.end(), full.inputs.begin() + sample * full.inputDimension,
+                               full.inputs.begin() + (sample + 1) * full.inputDimension);
+    }
+    rows.samples = rows.time.size();
+    if (rows.samples < 3) throw std::invalid_argument("SINDy row selection leaves fewer than three samples");
+    return rows;
+}
+}  // namespace
+
+std::filesystem::path runSindy(const SourceData& givenSource, const json::Value& givenSettings,
                                const std::filesystem::path& spectrumPath,
                                const std::filesystem::path& root, const std::string& label) {
+    const auto input = analyticCoordinateInput(givenSource, givenSettings);
+    const auto& fullSource = input.source;
+    const auto& settings = input.settings;
+    const auto selectedRows = sindyRows(fullSource, settings);
+    const auto& source = selectedRows;
     const auto requestedSpectrum=settings.at("spectrum_archive").string();
     const auto activeSpectrum=requestedSpectrum.empty()?spectrumPath:std::filesystem::u8path(requestedSpectrum);
     if (activeSpectrum.empty()) throw std::invalid_argument(
@@ -262,6 +310,10 @@ std::filesystem::path runSindy(const SourceData& source, const json::Value& sett
     options.includeConstant = settings.at("include_constant").boolean(true);
     options.reuseConjugateFits = settings.at("reuse_conjugate_fits").boolean(true);
     options.materializeTrainingValues = settings.at("compute_training_values").boolean(false);
+    const auto nullspace = settings.at("nullspace_solver").string("gram");
+    if (nullspace != "gram" && nullspace != "svd")
+        throw std::invalid_argument("SINDy nullspace_solver must be gram or svd");
+    options.gramNullspace = nullspace == "gram";
     const auto sourceMetadata=source.metadataJson.empty()?json::Value{}:json::parse(source.metadataJson);
     if(sourceMetadata.at("value_space").string()=="history-coordinates" || settings.at("input_space").string()=="coordinates")
         return runCoordinateSindy(source,settings,activeSpectrum,continuous,options,root,label);
@@ -346,7 +398,13 @@ std::filesystem::path runSindy(const SourceData& source, const json::Value& sett
     std::vector<std::string> reconstructionNames;
     for (const auto& value : settings.at("reconstruction_observables").array())
         reconstructionNames.push_back(value.string());
-    if (reconstructionNames.empty()) reconstructionNames.push_back("state");
+    // "reconstruction":"none" skips the all-mode least-squares C fit (samples x
+    // retained modes), which dominates SINDy runtime for a full H-DMD spectrum
+    // and is unused by state-Jacobian/coordinate-target control.
+    const bool skipReconstruction = settings.at("reconstruction").string() == "none";
+    if (skipReconstruction && !reconstructionNames.empty())
+        throw std::invalid_argument("reconstruction \"none\" conflicts with reconstruction_observables");
+    if (reconstructionNames.empty() && !skipReconstruction) reconstructionNames.push_back("state");
     std::string encodedReconstructions;
     for (const auto& name : reconstructionNames) {
         const auto projection=dynsyslab::core::fitObservableReconstruction(
@@ -369,6 +427,9 @@ std::filesystem::path runSindy(const SourceData& source, const json::Value& sett
         + ",\"polynomial_degree\":" + std::to_string(options.polynomialDegree)
         + ",\"feature_count\":" + std::to_string(result.featureCount)
         + ",\"threshold\":" + std::to_string(options.threshold)
+        + ",\"sample_stride\":" + std::to_string(static_cast<long long>(settings.at("sample_stride").number(1)))
+        + ",\"training_samples\":" + std::to_string(source.samples)
+        + ",\"source_samples\":" + std::to_string(fullSource.samples)
         + ",\"gamma_method\":\"" + gamma + "\",\"state_preprocessing\":{\"center\":"
         + jsonArray(result.center) + ",\"scale\":" + jsonArray(result.scale)
         + ",\"multiplier\":" + jsonArray(multipliers)
@@ -396,10 +457,12 @@ std::wstring PostprocessResult::summary() const {
     return out.str();
 }
 
-PostprocessResult executePostprocess(const json::Value& job,
+PostprocessResult executePostprocess(const json::Value& submitted,
     const std::filesystem::path& archiveRoot, const std::filesystem::path& progressPath,
     const dynsyslab::core::ExecutionContext* execution) {
     using namespace postprocess_detail;
+    // Observables named in a Hankel method become an explicit coordinate change.
+    const auto job = expandHankelCoordinateShorthand(submitted);
     if (execution) execution->report({"postprocess", "Loading source archives", 0.0, 0, 1});
     std::vector<std::filesystem::path> sources;
     for (const auto& value : job.at("sources").array())
@@ -410,7 +473,7 @@ PostprocessResult executePostprocess(const json::Value& job,
     const auto pooledStageCount = static_cast<std::size_t>(std::count_if(
         stages.begin(), stages.end(), [](const json::Value* stage) {
             const auto name=stage->at("name").string();
-            return name == "echo_history_koopman" || name == "history_basis";
+            return pooledMethod(name);
         }));
     const std::size_t ordinaryStageCount = stages.size() - pooledStageCount;
     PostprocessResult result; const std::size_t planned =
@@ -418,10 +481,16 @@ PostprocessResult executePostprocess(const json::Value& job,
     std::size_t complete = 0; atomicProgress(progressPath, 0.0, 0, planned, "Starting native post-processing");
     for (const auto* stage : stages) {
         const auto name=stage->at("name").string();
-        if (name != "echo_history_koopman" && name != "history_basis") continue;
+        if (!pooledMethod(name)) continue;
+        for (const auto& path : sources) requireTrainingDataRole(name, path, stage->at("settings"));
         const std::string label = job.at("label").string("native-postprocess")
             + " / " + name;
         const auto output = name=="history_basis"?runHistoryBasis(sources,stage->at("settings"),archiveRoot,label):
+            name=="history_control_regression"?runHistoryControlRegression(sources,stage->at("settings"),archiveRoot,label):
+            name=="input_map"?runInputMap(sources,stage->at("settings"),archiveRoot,label):
+            name=="control_target"?runControlTarget(sources,stage->at("settings"),archiveRoot,label):
+            name=="derivative_benchmark"?runDerivativeBenchmark(sources,stage->at("settings"),archiveRoot,label):
+            name=="mode_selection"?runModeSelection(sources,stage->at("settings"),archiveRoot,label):
             runEchoHistoryKoopman(sources, stage->at("settings"), archiveRoot, label);
         result.archives.push_back(output);
         result.methods.push_back(name);
@@ -437,6 +506,7 @@ PostprocessResult executePostprocess(const json::Value& job,
       std::filesystem::path precedingHankel;
       std::filesystem::path precedingSpectrum;
       std::filesystem::path precedingCoordinates;
+      std::filesystem::path precedingHankelInput; // the series the stored matrix was built from
       for (const auto* stage : stages) {
         if (execution) execution->checkpoint();
         const std::string method = stage->at("name").string();
@@ -453,13 +523,19 @@ PostprocessResult executePostprocess(const json::Value& job,
             inherited->at("hankel_archive")=precedingHankel.generic_u8string();
         }
         const auto& settings=inherited?*inherited:originalSettings;
-        if (method == "echo_history_koopman" || method == "history_basis") continue;
+        if (pooledMethod(method)) continue;
+        {   // Eigenfunctions/spectra from unforced data only; B_psi regressions from forced data only.
+            const bool previous = settings.at("use_previous_output").boolean(false) && !precedingCoordinates.empty();
+            requireTrainingDataRole(method, previous ? precedingCoordinates : sourcePath, settings);
+        }
         const std::string label = job.at("label").string("native-postprocess") + " / " + method;
         std::filesystem::path output;
-        if (method == "linear_analysis" || method == "controllability" || method == "observable_reconstruction" || method == "krom_extract" || method == "dmdc" || method == "edmdc" || method=="history_projection"
-            || method=="klqe" || method=="observability") {
+        if (method == "linear_analysis" || method == "linear_systems" || method == "controllability" || method == "observable_reconstruction" || method == "krom_extract" || method == "dmdc" || method == "edmdc" || method=="history_projection"
+            || method=="klqe" || method=="observability" || method=="empirical_observability") {
             if(method=="history_projection")output=runHistoryProjection(sourcePath,settings,archiveRoot,label);
             else if(method=="linear_analysis"||method=="controllability")output=runLinearAnalysis(sourcePath,settings,archiveRoot,label);
+            else if(method=="linear_systems")output=runLinearSystems(sourcePath,settings,archiveRoot,label);
+            else if(method=="empirical_observability")output=runEmpiricalObservability(sourcePath,settings,archiveRoot,label);
             else if(method=="observable_reconstruction")output=runObservableReconstruction(sourcePath,settings,archiveRoot,label);
             else if(method=="klqe"||method=="observability")output=runEstimationPostprocess(method,sourcePath,settings,archiveRoot,label);
             else output = method != "krom_extract"
@@ -491,11 +567,21 @@ PostprocessResult executePostprocess(const json::Value& job,
             if(execution)execution->report({"postprocess","Completed "+method,double(complete)/planned,complete,planned});
             continue;
         }
-        if (!loadedSource) loadedSource = loadSource(sourcePath);
-        const auto& source = *loadedSource;
+        // A method may read the preceding coordinate change instead of the source.
+        const bool previousOutput = settings.at("use_previous_output").boolean(false);
+        if (previousOutput && precedingCoordinates.empty())
+            throw std::invalid_argument(method + " use_previous_output needs a preceding coordinate_transform");
+        std::optional<SourceData> coordinateInput;
+        if (previousOutput) coordinateInput = loadSource(precedingCoordinates);
+        else if (inherited && !precedingHankelInput.empty() && precedingHankelInput != sourcePath)
+            coordinateInput = loadSource(precedingHankelInput);
+        const bool readsCoordinates = coordinateInput.has_value();
+        if (!readsCoordinates && !loadedSource) loadedSource = loadSource(sourcePath);
+        const auto& source = readsCoordinates ? *coordinateInput : *loadedSource;
         if (method=="hankel_matrix") {
             output=runHankelMatrix(source,settings,archiveRoot,label);
             precedingHankel=output;
+            precedingHankelInput=previousOutput?precedingCoordinates:sourcePath;
         }
         else if(method=="koopman_spectral"||method=="resdmd"||method=="mpedmd"||method=="hermitian_dmd"||method=="tlsdmd"||method=="multdmd"||method=="stochastic_resdmd"||method=="specrkhs")
             output=runKoopmanSpectral(source,settings,archiveRoot,label,method);

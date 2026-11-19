@@ -1,5 +1,27 @@
 # Observable Hankel matrices in the native pipeline
 
+## Module boundary
+
+| Module | Takes | Gives |
+|---|---|---|
+| Solver | system, initial condition, controller | state time series |
+| Coordinate change (`coordinate_transform`) | any time series | the series in working coordinates: `identity`, an analytic `observable` map such as `echo_jet2`, `channels` (observables, their time derivatives, KROM observables) or `history` (Hankel-SVD coordinates, fitted here) |
+| Hankel module | any time series and a window | the Hankel matrix: explicit (`buildHankelMatrix`) or matrix-free (`HankelOperator`), one row layout |
+| Post-processing (H-DMD, Hankel SVD/POD, spectral DMD variants, SINDy) | a coordinate-change output | spectra, decompositions, eigenfunctions |
+
+The Hankel module never evaluates physics. A channel is a column of the series
+it receives, chosen by index or recorded column name. H-DMD and the history
+basis both build their matrices through it; the history basis is fitted inside
+the `history` coordinate change, never as a stage beside H-DMD. A
+coordinate-change archive also stores the physical states at its samples
+(`source_states`), so H-DMD keeps the physical state as its model state.
+
+For older jobs and the workbench dialogs, a Hankel method that names physics
+observables (as in the example below) is expanded by the orchestrator into an
+explicit `coordinate_transform {"kind":"channels"}` step followed by the same
+method reading that step's columns (`use_previous_output: true`). Consecutive
+methods over the same channels share one coordinate change.
+
 The `hankel_matrix` stage prepares one immutable matrix archive for each source trajectory. The `hankel_svd` (also `hankel_pod`) and `hdmd` (also `hankel_dmd`) stages can consume that exact archive. They can also construct their own inputs directly from the same settings. A job with multiple sources starts a fresh window sequence for each source.
 
 ## Run the RPE example
@@ -26,7 +48,7 @@ The workbench's H-DMD and Hankel POD settings accept comma-separated channel nam
 }
 ```
 
-Each entry selects a catalog name or alias. An integer selects a column of a sampled source directly, including a measured rate supplied as its own column. Taps are nonnegative integer lags on the analysis grid. The default tap is zero. Channels expand in declaration order, then in the listed tap order. Optional `channel_scales` give one finite positive divisor per expanded channel. The default is one. Coincident channel declarations are rejected. Delaying an already included signal inside a dense window can produce repeated **rows** of the matrix; these retain their specified weighting and can reduce numerical rank.
+In this shorthand each entry selects a catalog name or alias, evaluated by the expanded coordinate change. An integer or recorded column name selects a column of the input series directly, including a measured rate supplied as its own column. Taps are nonnegative integer lags on the analysis grid. The default tap is zero. Channels expand in declaration order, then in the listed tap order. Optional `channel_scales` give one finite positive divisor per expanded channel. The default is one. Coincident channel declarations are rejected. Delaying an already included signal inside a dense window can produce repeated **rows** of the matrix; these retain their specified weighting and can reduce numerical rank.
 
 ## Indexing and alignment
 
@@ -42,7 +64,7 @@ Each column contains one window. Its chronological blocks run oldest to newest. 
 
 The source ticks for column j's augmented start and end are $s(L+jb)$ and $s(L+jb+(D-1)a)$. An end-aligned snapshot is causal at its timestamp. The earliest raw sample in that column is $s j b$. The builder omits windows requiring unavailable history. Omitting `columns` or setting it to zero uses all complete windows. A paired matrix reserves one additional analysis tick for Y. A standalone SVD can use the final unpaired window too. Use a shared matrix stage when an identical set of columns matters. The matrix stage defaults to `shifted_pair: true`. Setting it to `false` builds X alone for SVD.
 
-This path materializes dense matrices. X alone uses eight bytes per entry in memory, and a paired fit also needs Y and decomposition workspace. Set `window.columns` to bound the matrix size when working with long records. For the established pooled, matrix-free scalar history basis, the existing `history_basis` stage remains available.
+This path materializes dense matrices. X alone uses eight bytes per entry in memory, and a paired fit also needs Y and decomposition workspace. Set `window.columns` to bound the matrix size when working with long records. Embeddings too large to store, such as the pooled echo-history basis, use the matrix-free `HankelOperator` with the same layout: `coordinate_transform {"kind":"history"}` fits its left basis by randomized subspace iteration. The legacy `history_basis` stage uses the same operator.
 
 The common `window` object uses explicit counts and defaults to end alignment. Legacy job fields keep their existing meanings: H-DMD's `matrix_size` counts pairs and `sampling_window` caps the delay count, while Hankel POD's `matrix_size` counts delay blocks. Legacy start-aligned jobs retain their timestamps. Choose either the common object or the legacy geometry fields.
 

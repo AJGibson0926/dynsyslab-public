@@ -275,6 +275,7 @@ The native workbench uses the same `PlotRequest` routes as Viewer:
 | Controlled trajectory/attempt | all trajectory views, dashed-red target overlay, separately plotted control history |
 | ODE trajectory observables | scrolling scalar/vector/complex output time series, each followed by a full-panel phase map for two-state systems; exact state-identity deduplication |
 | KROM | fixed discrete spectrum on the right; selected eigenfunction time panels then phase-space maps on the left; real/imaginary, magnitude/phase, or domain coloring |
+| KROM or Koopman spectrum with a reconstruction map | **Mode weights**: 3-D stems of each observable's weight on every mode, over the eigenvalue plane; for an extracted K-ROM, the parent's modes in blue and the kept modes in red |
 | Control-map evaluation | native relative-error heat maps, paged when many fits are present |
 | Controlled/regression dataset | state histories, phase coverage, control excitation |
 | Campaign | navigable manifest hierarchy; plots are requested from member trajectories |
@@ -334,6 +335,56 @@ warning, or sample indices if unavailable. Two-state systems get a 101×101
 map on the same automatic state-phase domain as their training data; higher
 dimensional systems retain time histories without inventing a phase slice.
 No archive or model is modified by inspecting, selecting, or rendering modes.
+
+### Mode weights (`mode_weights`)
+
+The **Mode weights** view shows how each reconstructed observable decomposes
+over the Koopman modes and which modes a reduced model kept. For observable o and
+mode j the stem height is `|c_oj| · rms_t |phi_j|`, the reconstruction coefficient
+times the root-mean-square of the archived training eigenfunction values. It does
+not depend on how the eigenfunctions are scaled, and its square is the energy the
+`observable_energy` K-ROM selection rule ranks. The first panel is the total over
+observables, `sqrt(sum_o w_oj^2)`; then one panel per scalar reconstruction
+(multi-row maps such as `state` are skipped), in the training order.
+
+The view has three pages, chosen with the page selector (`--page 0|1|2` in the CLI).
+The stems are the same on every page; only the eigenvalue each stands on changes:
+
+| Page | Plane | Use |
+|---|---|---|
+| 0 | discrete μ, full unit circle | where the modes sit relative to |μ| = 1 |
+| 1 | discrete μ, zoomed to the weighted modes, with the unit-circle arc | finely sampled data crowd near μ = 1; this separates them |
+| 2 | continuous λ, with the stability boundary Re λ = 0 | decay rates and frequencies in time units |
+
+When an archive stores only one plane, the other is derived from `delta_t`
+(μ = exp(λΔt)). The camera opens at azimuth −30°, elevation 28°, so both base axes
+and the stem heights read clearly; drag to rotate as with any 3-D plot. When the
+archive was extracted from a parent model (`source_krom` and `selected_modes` in
+its metadata) and the parent is readable, every parent mode is drawn in blue and
+the kept modes in red over them, at the parent's weights, and each title gives the
+count kept and their share of that observable's energy. On pages 1 and 2 the view
+window is the extent of the modes carrying at least 0.1% of the heaviest total
+weight (page 2 always includes Re λ = 0); the title counts lighter modes left
+outside it. Heavy blue stems outside the unit circle, or right of Re λ = 0, are
+growing modes, which `max_real_part` excludes.
+
+    DynSysLabViewerCli render --source KROM.npz --view mode_weights --page 1 --output weights.png
+
+Three-dimensional stem plots (any `three_d` figure with box axes, including the
+H-DMD spectral-measure panels) follow the Viewer's value-scale control on their
+height axis: **Linear**, **Log** (or **Symmetric log**, treated as log since heights
+are nonnegative), or **Auto**, which uses log when the positive heights span three
+or more decades. On a log axis stems rise from a floor at most six decades below
+the tallest, and heights at or below it sit on the floor; the axis title gains
+"(log)" and its ticks read 10^k (physical values). All three axes carry tick marks
+and labels. Each base axis runs along the floor edge nearest the viewer (so stems
+never hide it) and the height axis stands at the floor corner furthest left on
+screen; axis titles and tick labels sit on a near-opaque backing. The corner the
+two base axes share is labelled once, on the x axis. Probes report
+physical heights. They carry a legend at the bottom right when they have two or
+more labelled series (the camera controls occupy the top right).
+
+    DynSysLabViewerCli render --source KROM.npz --view mode_weights --page 2 --scale linear --output weights.png
 
 Trajectory spectra use the native core `TimeSeries` Fourier sidecar rather than
 a Viewer-owned DFT. Catalog construction loads no trajectory arrays. Selecting
@@ -673,6 +724,10 @@ separate `DynSysLab.Viewer` taskbar application identity.
 
 ## Background navigation and plot inspection
 
+The complete reference for headless figures (views by route or label, time windows,
+dimensional spectra, axis ranges, multi-run comparisons with colors, `time-series`
+spectra) is [VIEWER_CLI.md](VIEWER_CLI.md).
+
 Add `--benchmark-scroll 60` to a CLI `render` call to report cold-frame time,
 scroll redraw median/p95, panel render count, cache hits, and cached bytes.
 
@@ -754,7 +809,7 @@ Use the native CLI directly to plot several estimates against a reference in a c
 DynSysLabViewerCli time-series --source run.npz --output comparison.png --curve "corrected=Monopole plus near field" --color "#DE9B00" --line-width 4 --curve "actual=RPE solution" --color "#D8242A" --line-width 2.7 --line-style solid --curve "leading=Leading monopole" --color "#004DB8" --line-width 1.65 --line-style time-dash --axis "Radius r" --axis "Radial velocity" --start 0.3 --stop 7.2
 ```
 
-Repeat `--curve` in drawing order. Each curve can take a hex `--color` and a `--line-style` of `solid`, `dash` or `time-dash`. The last spaces dashes horizontally so overlapping estimates remain distinguishable even during fast oscillations. Use `--axis` once per component or accept the default labels. Optional arguments include `--time-key`, `--time-label`, `--title`, `--width`, `--height` and zero-based `--page` for more than two components. The command needs only the NPZ and output destination. For dense PNGs it retains endpoints and both extrema in chronological order within each subpixel time bin. The public C++ function `dsl::timeSeriesOverlay` returns a Viewer payload and keeps every sample by default. Pass the resulting payload to `dsl::renderPlotPng` for a background export.
+Repeat `--curve` in drawing order. Each curve can take a hex `--color` and a `--line-style` of `solid`, `dash` or `time-dash`. The last spaces dashes horizontally so overlapping estimates remain distinguishable even during fast oscillations. Use `--axis` once per component or accept the default labels. Optional arguments include `--time-key`, `--time-label`, `--title`, `--width`, `--height` and zero-based `--page` for more than two components. The command needs only the NPZ and output destination. For dense PNGs it retains endpoints and both extrema in chronological order within each subpixel time bin. The public C++ function `dsl::timeSeriesOverlay` returns a Viewer payload and keeps every sample by default. Pass the resulting payload to `dsl::renderPlotPng` for a background export. `--spectrum` turns each curve into its amplitude spectrum; see [VIEWER_CLI.md](VIEWER_CLI.md).
 
 ## Main and Observables workspace tabs
 

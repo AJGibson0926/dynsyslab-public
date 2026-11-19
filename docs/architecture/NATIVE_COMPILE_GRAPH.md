@@ -36,7 +36,7 @@ workflow and payload services
         |
 scientific orchestration DLLs
   eigenfunctions | spectral | decomposition | reconstruction
-  control maps   | control  | estimation    | PCA
+  control maps   | control (incl. estimation)  | linear analysis | PCA
         |
 dynsyslab_numerics.dll
   SVD | least squares | eigensystems | nullspace | products
@@ -71,6 +71,14 @@ neither target exposes Eigen types in its public APIs. These structured kernels
 avoid materializing the full delay matrix and are explicitly listed in the
 architecture test. Ordinary system, controller, archive, and UI code still uses
 runtime buffers and narrow numerical interfaces.
+
+The classical linear-systems kernels (Lyapunov/Stein on the Schur form, QZ
+transmission zeros, balanced truncation, DARE doubling, H-infinity) are
+`EigenNumerics*` units of `dynsyslab_numerics`, with private helpers in
+`EigenNumericsLinearSystems.hpp`. Their public API is the Eigen-free
+`core/StateSpace.hpp` family ([LINEAR_SYSTEMS_TOOLKIT.md](LINEAR_SYSTEMS_TOOLKIT.md)).
+Numerics has one Lyapunov/Stein solver and one finite-horizon gramian kernel;
+the observability gramians in `MatrixFunctions.hpp` call them.
 
 All three Eigen targets use a shared precompiled-header configuration and a three-job Ninja pool.
 This avoids redundant parsing and memory contention while allowing ordinary

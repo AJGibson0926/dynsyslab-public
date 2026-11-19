@@ -298,9 +298,15 @@ void solveAndArchive() {
         && firstPdeCampaignMetadata.at("campaign_point_index").number() == 0.0,
         "PDE trajectory carries campaign identity");
 
+    // Eigenfunction/spectrum methods train on UNFORCED data (the forced run feeds only the
+    // control regression below); the pipeline refuses forced sources for them.
+    auto freeJob = job;
+    freeJob.at("controller") = dynsyslab::core::json::parse(R"({"kind":"none","settings":{}})");
+    freeJob.at("label") = dynsyslab::core::json::Value("native-test-free");
+    const auto freeResult = dynsyslab::workflow::executeSolve(freeJob, root, root / "free-progress.json");
     const std::string postJson = "{\"schema\":\"dynsyslab.compute-job/v1\","
         "\"kind\":\"postprocess\",\"label\":\"native-post-test\",\"sources\":[\""
-        + jsonEscape(result.archives.front().u8string()) + "\"],\"methods\":["
+        + jsonEscape(freeResult.archives.front().u8string()) + "\"],\"methods\":["
         "{\"name\":\"dmd\",\"enabled\":true,\"settings\":{}},"
         "{\"name\":\"hdmd\",\"enabled\":true,\"settings\":{\"matrix_size\":4,"
         "\"sampling_window\":6,\"observable\":\"position\"}},"

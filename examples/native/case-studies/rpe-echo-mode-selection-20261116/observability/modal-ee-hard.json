@@ -1,0 +1,22 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "modal obsv / ee-hard",
+  "description": "Observability matrix [C; C M; ...; C M^(n-1)] of the K-ROM in discrete modal coordinates (M = diag(exp(lambda dt)), one complex coordinate per eigenfunction) with the echo output, and its SVD.",
+  "sources": [
+    "archives/derived/koopman-mode-selection/experiment-ee-ic0p37-split-krom__mode-selection-krom__20261117T002622Z.npz"
+  ],
+  "methods": [
+    {
+      "name": "linear_analysis",
+      "enabled": true,
+      "settings": {
+        "measurement": "far_field_acoustic_echo",
+        "analysis_method": "modal-matrix"
+      }
+    }
+  ],
+  "archive": {
+    "enabled": true
+  }
+}

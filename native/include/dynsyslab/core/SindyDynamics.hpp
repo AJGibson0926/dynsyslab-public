@@ -18,10 +18,14 @@ struct SindyDynamicsFitDiagnostics {
 };
 class SindyDynamicsModel {
 public:
-    SindyDynamicsModel(Observable library,std::vector<double> coefficients);
+    // outputs == 0 means one output per input coordinate (a vector field z'=f(z)).
+    // A different count fits another coordinate set's rates, w'=g(z).
+    SindyDynamicsModel(Observable library,std::vector<double> coefficients,std::size_t outputs=0);
     const Observable& library() const noexcept {return library_;}
     const std::vector<double>& coefficients() const noexcept {return coefficients_;}
     std::size_t dimension() const noexcept {return library_.stateDimension();}
+    std::size_t outputs() const noexcept {return outputs_;}
+    bool isVectorField() const noexcept {return outputs_==dimension();}
     std::vector<double> evaluate(const double* q) const;
     TimeSeries evaluate(const TimeSeries& q) const;
     Observable vectorField() const;
@@ -30,6 +34,7 @@ public:
 private:
     Observable library_;
     std::vector<double> coefficients_; // feature x output, row-major, original library units
+    std::size_t outputs_{};
 };
 // Normalization is encoded in the returned expression library, making the fitted
 // model self-contained. Empty center/scale mean raw coordinates.

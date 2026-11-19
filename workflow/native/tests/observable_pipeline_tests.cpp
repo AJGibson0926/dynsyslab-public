@@ -28,7 +28,8 @@ int main(){try{
     auto job=core::json::parse(R"({"schema":"dynsyslab.compute-job/v1","kind":"postprocess","label":"echo-pipeline-test","methods":[{"name":"hdmd","settings":{"observable":"far_field_acoustic_echo","matrix_size":4,"sampling_window":30,"rank":2}},{"name":"sindy","settings":{"coordinate_observable":"far_field_acoustic_echo","polynomial_degree":3,"include_constant":false,"threshold":0,"max_iterations":1,"normalize":false,"gamma_method":"system_rhs","reconstruction_observables":["far_field_acoustic_echo"]}}]})");
     job.at("sources")=core::json::Value::Array{source.generic_u8string()};
     const auto result=workflow::executePostprocess(job,root,{});
-    check(result.archives.size()==2,"pipeline archive count");
+    // The echo named in hdmd is a coordinate change that runs first.
+    check(result.archives.size()==3&&result.methods.front()=="coordinate_transform","pipeline archive count");
     const auto fitted=core::readNpz(result.archives.back());
     check(fitted.at("training_coordinates").shape[1]==1,"echo must be the only coordinate");
     check(fitted.at("polynomial_exponents").shape[1]==1,"echo polynomial dimension");
@@ -44,7 +45,7 @@ int main(){try{
     // Reuse the saved spectrum: no second H-DMD stage is allowed in this jet fit.
     auto jetJob=core::json::parse(R"({"schema":"dynsyslab.compute-job/v1","kind":"postprocess","label":"echo-jet-test","methods":[{"name":"sindy","settings":{"coordinate_observable":"echo_jet2","polynomial_degree":4,"include_constant":false,"threshold":0,"max_iterations":1,"normalize":false,"gamma_method":"system_rhs","archive_coordinate_derivatives":true,"reconstruction_observables":["far_field_acoustic_echo","far_field_acoustic_echo_dot"]}}]})");
     jetJob.at("sources")=core::json::Value::Array{source.generic_u8string()};
-    jetJob.at("methods").array()[0].at("settings").at("spectrum_archive")=result.archives.front().generic_u8string();
+    jetJob.at("methods").array()[0].at("settings").at("spectrum_archive")=result.archives.at(1).generic_u8string();
     const auto jetResult=workflow::executePostprocess(jetJob,root,{});
     check(jetResult.archives.size()==1,"jet job recomputed a spectrum");
     check(jetResult.archives.front()!=result.archives.back(),"new fit reused a completed archive path");
@@ -52,7 +53,7 @@ int main(){try{
     const auto jetArchive=core::readNpz(jetResult.archives.front());
     check(jetArchive.at("training_coordinates").shape==std::vector<std::size_t>({65,2}),"jet coordinate shape");
     check(jetArchive.at("polynomial_exponents").shape==std::vector<std::size_t>({14,2}),"jet polynomial library shape");
-    check(jetArchive.at("continuous_eigenvalues").complexDoubles()==core::readNpz(result.archives.front()).at("continuous_eigenvalues").complexDoubles(),"jet fit changed supplied spectrum");
+    check(jetArchive.at("continuous_eigenvalues").complexDoubles()==core::readNpz(result.archives.at(1)).at("continuous_eigenvalues").complexDoubles(),"jet fit changed supplied spectrum");
     check(jetArchive.at("training_coordinate_jacobians").shape==std::vector<std::size_t>({65,2,2}),"jet gradient evidence shape");
     const auto jetCoordinates=jetArchive.at("training_coordinates").doubles();
     const auto jetVelocities=jetArchive.at("training_coordinate_velocities").doubles();
@@ -83,14 +84,13 @@ int main(){try{
     driven.arrays["metadata_json"]=core::NpyArray::fromString(core::json::dump(metadata));
     const auto drivenPath=root/"controlled-legacy.npz";core::writeNpzAtomic(drivenPath,driven);
     auto forcedJob=jetJob;forcedJob.at("sources")=core::json::Value::Array{drivenPath.generic_u8string()};
+    // Eigenfunction SINDy is autonomous: a forced (driven) record is refused whatever the
+    // input-term setting (docs/architecture/TRAINING_DATA_ROLES.md). B_psi comes from input_map.
     for(bool included:{false,true}){
         forcedJob.at("methods").array()[0].at("settings").at("include_input_terms")=included;
-        const auto evidence=core::readNpz(workflow::executePostprocess(forcedJob,root,{}).archives.front());
-        const auto rates=evidence.at("training_coordinate_velocities").doubles();
-        const auto gradients=evidence.at("training_coordinate_jacobians").doubles();
-        for(std::size_t i=0;i<65;++i){const auto b=system->inputMatrix(jetStates.data()+2*i);
-            const double gain=gradients[4*i]*b[0]+gradients[4*i+1]*b[1];
-            check(std::abs(rates[2*i]-jetCoordinates[2*i+1]-(included?.5*gain:0.))<1e-10,"input-term switch did not govern generator derivatives");}
+        bool refused=false;
+        try{(void)workflow::executePostprocess(forcedJob,root,{});}catch(const std::exception&){refused=true;}
+        check(refused,"eigenfunction SINDy accepted a forced training record");
     }
     // A small stable fixture verifies target plumbing independently of SINDy fit quality.
     core::KoopmanSINDyResult fixture;fixture.stateDimension=1;fixture.dynamicalStateDimension=2;

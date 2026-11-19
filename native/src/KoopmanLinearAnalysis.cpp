@@ -1,4 +1,5 @@
-#include <dynsyslab/core/Estimation.hpp>
+#include <dynsyslab/core/KoopmanModel.hpp>
+#include <dynsyslab/core/Observability.hpp>
 #include <cmath>
 #include <stdexcept>
 namespace dynsyslab::core {

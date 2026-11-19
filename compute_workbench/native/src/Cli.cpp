@@ -1,7 +1,9 @@
 #include <dynsyslab/workflow/Run.hpp>
+#include <dynsyslab/workflow/Pipeline.hpp>
 #include <dynsyslab/workflow/ObservableQuery.hpp>
 #include <dynsyslab/workflow/KoopmanSpectralQuery.hpp>
 #include <dynsyslab/workflow/CoordinateClosureQuery.hpp>
+#include <dynsyslab/workflow/CoordinateInverse.hpp>
 #include <dynsyslab/workflow/AnalyticQuery.hpp>
 #include <dynsyslab/workflow/PhaseSpaceQuery.hpp>
 #include <dynsyslab/workflow/SystemKnowledge.hpp>
@@ -52,6 +54,7 @@ struct Arguments {
     std::string fourierWindow{"hann"};
     bool fourierRemoveMean{true};
     bool fourierOneSided{true};
+    std::vector<std::pair<std::string, std::string>> params, sets;
 };
 std::string readText(const std::filesystem::path& path) {
     std::ifstream stream(path, std::ios::binary);
@@ -87,6 +90,19 @@ Arguments arguments(int count, wchar_t** values) {
             else if(value==L"--coordinates")result.importCoordinates=item;
             else if(value==L"--label")result.importLabel=item;
             else result.importParameters=item;
+        } else if (value == L"--fresh") {
+            result.sets.emplace_back("__fresh", "true");
+        } else if (value == L"--refresh" && index + 1 < count) {
+            result.sets.emplace_back("__refresh", dynsyslab::core::narrow(values[++index]));
+        } else if (value == L"--until" && index + 1 < count) {
+            result.sets.emplace_back("__until", dynsyslab::core::narrow(values[++index]));
+        } else if ((value == L"--param" || value == L"--set") && index + 1 < count) {
+            const auto item = dynsyslab::core::narrow(values[++index]);
+            const auto equals = item.find('=');
+            if (equals == std::string::npos || equals == 0)
+                throw std::invalid_argument("--param/--set expects NAME=VALUE");
+            (value == L"--param" ? result.params : result.sets)
+                .emplace_back(item.substr(0, equals), item.substr(equals + 1));
         } else if (value == L"--input-scale" && index + 1 < count) {
             result.inputScale=std::stod(values[++index]);
         } else if (value == L"--allow-unknown-records") {
@@ -115,6 +131,7 @@ void usage() {
         << "dynsyslab_cli koopman-spectral <query.json>\n"
         << "dynsyslab_cli observable <query.json>\n"
         << "dynsyslab_cli observable-closure <query.json>\n"
+        << "dynsyslab_cli coordinate-inverse <coordinates.npz> <input.npz> <output.npz>\n"
         << "dynsyslab_cli analytic <query.json>\n"
         << "dynsyslab_cli special-function <query.json>\n"
         << "dynsyslab_cli phase-space <query.json> [--archive-root PATH]\n"
@@ -122,9 +139,13 @@ void usage() {
         << "dynsyslab_cli generate-ics <solve-job.json>\n"
         << "dynsyslab_cli krom-validation-plan <krom.npz> [--archive-root PATH]\n"
         << "dynsyslab_cli krom-info <krom.npz>\n"
-        << "dynsyslab_cli validate <job.json>\n"
-        << "dynsyslab_cli plan <job.json>\n"
-        << "dynsyslab_cli run <job.json> [--archive-root PATH] [--progress PATH]\n"
+        << "dynsyslab_cli validate|plan|run <job.json> [--param NAME=VALUE]... [--set PATH=VALUE]...\n"
+        << "                  [--until STAGE] [--refresh STAGE]... [--fresh]\n"
+        << "                  [--archive-root PATH] [--progress PATH]\n"
+        << "    VALUE is JSON or plain text. Pipeline PATHs start with a stage id\n"
+        << "    (control.controller.settings.Q=1000); --until runs a pipeline through STAGE;\n"
+        << "    --refresh recomputes STAGE (and so everything downstream) instead of reusing it;\n"
+        << "    --fresh recomputes every stage.\n"
         << "dynsyslab_cli fourier <trajectory.npz> [--component N]\n"
         << "                      [--window rectangular|hann|hamming|blackman]\n"
         << "                      [--keep-mean] [--two-sided]\n"
@@ -327,7 +348,7 @@ void capabilities() {
               << "\"koopman_validation\",\"boundary_eigenfunctions\","
               << "\"eigenvalue_optimization\","
               << "\"echo_history_koopman\",\"history_basis\",\"history_projection\","
-              << "\"observability\",\"klqe\",\"linear_analysis\",\"controllability\",\"observable_reconstruction\"],\"workflows\":[\"krom_control_search\",\"observable_closure\"],\"desktop_ui\":{"
+              << "\"observability\",\"klqe\",\"linear_analysis\",\"linear_systems\",\"mode_selection\",\"controllability\",\"observable_reconstruction\"],\"workflows\":[\"krom_control_search\",\"observable_closure\"],\"desktop_ui\":{"
               << "\"solver\":true,\"postprocessor\":true,\"viewer\":true,"
               << "\"native_jobs\":true,\"archive_tools\":true,"
               << "\"legacy_csv_import\":true,\"krom_control_search\":true,"
@@ -382,7 +403,8 @@ int queue(const Arguments& args) {
     if (operation == L"submit") {
         if (args.positional.size() < 3) throw std::invalid_argument("queue submit needs a job file");
         const std::string text = readText(args.positional[2]);
-        const auto job = json::parse(text); requireJob(job);
+        const auto job = dynsyslab::workflow::applyJobInputs(json::parse(text), args.params, args.sets);
+        requireJob(job);
         json::Value::Object submitted;
         submitted["job_id"] = jobs.submit(job);
         printQueue("submit", json::Value(std::move(submitted))); return 0;
@@ -483,6 +505,14 @@ int wmain(int argc, wchar_t** argv) {
             std::cout << json::dump(dynsyslab::workflow::evaluateCoordinateClosureQuery(
                 json::parse(readText(args.positional[1])))) << '\n';
         }
+        else if (command == L"coordinate-inverse") {
+            if(args.positional.size()!=4)throw std::invalid_argument(
+                "coordinate-inverse requires a coordinate archive, an input and an output NPZ");
+            const std::filesystem::path output(args.positional[3]);
+            dynsyslab::workflow::invertCoordinates(args.positional[1],args.positional[2],output);
+            std::cout << "{\"schema\":\"dynsyslab.coordinate-inverse/v1\",\"output\":"
+                      << json::dump(json::Value(output.generic_u8string())) << "}\n";
+        }
         else if (command == L"generate-ics") {
             if (args.positional.size() < 2)
                 throw std::invalid_argument("generate-ics needs a solve job file");
@@ -498,7 +528,9 @@ int wmain(int argc, wchar_t** argv) {
         else if (command == L"queue") return queue(args);
         else if (command == L"validate" || command == L"plan" || command == L"run") {
             if (args.positional.size() < 2) throw std::invalid_argument("command needs a job file");
-            const auto job = json::parse(readText(args.positional[1])); requireJob(job);
+            const auto job = dynsyslab::workflow::applyJobInputs(
+                json::parse(readText(args.positional[1])), args.params, args.sets);
+            requireJob(job);
             if (command == L"validate") std::cout << "valid\n";
             else if (command == L"plan")
                 std::cout << json::dump(dynsyslab::workflow::planJob(job)) << '\n';

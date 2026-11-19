@@ -76,6 +76,59 @@ dynsyslab::core::StateTargetFunction waveformTarget(
     };
 }
 
+// Optional smooth onset for any state target (the ramp toggle). A ramp block
+//   {"duration": T, "from": [...], "derivative_pairs": [[position, velocity], ...]}
+// gives x_ref = from + s(t)(w(t) - from), with the quintic smoothstep s rising
+// 0 -> 1 over [0, T]. For each derivative pair, the velocity component also gets
+// s'(t)(w_position - from_position), so it stays the exact derivative of the
+// ramped position. The default pairs are [[0, 1]] for a state of dimension 2 or
+// more (r and r' for the RPE), and none otherwise. "ramp" absent, null or false,
+// or {"enabled": false}, disables the ramp: the target is used as given.
+bool rampRequested(const json::Value& ramp) {
+    if (ramp.isNull()) return false;
+    if (std::holds_alternative<bool>(ramp.storage())) return ramp.boolean();
+    return ramp.at("enabled").boolean(true);
+}
+
+dynsyslab::core::StateTargetFunction withRamp(
+    dynsyslab::core::StateTargetFunction base, const json::Value& ramp, std::size_t dimension) {
+    if (!rampRequested(ramp)) return base;
+    if (!std::holds_alternative<json::Value::Object>(ramp.storage()))
+        throw std::invalid_argument("target ramp must be an object, null or false");
+    const double duration = ramp.at("duration").number(0.0);
+    auto from = numbers(ramp.at("from"));
+    if (!(duration > 0.0) || !std::isfinite(duration))
+        throw std::invalid_argument("target ramp.duration must be positive");
+    if (from.size() != dimension)
+        throw std::invalid_argument("target ramp.from dimension mismatch");
+    finiteVector(from, "target ramp.from");
+    std::vector<std::pair<std::size_t, std::size_t>> pairs;
+    if (ramp.at("derivative_pairs").isNull()) {
+        if (dimension > 1) pairs.emplace_back(0, 1);
+    } else {
+        for (const auto& pair : ramp.at("derivative_pairs").array()) {
+            const auto ij = numbers(pair);
+            if (ij.size() != 2 || ij[0] < 0 || ij[1] < 0 || ij[0] != std::floor(ij[0])
+                || ij[1] != std::floor(ij[1]) || ij[0] >= double(dimension) || ij[1] >= double(dimension))
+                throw std::invalid_argument("target ramp.derivative_pairs must hold [position, velocity] state indices");
+            pairs.emplace_back(std::size_t(ij[0]), std::size_t(ij[1]));
+        }
+    }
+    return [base = std::move(base), duration, from = std::move(from), pairs = std::move(pairs)]
+        (double time) {
+        auto result = base(time);
+        const double x = std::clamp(time / duration, 0.0, 1.0);
+        const double s = x * x * x * (10.0 - 15.0 * x + 6.0 * x * x);
+        const double ds = (time > 0.0 && time < duration)
+            ? 30.0 * x * x * (1.0 - x) * (1.0 - x) / duration : 0.0;
+        std::vector<double> lead(pairs.size());
+        for (std::size_t p = 0; p < pairs.size(); ++p) lead[p] = result[pairs[p].first] - from[pairs[p].first];
+        for (std::size_t k = 0; k < result.size(); ++k) result[k] = from[k] + s * (result[k] - from[k]);
+        for (std::size_t p = 0; p < pairs.size(); ++p) result[pairs[p].second] += ds * lead[p];
+        return result;
+    };
+}
+
 dynsyslab::core::StateTargetFunction trajectoryTarget(
     const json::Value& source, std::size_t dimension) {
     const std::string path = source.at("source").string();
@@ -120,8 +173,8 @@ dynsyslab::core::StateTargetFunction trajectoryTarget(
 
 }  // namespace
 
-dynsyslab::core::StateTargetFunction resolveControlTarget(
-    const json::Value& source, std::size_t dimension) {
+namespace {
+dynsyslab::core::StateTargetFunction baseTarget(const json::Value& source, std::size_t dimension) {
     const std::string kind = source.at("kind").string("constant");
     if (kind == "constant" || kind == "fixed_point")
         return fixedTarget(source, dimension);
@@ -135,6 +188,12 @@ dynsyslab::core::StateTargetFunction resolveControlTarget(
         return [target](double time) { return target.evaluate(time); };
     }
     throw std::invalid_argument("unknown native control target kind: " + kind);
+}
+}  // namespace
+
+dynsyslab::core::StateTargetFunction resolveControlTarget(
+    const json::Value& source, std::size_t dimension) {
+    return withRamp(baseTarget(source, dimension), source.at("ramp"), dimension);
 }
 
 }  // namespace dynsyslab::workflow

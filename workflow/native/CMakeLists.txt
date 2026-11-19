@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(dynsyslab_workflow VERSION 0.5.2 LANGUAGES CXX)
+project(dynsyslab_workflow VERSION 0.6.0 LANGUAGES CXX)
 
 if(MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
@@ -17,22 +17,22 @@ if(NOT TARGET dynsyslab_core)
 endif()
 
 add_library(dynsyslab_workflow SHARED
-  src/Run.cpp src/Plan.cpp src/SystemResolution.cpp src/SolveDispatch.cpp src/SolveSet.cpp src/Solve.cpp src/InitialConditions.cpp src/ControlFactory.cpp src/ControlTargets.cpp src/PrescribedControl.cpp src/DelaySolve.cpp src/LatticeSolve.cpp src/PDESolve.cpp src/Hierarchy.cpp src/Campaign.cpp src/Postprocess.cpp
+  src/Run.cpp src/Plan.cpp src/SystemResolution.cpp src/SolveDispatch.cpp src/SolveSet.cpp src/Solve.cpp src/InitialConditions.cpp src/ControlFactory.cpp src/ControlTargets.cpp src/PrescribedControl.cpp src/DelaySolve.cpp src/LatticeSolve.cpp src/PDESolve.cpp src/Hierarchy.cpp src/Campaign.cpp src/Pipeline.cpp src/Postprocess.cpp
   src/WorkflowSupport.cpp src/WorkflowExtensions.cpp src/PostprocessSupport.cpp
   src/SourceCoordinates.cpp src/ObservableQuery.cpp src/CoordinateClosureQuery.cpp
   src/AnalyticQuery.cpp src/AnalyticArchive.cpp
   src/PhaseSpaceQuery.cpp src/PhaseSpaceSerialization.cpp src/PhaseForcingConfiguration.cpp
   src/KnowledgeSerialization.cpp src/ResearchCatalogue.cpp
-  src/LinearAnalysisPostprocess.cpp src/ReconstructionPostprocess.cpp src/HankelAnalysis.cpp src/HankelArchive.cpp src/HdmdPostprocess.cpp src/DmdPostprocess.cpp src/DmdControlPostprocess.cpp
+  src/LinearAnalysisPostprocess.cpp src/LinearSystemsPostprocess.cpp src/LinearSystemsClassical.cpp src/EmpiricalObservabilityPostprocess.cpp src/ReconstructionPostprocess.cpp src/HankelAnalysis.cpp src/HankelArchive.cpp src/HdmdPostprocess.cpp src/DmdPostprocess.cpp src/DmdControlPostprocess.cpp
   src/KromControlSearch.cpp src/KromControlSearchSupport.cpp
   src/TrainingPreflight.cpp
-  src/EchoHistoryKoopman.cpp src/ObservationSource.cpp src/HistoryControl.cpp src/HistoryPostprocess.cpp src/CoordinateSindy.cpp
+  src/EchoHistoryKoopman.cpp src/ObservationSource.cpp src/HistoryControl.cpp src/HistoryControlRegression.cpp src/InputMap.cpp src/ModeSelection.cpp src/ModeSelectionData.cpp src/ModeSelectionScore.cpp src/EigenfunctionPolynomialFit.cpp src/KlqrAugmentation.cpp src/ControlTargetLift.cpp src/DerivativeBenchmark.cpp src/HistoryPostprocess.cpp src/CoordinateSindy.cpp
   src/EstimationPostprocess.cpp src/DecompositionPostprocess.cpp
-  src/CoordinateTransformPostprocess.cpp src/SindyDynamicsPostprocess.cpp
+  src/CoordinateTransformPostprocess.cpp src/CoordinateChannels.cpp src/CoordinateChangeKinds.cpp src/CoordinateDiagnostics.cpp src/CoordinateInverse.cpp src/HankelShorthand.cpp src/SindyDynamicsPostprocess.cpp
   src/PcaPostprocess.cpp src/KromPostprocess.cpp src/KromEvidence.cpp
   src/KoopmanSpectralQuery.cpp src/KoopmanSpectralPostprocess.cpp)
 target_sources(dynsyslab_workflow PRIVATE src/KromValidationPostprocess.cpp
-  src/KoopmanFeedback.cpp src/EstimatedControl.cpp
+  src/KoopmanFeedback.cpp src/EstimatedControl.cpp src/EstimatorFactory.cpp src/KlqeProcessCovariance.cpp
   src/KromDatasetSupport.cpp src/KromValidationPlan.cpp
   src/BoundaryPostprocess.cpp src/EigenvalueOptimizationPostprocess.cpp)
 target_include_directories(dynsyslab_workflow PUBLIC include)
@@ -73,6 +73,9 @@ if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
   add_executable(dynsyslab_pipeline_boundary_tests tests/pipeline_boundary_tests.cpp)
   target_link_libraries(dynsyslab_pipeline_boundary_tests PRIVATE dynsyslab_workflow dynsyslab_workflow_c_api)
   add_test(NAME dynsyslab_pipeline_boundary_tests COMMAND dynsyslab_pipeline_boundary_tests)
+  add_executable(dynsyslab_pipeline_job_tests tests/pipeline_job_tests.cpp)
+  target_link_libraries(dynsyslab_pipeline_job_tests PRIVATE dynsyslab_workflow)
+  add_test(NAME dynsyslab_pipeline_job_tests COMMAND dynsyslab_pipeline_job_tests)
   add_executable(dynsyslab_dmd_control_postprocess_tests tests/dmd_control_postprocess_tests.cpp)
   target_link_libraries(dynsyslab_dmd_control_postprocess_tests PRIVATE dynsyslab_workflow dynsyslab_workflow_c_api)
   add_test(NAME dynsyslab_dmd_control_postprocess_tests COMMAND dynsyslab_dmd_control_postprocess_tests)
@@ -149,6 +152,25 @@ if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
     COMMAND dynsyslab_hdmd_scattered_krom_tests)
   set_tests_properties(dynsyslab_hdmd_scattered_krom_tests PROPERTIES
     LABELS "native;workflow;postprocess;krom;hdmd")
+  add_executable(dynsyslab_linear_systems_postprocess_tests
+    tests/linear_systems_postprocess_tests.cpp)
+  target_link_libraries(dynsyslab_linear_systems_postprocess_tests PRIVATE dynsyslab_workflow)
+  add_test(NAME dynsyslab_linear_systems_postprocess_tests
+    COMMAND dynsyslab_linear_systems_postprocess_tests)
+  set_tests_properties(dynsyslab_linear_systems_postprocess_tests PROPERTIES
+    LABELS "native;workflow;postprocess;linear-systems")
+  add_executable(dynsyslab_empirical_observability_postprocess_tests
+    tests/empirical_observability_postprocess_tests.cpp)
+  target_link_libraries(dynsyslab_empirical_observability_postprocess_tests PRIVATE dynsyslab_workflow)
+  add_test(NAME dynsyslab_empirical_observability_postprocess_tests
+    COMMAND dynsyslab_empirical_observability_postprocess_tests)
+  set_tests_properties(dynsyslab_empirical_observability_postprocess_tests PROPERTIES
+    LABELS "native;workflow;postprocess;linear-systems")
+  add_executable(dynsyslab_mode_selection_tests tests/mode_selection_tests.cpp)
+  target_link_libraries(dynsyslab_mode_selection_tests PRIVATE dynsyslab_workflow)
+  add_test(NAME dynsyslab_mode_selection_tests COMMAND dynsyslab_mode_selection_tests)
+  set_tests_properties(dynsyslab_mode_selection_tests PROPERTIES
+    LABELS "native;workflow;postprocess;mode-selection")
   add_executable(dynsyslab_boundary_postprocess_tests
     tests/boundary_postprocess_tests.cpp)
   target_link_libraries(dynsyslab_boundary_postprocess_tests PRIVATE dynsyslab_workflow)

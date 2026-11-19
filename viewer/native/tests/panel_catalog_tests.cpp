@@ -23,7 +23,7 @@ int main() {
                       "control_fourier", "time_frequency"};
         const auto routes = dsl::panelSourceViews(item);
         require(routes == std::vector<std::string>({"time", "phase", "fourier",
-            "control_fourier", "data_overview", "three_d", "observable_time"}), "panel route policy");
+            "control_fourier", "data_overview", "three_d", "observable_time", "estimator"}), "panel route policy");
 
         dsl::CatalogItem staleTrajectory;
         staleTrajectory.views = {"data_overview"};

@@ -1,5 +1,7 @@
 #include <dynsyslab/workflow/ControlFactory.hpp>
+#include "KlqrAugmentation.hpp"
 #include "ModelBindingOptions.hpp"
+#include "BalancedTruncationSettings.hpp"
 #include "HistoryControl.hpp"
 #include "EstimatedControl.hpp"
 #include <dynsyslab/core/HistoryObservationArchive.hpp>
@@ -195,8 +197,19 @@ ControllerSetup buildController(
     if (kind == "none") return {};
     if (!trajectoryCount) throw std::invalid_argument("controller needs a trajectory");
     const auto& settings = source.at("settings");
-    if(!settings.at("estimator").isNull())
-        return detail::buildEstimatedController(source,solver,system,trajectoryCount,defaultSampleTime);
+    if(!settings.at("estimator").isNull()) {
+        // applied_controller: the KLQE -> KLQR runs in shadow beside a reference drive that the
+        // plant actually receives (any non-estimating controller, evaluated on the true state).
+        std::function<double(std::size_t,double,const double*)> applied;
+        if(const auto& spec=settings.at("applied_controller");!spec.isNull()) {
+            if(!spec.at("settings").at("estimator").isNull()||!spec.at("settings").at("applied_controller").isNull())
+                throw std::invalid_argument("applied_controller must not estimate or shadow");
+            applied=buildController(spec,solver,system,trajectoryCount,defaultSampleTime,fallbackState).policy.value;
+            if(!applied)throw std::invalid_argument("applied_controller needs an input policy");
+        }
+        return detail::buildEstimatedController(source,solver,system,trajectoryCount,defaultSampleTime,
+                                                std::move(applied));
+    }
     const std::size_t states = system.descriptor().stateDimension;
     const bool prescribedKind = kind == "waveform" || kind == "random_pulse";
     const auto& targetSpec=source.at("target");
@@ -293,10 +306,19 @@ ControllerSetup buildController(
         const auto Kp = gainMatrix(settings.at("Kp"), 1, states, 1.0, "PID Kp");
         const auto Ki = gainMatrix(settings.at("Ki"), 1, states, 0.0, "PID Ki");
         const auto Kd = gainMatrix(settings.at("Kd"), 1, states, 0.0, "PID Kd");
+        dynsyslab::core::PIDOptions pid;
+        pid.derivativeFilterTime = settings.at("derivative_filter_time").number(0.0);
+        pid.integratorLimit = numbers(settings.at("integrator_limit"));
+        if (pid.integratorLimit.size() == 1 && states > 1) pid.integratorLimit.assign(states, pid.integratorLimit[0]);
+        if (const auto cap = controlCap(settings.at("control_limit"))) {
+            // Anti-windup against the actuator cap (the cap itself is applied below).
+            pid.outputMinimum = cap->first; pid.outputMaximum = cap->second;
+            pid.conditionalIntegration = settings.at("conditional_integration").boolean(true);
+        }
         result.policy.value = controllerBank<dynsyslab::core::PIDController>(
-            trajectoryCount, [Kp, Ki, Kd, states, target] {
+            trajectoryCount, [Kp, Ki, Kd, states, target, pid] {
                 return std::make_shared<dynsyslab::core::PIDController>(
-                    Kp, Ki, Kd, states, 1, target);
+                    Kp, Ki, Kd, states, 1, target, pid);
             });
         result.kind = kind; result.family = "state_space";
     } else if (kind == "klqr" || kind == "kmpc") {
@@ -341,14 +363,24 @@ ControllerSetup buildController(
         if (model->inputDimension() != 1)
             throw std::invalid_argument("current native integrator supports scalar-input Koopman control");
         auto referenceSpace=dynsyslab::core::KoopmanTargetSpace::dynamicalState;
+        const auto historyMeasurement=[&]() {
+            const auto name=settings.at("measurement_observable").string(history->measurement());
+            if(name.empty())throw std::invalid_argument("History control requires a simulator measurement observable");
+            return system.observableCatalog().at(name);
+        };
         if(observableTarget) {
             referenceSpace=dynsyslab::core::KoopmanTargetSpace::observableCoordinates;
             if(targetSpec.at("kind").string()=="from_state") {
-                const auto coordinates=model->coordinateObservable();
                 result.target=resolveControlTarget(targetSpec.at("state_target"),states);
-                target=[stateTarget=result.target,coordinates](double time) {
-                    const auto x=stateTarget(time); return coordinates.evaluateReal(x.data());
-                };
+                if(history) {
+                    // xi_ref: frozen projection of the measured observable along the state target.
+                    target=detail::historyCoordinateTarget(result.target,*history,historyMeasurement());
+                } else {
+                    const auto coordinates=model->coordinateObservable();
+                    target=[stateTarget=result.target,coordinates](double time) {
+                        const auto x=stateTarget(time); return coordinates.evaluateReal(x.data());
+                    };
+                }
             } else target=resolveControlTarget(targetSpec,model->coordinateDimension());
             result.observableTarget=target;
             result.targetObservableNames=model->coordinates().names;
@@ -370,14 +402,48 @@ ControllerSetup buildController(
             result.modelBindingEvidence.object()["control_map_provenance"]=std::visit(
                 [](const auto& map){return map.provenance;},model->storedControlMap(representation));
         }
-        if (kind == "klqr") {
+        const auto reduction=parseBalancedTruncation(settings.at("balanced_truncation"));
+        if(reduction&&kind!="klqr")
+            throw std::invalid_argument("balanced_truncation applies to klqr (and klqe), not "+kind);
+        if(reduction)result.modelBindingEvidence.object()["controller_balanced_truncation"]=
+            balancedTruncationRequest(*reduction);
+        const bool historyExact=representation=="history_exact";
+        if(historyExact&&(!history||kind!="klqr"))
+            throw std::invalid_argument("control_representation history_exact needs a causal-history KROM and klqr");
+        if (kind == "klqr" && historyExact) {
+            auto controller = std::make_shared<dynsyslab::core::KoopmanLQRController>(
+                model, Q, R, target, "external", referenceSpace);
+            if(reduction)controller->setBalancedReduction(*reduction);
+            std::shared_ptr<const dynsyslab::core::ODESystem> plant=
+                dynsyslab::core::createSystem(system.configuration());
+            result.policy.value=detail::historyExactControlLaw(std::move(controller),model,*history,
+                historyMeasurement(),std::move(plant),trajectoryCount,settings.at("warmup_input").number(0));
+            result.modelBindingEvidence.object()["control_map_provenance"]=
+                "history_exact: grad_xi psi * newest-sample weight * L_g(measurement), from simulator state";
+        } else if (kind == "klqr") {
             auto controller = std::make_shared<dynsyslab::core::KoopmanLQRController>(
                 model, Q, R, target, representation, referenceSpace);
+            if(reduction)controller->setBalancedReduction(*reduction);
+            applyKlqrAugmentations(*controller, *model, settings);
+            if(controller->stateful())
+                result.modelBindingEvidence.object()["klqr_augmentations"]=klqrAugmentationEvidence(settings);
             if(history)result.policy.value=detail::coordinateControllerBank(*controller,trajectoryCount);
-            else result.policy.value = [controller = std::move(controller)](
-                std::size_t, double time, const double* state) {
-                return controller->value(time, state).front();
-            };
+            else if(controller->stateful()) {
+                // Integral/PID states: one controller copy per trajectory, sampled clock (below).
+                auto bank=std::make_shared<std::vector<dynsyslab::core::KoopmanLQRController>>(
+                    trajectoryCount,*controller);
+                result.policy.value=[bank](std::size_t trajectory,double time,const double* state) {
+                    return bank->at(trajectory).value(time,state).front();
+                };
+            } else {
+                if(reduction)result.appendDiagnostics=[controller](std::size_t,dynsyslab::core::NpzRecord& archive) {
+                    storeKlqrReduction(*controller,archive);
+                };
+                result.policy.value = [controller = std::move(controller)](
+                    std::size_t, double time, const double* state) {
+                    return controller->value(time, state).front();
+                };
+            }
         } else {
             const auto clock = resolveClock(kind, solver, settings, history?history->sampleInterval():defaultSampleTime, true);
             auto limits = numbers(settings.at("control_limit"));
@@ -404,8 +470,9 @@ ControllerSetup buildController(
             const auto catalog=system.observableCatalog();
             if(!history->measurement().empty()&&catalog.at(observable).descriptor().name!=catalog.at(history->measurement()).descriptor().name)
                 throw std::invalid_argument("Deployment measurement differs from frozen history training measurement");
-            result.policy.value=detail::historyControlLaw(std::move(result.policy.value),*history,
-                catalog.at(observable),trajectoryCount,settings.at("warmup_input").number(0));
+            if(!historyExact)  // history_exact already built its own measurement law
+                result.policy.value=detail::historyControlLaw(std::move(result.policy.value),*history,
+                    catalog.at(observable),trajectoryCount,settings.at("warmup_input").number(0));
         }
         result.kind = kind; result.family = "koopman";
     } else {
@@ -413,7 +480,7 @@ ControllerSetup buildController(
             + " controller has not yet been ported to the native control core");
     }
 
-    const bool sampledRequired = kind == "sdre" || kind == "pid";
+    const bool sampledRequired = kind == "sdre" || kind == "pid" || (kind == "klqr" && klqrIsStateful(settings));
     if (kind != "mpc" && kind != "kmpc" && !historyClock) {
         const auto clock = resolveClock(kind, solver, settings,
                                         defaultSampleTime, sampledRequired);
@@ -422,11 +489,45 @@ ControllerSetup buildController(
         result.evaluation = clock.label;
         result.sampleTime = clock.sampleTime;
     }
+    // Optional actuator cap (the cap toggle), for every controller kind except MPC and
+    // KMPC, whose optimizers enforce control_limit as a constraint. A scalar L clips
+    // to [-L, L], a pair [low, high] clips asymmetrically. Absent, null or false: no cap.
+    if (kind != "mpc" && kind != "kmpc") {
+        if (const auto cap = controlCap(settings.at("control_limit"))) {
+            result.policy.value = [law = std::move(result.policy.value), low = cap->first, high = cap->second](
+                std::size_t trajectory, double time, const double* state) {
+                return std::clamp(law(trajectory, time, state), low, high);
+            };
+            if (std::holds_alternative<json::Value::Object>(result.modelBindingEvidence.storage()))
+                result.modelBindingEvidence.object()["control_limit"] =
+                    json::Value(json::Value::Array{json::Value(cap->first), json::Value(cap->second)});
+        }
+    }
     if (kind != "waveform" && kind != "random_pulse")
         result.policy.value = withWindow(std::move(result.policy.value),
                                          activeWindow(settings));
     if(!observableTarget)result.target = std::move(target);
     return result;
+}
+
+std::optional<std::pair<double, double>> controlCap(const json::Value& limit) {
+    if (limit.isNull()) return std::nullopt;
+    if (std::holds_alternative<bool>(limit.storage())) {
+        if (!limit.boolean()) return std::nullopt;
+        throw std::invalid_argument("control_limit true needs a value: give a positive number or [low, high]");
+    }
+    if (std::holds_alternative<json::Value::Array>(limit.storage())) {
+        const auto& values = limit.array();
+        if (values.size() == 1) return controlCap(values.front());
+        if (values.size() != 2) throw std::invalid_argument("control_limit must be a number or [low, high]");
+        const double low = values[0].number(), high = values[1].number();
+        if (!std::isfinite(low) || !std::isfinite(high) || !(low < high))
+            throw std::invalid_argument("control_limit [low, high] needs finite low < high");
+        return std::make_pair(low, high);
+    }
+    const double value = limit.number(-1);
+    if (!(value > 0) || !std::isfinite(value)) throw std::invalid_argument("control_limit must be positive");
+    return std::make_pair(-value, value);
 }
 
 }  // namespace dynsyslab::workflow

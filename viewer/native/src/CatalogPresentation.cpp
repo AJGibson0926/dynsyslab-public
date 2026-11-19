@@ -31,6 +31,7 @@ std::string activity(const CatalogItem& item, const std::string& originalLabel,
     if (item.kind == "koopman_spectrum") return "Koopman spectra";
     if (item.kind == "krom_control_campaign") return "Control searches";
     if (item.kind == "observability" || item.kind == "estimation") return "Estimation";
+    if (item.kind == "linear_systems") return "Linear systems";
     if (item.kind == "decomposition") return "Post-processing";
     if (item.kind == "batch") {
         if (has(text, "control")) return "Control runs";
@@ -52,7 +53,7 @@ std::string majorLane(const std::string& study) {
         study == "Koopman spectra" || study == "Bψ identification" ||
         study == "Post-processing") return "Models & assets";
     if (study == "KLQR controls" || study == "Control searches" ||
-        study == "Estimation") return "Control & estimation";
+        study == "Estimation" || study == "Linear systems") return "Control & estimation";
     return "Other data";
 }
 

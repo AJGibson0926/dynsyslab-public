@@ -19,6 +19,7 @@ void decorateTrajectory(Payload& payload,const json::Value& metadata,
     double inputScale=positive(metadata,"control_input_scale_to_dimensional");
     if(!inputScale) inputScale=positive(metadata.at("control_history"),"scale_to_dimensional");
     if(!inputScale) inputScale=positive(metadata.at("nondimensionalization"),"control_pressure_scale_pa");
+    if(!inputScale) inputScale=positive(metadata,"control_scale_to_dimensional");
     const auto controlCoordinates=metadata.at("control_input_coordinate_system").string(
         metadata.at("control_history").at("coordinate_system").string(
         metadata.at("control_coordinate_system").string(current.coordinates)));
@@ -64,7 +65,8 @@ void decorateTrajectory(Payload& payload,const json::Value& metadata,
         alternate.yLabel=control?(bubble&&other.coordinates=="dimensional"?"u\\; (Pa)":"u"):other.stateLabels[component];
         if(figure.kind=="three_d"&&dimension>=3) alternate.zLabel=other.stateLabels[2];
         if(spectrum) {
-            alternate.xLabel=other.coordinates=="dimensionless"?"frequency (cycles / tau)":"frequency (cycles / time)";
+            alternate.xLabel=other.coordinates=="dimensionless"?"frequency (cycles / tau)":
+                positive(metadata,"time_scale_to_seconds")>0?"frequency (Hz)":"frequency (cycles / time)";
             alternate.yLabel=figure.yLabel;
         }
         for(const auto& trace:figure.traces)

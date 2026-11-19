@@ -1,0 +1,43 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "postprocess",
+  "label": "rpe-viscous-ic0-standard-hdmd-sindy",
+  "sources": [
+    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z.npz"
+  ],
+  "methods": [
+    {
+      "name": "hdmd",
+      "enabled": true,
+      "settings": {
+        "observable": 0,
+        "matrix_size": 2000,
+        "sampling_window": 20000,
+        "sample_stride": 10,
+        "rank": 0,
+        "svd_tolerance": 1e-10,
+        "mode_sort": "terminal-amplitude-energy"
+      }
+    },
+    {
+      "name": "sindy",
+      "enabled": true,
+      "settings": {
+        "coordinate_observable": "state",
+        "polynomial_degree": 4,
+        "threshold": 0.05,
+        "max_iterations": 20,
+        "normalize": true,
+        "reuse_conjugate_fits": true,
+        "compute_training_values": false,
+        "gamma_method": "system_rhs",
+        "archive_storage": "coefficient-first",
+        "reconstruction_observables": ["state"]
+      }
+    }
+  ],
+  "archive": {
+    "enabled": true,
+    "data_role": "viscous_multisine_klqr_study"
+  }
+}

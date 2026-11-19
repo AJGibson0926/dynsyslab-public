@@ -1,11 +1,13 @@
 #include <dynsyslab/workflow/EstimationPostprocess.hpp>
 #include "ObservationSource.hpp"
 #include "ModelBindingOptions.hpp"
+#include "BalancedTruncationSettings.hpp"
 
 #include <dynsyslab/core/Text.hpp>
 
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/Estimation.hpp>
+#include <dynsyslab/core/ReducedOrderEstimation.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/core/System.hpp>
 
@@ -120,8 +122,12 @@ std::filesystem::path runEstimationPostprocess(
                           settings.at("process_diagonal"));
     const auto R=diagonal(p,settings.at("measurement_variance").number(1.0e-4),
                           settings.at("measurement_diagonal"));
-    const auto design=dynsyslab::core::designKoopmanLQEFromMeasurements(
+    auto design=dynsyslab::core::designKoopmanLQEFromMeasurements(
         model,measurement,Q,R,stateName,settings.at("require_detectable").boolean(true));
+    std::string reductionJson;
+    if(const auto reduction=parseBalancedTruncation(settings.at("balanced_truncation")))
+        reductionJson=",\"balanced_truncation\":"+json::dump(balancedTruncationEvidence(
+            dynsyslab::core::reduceKoopmanLQEDesign(design,*reduction,Q,R).reduction));
     const auto observability=dynsyslab::core::analyzeObservability(
         design.generator,design.measurementMatrix,n,p,
         observabilityOptions(settings,n));
@@ -162,7 +168,8 @@ std::filesystem::path runEstimationPostprocess(
         +",\"detectable\":"+(design.solution.detectable?"true":"false")
         +",\"observer_poles\":"+complexJson(design.solution.observerPoles)
         +",\"model_binding_evidence\":"+model.bindingEvidenceJson()
-        +",\"unverified_measurement_reason\":"+json::dump(settings.at("unverified_legacy_reason"));
+        +",\"unverified_measurement_reason\":"+json::dump(settings.at("unverified_legacy_reason"))
+        +reductionJson;
     if (method=="klqe") {
         const auto sourceMeta=source.metadataJson().empty()?json::Value{}:json::parse(source.metadataJson());
         const auto space=sourceMeta.at("value_space").string();
@@ -171,11 +178,36 @@ std::filesystem::path runEstimationPostprocess(
         const bool hasTruth=config&&stateSpace&&model.physicalStateDimension()&&source.contains(stateKey)
             &&source.at(stateKey).shape==std::vector<std::size_t>{observed.samples,*model.physicalStateDimension()};
         std::vector<double> initial,truth;
+        // initial_estimate: "zero" (no prior knowledge), "truth" (psi at the true first state; benchmark
+        // only), or the legacy default (explicit values / initial_state / the system's initial state).
+        const auto initialMode=settings.at("initial_estimate").string();
+        if(!initialMode.empty()&&initialMode!="zero"&&initialMode!="truth")
+            throw std::invalid_argument("initial_estimate must be zero or truth");
         for(const auto& value:settings.at("initial_lifted_values").array())initial.push_back(value.number());
+        if(initialMode=="zero")initial.assign(n,0.0);
         if(initial.empty()&&!settings.at("initial_state").isNull()) {
             std::vector<double> state;for(const auto& value:settings.at("initial_state").array())state.push_back(value.number());
             if(state.size()!=model.stateDimension())throw std::invalid_argument("Initial state dimension differs from KROM");
             initial=model.evaluateSplit(state.data());
+        }
+        // Optional row selection: time_window [start, stop] and sample_stride.
+        std::vector<std::size_t> rows;
+        {
+            const auto& window=settings.at("time_window").array();
+            if(!window.empty()&&window.size()!=2)throw std::invalid_argument("klqe time_window must be [start, stop]");
+            const double start=window.empty()?-INFINITY:window[0].number(),stop=window.empty()?INFINITY:window[1].number();
+            const double strideValue=settings.at("sample_stride").number(1);
+            if(!(strideValue>=1)||std::floor(strideValue)!=strideValue)throw std::invalid_argument("klqe sample_stride must be a positive integer");
+            std::size_t kept=0;
+            for(std::size_t i=0;i<observed.samples;++i)
+                if(observed.time[i]>=start&&observed.time[i]<=stop&&(kept++%static_cast<std::size_t>(strideValue))==0)rows.push_back(i);
+            if(rows.size()<2)throw std::invalid_argument("klqe row selection leaves fewer than two samples");
+        }
+        if(initial.empty()&&initialMode=="truth") {
+            if(!hasTruth||model.requiresExternalCoordinates())
+                throw std::invalid_argument("initial_estimate truth needs physical truth and a state-evaluable KROM");
+            const auto physical=postprocess_detail::loadSource(sourcePath);
+            initial=model.evaluateSplit(physical.values.data()+rows.front()*physical.dimension);
         }
         if(initial.empty()&&hasTruth&&!model.requiresExternalCoordinates()) {
             const auto system=dynsyslab::core::createSystem(*config);
@@ -187,9 +219,19 @@ std::filesystem::path runEstimationPostprocess(
             if(physical.time!=observed.time)throw std::invalid_argument("Truth and measurement clocks differ; explicitly normalize measurements first");
             truth=physical.values;
         }
-        const auto& measurements=observed.values;
+        std::vector<double> time,measurements,selectedTruth;
+        for(const auto i:rows) {
+            time.push_back(observed.time[i]);
+            measurements.insert(measurements.end(),observed.values.begin()+i*observed.dimension,
+                                observed.values.begin()+(i+1)*observed.dimension);
+            if(!truth.empty()) {
+                const auto width=truth.size()/observed.samples;
+                selectedTruth.insert(selectedTruth.end(),truth.begin()+i*width,truth.begin()+(i+1)*width);
+            }
+        }
+        truth=std::move(selectedTruth);
         const auto run=dynsyslab::core::runKoopmanLQEFromLifted(
-            model,design,observed.time,measurements,initial,truth);
+            model,design,time,measurements,initial,truth);
         output.arrays["time"]=dynsyslab::core::NpyArray::fromDoubles({run.samples},run.time);
         output.arrays["values"]=dynsyslab::core::NpyArray::fromDoubles(
             {run.samples,run.stateDimension?run.stateDimension:run.liftedDimension},

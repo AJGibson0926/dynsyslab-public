@@ -81,7 +81,9 @@ DisplayCoordinateTransform displayCoordinateTransform(
     if (hasTransformedValues(metadata)) {
         result.coordinates = stored;
         result.timeLabel = stored == "dimensionless" ? "\\tau" : "time";
-        const auto& names = metadata.at("coordinate_names").array();
+        // Display labels (TeX) when the coordinate change recorded them, else identifiers.
+        const auto& labels = metadata.at("coordinate_labels").array();
+        const auto& names = labels.size() == stateDimension ? labels : metadata.at("coordinate_names").array();
         for (std::size_t i = 0; i < stateDimension; ++i) {
             const auto name = i < names.size() ? names[i].string() : "";
             result.stateLabels.push_back(name.empty() ? "q_{" + std::to_string(i+1) + "}" :

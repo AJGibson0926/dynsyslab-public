@@ -5,6 +5,7 @@
 #include <string>
 namespace dynsyslab::core {
 class KoopmanModel;
+struct ReconstructionResult;
 enum class ObservabilityMethod {
     classicalMatrix,
     discreteGramian,
@@ -58,4 +59,10 @@ struct ObservabilityResult {
 // be positive; it specifies the transition's dt and is applied exactly once.
 [[nodiscard]] ObservabilityResult analyzeObservability(const KoopmanModel& model,
     const std::string& reconstruction, const ObservabilityOptions& options = {});
+
+// Convert G = C Psi into a real output map over the KROM's split lifted state.
+// Defined in dynsyslab_linear_analysis; shared by observability, the
+// linear-systems toolkit and KLQE.
+[[nodiscard]] std::vector<double> reconstructionSplitMatrix(
+    const KoopmanModel& model, const ReconstructionResult& reconstruction);
 } // namespace dynsyslab::core

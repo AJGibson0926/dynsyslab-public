@@ -11,6 +11,7 @@
 - [Coordinate transforms and dynamics SINDy](architecture/COORDINATE_DYNAMICS_SINDY.md) - shared modules, vector-field fits and validation.
 
 - [Native pipeline boundaries and runtime APIs](architecture/PIPELINE_BOUNDARY_REFACTOR_2026-10-31.md)
+- [Pipeline jobs](architecture/PIPELINE_JOBS.md) - one submitted deterministic study: stages, references, parameters, extends/overrides, provenance manifest.
 
 Start with [Start here](START_HERE.md). The categories below distinguish
 operating guides, architecture contracts, scientific workflow references, and
@@ -18,6 +19,7 @@ dated evidence. Case studies are reproducibility records, not default policy.
 
 ## Use DynSysLab
 
+- [Overview](OVERVIEW.md) — the suite at a glance: modules, pipelines and diagrams.
 - [Install DynSysLab](INSTALL.md) — verified prebuilt Windows release, Codex setup, and first solve.
 - [Local asset pointers](LOCAL_ASSET_POINTERS.json) — hashes and relative locations of local-only report media.
 - [Start here](START_HERE.md) — five-minute human and AI-agent entry point.
@@ -54,10 +56,14 @@ dated evidence. Case studies are reproducibility records, not default policy.
   between reusable suite features and retired one-off experiment code.
 - [Solver/Post-processor C++ workbench](architecture/SOLVER_POSTPROCESSOR_CPP_WORKBENCH.md) — shared archives, versioned jobs, and panel design.
 - [Viewer C++ workbench](architecture/VIEWER_CPP_WORKBENCH.md) — native Viewer information model and performance boundaries.
+- [Viewer CLI](architecture/VIEWER_CLI.md) — headless figures from archives and arrays: views, windows, spectra, comparisons.
+- [Integral action and PID](architecture/INTEGRAL_AND_PID_CONTROL.md) — general PID and LQI components with KLQR adapters.
 - [TimeSeries and Fourier contract](architecture/TIME_SERIES_AND_FOURIER.md) —
   native sample ownership, zero-copy solver views, lazy spectral analysis, and
   archive/Viewer boundaries.
 - [Bubble models and observables](architecture/BUBBLE_MODELS_AND_OBSERVABLES_2026-08-30.md) — RPE, Marmottant, and Reddy-Szeri model contracts.
+- [Classical linear-systems toolkit](architecture/LINEAR_SYSTEMS_TOOLKIT.md) - gramians, Hankel singular values, balanced truncation/residualization, Kalman decomposition, pole placement, LQR/LQE/LQG, H2/Hinf norms, zeros, ERA/OKID; the `linear_systems` method and Viewer views.
+- [Mode selection for echo-only KLQE/KLQR](architecture/MODE_SELECTION.md): choosing the eigenfunction subset by echo/state readouts, observability, controllability and B_psi quality
 - [Joint H-DMD and linear diagnostics](architecture/JOINT_HDMD_AND_LINEAR_ANALYSIS.md) � named reconstructions, matrix/KROM Gramians, SVD directions, and estimator subset criteria.
 - [Observable Hankel matrices](architecture/OBSERVABLE_HANKEL.md) covers shared windows, tapped channels, observable derivatives, POD coordinates, and DMD modes.
 - [H-DMD scalar observables](architecture/HDMD_SCALAR_OBSERVABLES.md) — arbitrary scalar-observable Hankel inputs.

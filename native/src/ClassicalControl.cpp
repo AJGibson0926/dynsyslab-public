@@ -160,50 +160,103 @@ const FiniteHorizonLQRSolution& StateSpaceMPCController::lastSolution() const no
     return last_;
 }
 
+PIDCompensator::PIDCompensator(
+    std::vector<double> proportional, std::vector<double> integral,
+    std::vector<double> derivative, std::size_t errors, std::size_t outputs, PIDOptions options)
+    : proportional_(std::move(proportional)),integralGain_(std::move(integral)),
+      derivative_(std::move(derivative)),accumulated_(errors),previousError_(errors),
+      filteredRate_(errors),errorDimension_(errors),outputDimension_(outputs),
+      options_(std::move(options)) {
+    dimensions(proportional_, outputs, errors, "PID Kp");
+    dimensions(integralGain_, outputs, errors, "PID Ki");
+    dimensions(derivative_, outputs, errors, "PID Kd");
+    if (!(options_.derivativeFilterTime >= 0.0) || !std::isfinite(options_.derivativeFilterTime))
+        throw std::invalid_argument("PID derivative filter time must be nonnegative");
+    if (!options_.integratorLimit.empty() && options_.integratorLimit.size() != errors)
+        throw std::invalid_argument("PID integrator limit needs one value per error channel");
+    for (double limit : options_.integratorLimit)
+        if (!(limit > 0.0)) throw std::invalid_argument("PID integrator limits must be positive");
+    if (!(options_.outputMinimum < options_.outputMaximum))
+        throw std::invalid_argument("PID output limits must satisfy minimum < maximum");
+}
+
+std::vector<double> PIDCompensator::combine(const std::vector<double>& error,
+    const std::vector<double>& integral, const std::vector<double>& rate) const {
+    std::vector<double> output(outputDimension_, 0.0);
+    for (std::size_t row = 0; row < outputDimension_; ++row)
+        for (std::size_t column = 0; column < errorDimension_; ++column) {
+            const std::size_t index = row * errorDimension_ + column;
+            output[row] += proportional_[index] * error[column]
+                + integralGain_[index] * integral[column] + derivative_[index] * rate[column];
+        }
+    return output;
+}
+
+std::vector<double> PIDCompensator::update(double time, const std::vector<double>& error) {
+    if (!std::isfinite(time)) throw std::invalid_argument("PID sample time is invalid");
+    if (error.size() != errorDimension_ || std::any_of(error.begin(), error.end(),
+        [](double value) { return !std::isfinite(value); }))
+        throw std::invalid_argument("PID error has the wrong dimension or is not finite");
+    std::vector<double> integral = accumulated_, rate(errorDimension_, 0.0);
+    if (initialized_) {
+        if (time < previousTime_) throw std::invalid_argument("PID samples must be monotonic");
+        const double step = time - previousTime_;
+        if (step > 0.0) {
+            for (std::size_t index = 0; index < errorDimension_; ++index) {
+                integral[index] += step * error[index];
+                if (!options_.integratorLimit.empty())
+                    integral[index] = std::clamp(integral[index],
+                        -options_.integratorLimit[index], options_.integratorLimit[index]);
+                const double raw = (error[index] - previousError_[index]) / step;
+                // First-order filter, exact for a held raw derivative over the step.
+                const double tau = options_.derivativeFilterTime;
+                const double blend = tau > 0.0 ? 1.0 - std::exp(-step / tau) : 1.0;
+                filteredRate_[index] += blend * (raw - filteredRate_[index]);
+            }
+        }
+        rate = filteredRate_;
+    }
+    auto output = combine(error, integral, rate);
+    if (options_.conditionalIntegration && initialized_) {
+        const auto held = combine(error, accumulated_, rate);
+        for (std::size_t row = 0; row < outputDimension_; ++row) {
+            const bool high = output[row] > options_.outputMaximum && output[row] > held[row];
+            const bool low = output[row] < options_.outputMinimum && output[row] < held[row];
+            if (high || low) { integral = accumulated_; output = held; break; }
+        }
+    }
+    for (double& value : output)
+        value = std::clamp(value, options_.outputMinimum, options_.outputMaximum);
+    accumulated_ = std::move(integral); previousError_ = error;
+    previousTime_ = time; initialized_ = true;
+    return output;
+}
+
+void PIDCompensator::reset() noexcept {
+    std::fill(accumulated_.begin(), accumulated_.end(), 0.0);
+    std::fill(previousError_.begin(), previousError_.end(), 0.0);
+    std::fill(filteredRate_.begin(), filteredRate_.end(), 0.0);
+    previousTime_ = 0.0; initialized_ = false;
+}
+
 PIDController::PIDController(
     std::vector<double> proportional, std::vector<double> integral,
     std::vector<double> derivative, std::size_t states, std::size_t inputs,
-    StateTargetFunction target)
-    : proportional_(std::move(proportional)),integralGain_(std::move(integral)),
-      derivative_(std::move(derivative)),accumulated_(states),previousError_(states),
-      stateDimension_(states),inputDimension_(inputs),target_(std::move(target)) {
-    dimensions(proportional_, inputs, states, "PID Kp");
-    dimensions(integralGain_, inputs, states, "PID Ki");
-    dimensions(derivative_, inputs, states, "PID Kd");
-}
+    StateTargetFunction target, PIDOptions options)
+    : compensator_(std::move(proportional), std::move(integral), std::move(derivative),
+                   states, inputs, std::move(options)),
+      stateDimension_(states), target_(std::move(target)) {}
 
 std::vector<double> PIDController::value(double time, const double* state) {
     if (!std::isfinite(time)) throw std::invalid_argument("PID sample time is invalid");
     finiteState(state, stateDimension_, "PID");
     const auto target = reference(target_, time, stateDimension_);
-    std::vector<double> error(stateDimension_), rate(stateDimension_);
+    std::vector<double> error(stateDimension_);
     for (std::size_t index = 0; index < stateDimension_; ++index)
         error[index] = target[index] - state[index];
-    if (initialized_) {
-        if (time < previousTime_) throw std::invalid_argument("PID samples must be monotonic");
-        const double step = time - previousTime_;
-        if (step > 0.0)
-            for (std::size_t index = 0; index < stateDimension_; ++index) {
-                accumulated_[index] += step * error[index];
-                rate[index] = (error[index] - previousError_[index]) / step;
-            }
-    }
-    previousError_ = error; previousTime_ = time; initialized_ = true;
-    std::vector<double> output(inputDimension_, 0.0);
-    for (std::size_t input = 0; input < inputDimension_; ++input)
-        for (std::size_t stateIndex = 0; stateIndex < stateDimension_; ++stateIndex) {
-            const std::size_t index = input * stateDimension_ + stateIndex;
-            output[input] += proportional_[index] * error[stateIndex]
-                + integralGain_[index] * accumulated_[stateIndex]
-                + derivative_[index] * rate[stateIndex];
-        }
-    return output;
+    return compensator_.update(time, error);
 }
 
-void PIDController::reset() noexcept {
-    std::fill(accumulated_.begin(), accumulated_.end(), 0.0);
-    std::fill(previousError_.begin(), previousError_.end(), 0.0);
-    previousTime_ = 0.0; initialized_ = false;
-}
+void PIDController::reset() noexcept { compensator_.reset(); }
 
 }  // namespace dynsyslab::core

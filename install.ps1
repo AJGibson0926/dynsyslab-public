@@ -17,7 +17,7 @@ if ($env:OS -ne 'Windows_NT' -or -not [Environment]::Is64BitOperatingSystem) {
 }
 if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid GitHub repository name.' }
 if ($Version -ne 'latest' -and $Version -notmatch '^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-.][A-Za-z0-9.]+)?$') {
-    throw 'Version must be latest or a release tag such as v0.5.2.'
+    throw 'Version must be latest or a release tag such as v0.6.0.'
 }
 if ([bool]$PackagePath -ne [bool]$ChecksumPath) {
     throw 'Offline installation requires both -PackagePath and -ChecksumPath.'
