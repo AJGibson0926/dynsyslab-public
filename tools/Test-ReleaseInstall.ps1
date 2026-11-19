@@ -33,7 +33,7 @@ Expect-Rejection {
 } 'checksum mismatch'
 if (Test-Path -LiteralPath $install) { throw 'Rejected checksum wrote an installation.' }
 
-Add-Type -AssemblyName System.IO.Compression.FileSystem
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 $unsafeZip = Join-Path $work 'unsafe.zip'
 $zip = [IO.Compression.ZipFile]::Open($unsafeZip, [IO.Compression.ZipArchiveMode]::Create)
 try {
@@ -67,7 +67,8 @@ foreach ($field in @('version', 'cli', 'welcome_document', 'quickstart_command',
 }
 if (-not (Test-Path -LiteralPath $record.welcome_document)) { throw 'Installed welcome document is missing.' }
 # quickstart: JSON form, default archive root from the install, distinct runs, long working directory.
-$long = Join-Path $work ('long-working-directory-' + ('x' * 150))
+# About 200 characters: long, yet below the Windows limit for a process working directory.
+$long = Join-Path $work ('long-working-directory-' + ('x' * [Math]::Max(1, 200 - $work.Length - 24)))
 New-Item -ItemType Directory -Force -Path $long | Out-Null
 Push-Location -LiteralPath $long
 try {

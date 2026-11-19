@@ -30,12 +30,14 @@ struct Resources { fs::path examples, welcome, viewer; };
 
 Resources locate() {
     const auto exe = cliExecutablePath();
+    const auto viewer = exe.parent_path() / L"DynSysLabViewerCli.exe";
+    const auto root = exe.parent_path().parent_path() / L"resources";  // installed or packaged layout first
+    std::error_code ignored;
+    if (fs::is_regular_file(root / L"examples" / L"quickstart" / L"quickstart.json", ignored))
+        return {root / L"examples" / L"quickstart", root / L"docs" / L"AGENT_WELCOME.md", viewer};
     if (const auto checkout = sourceCheckoutContaining(exe); !checkout.empty())
-        return {checkout / L"examples" / L"native" / L"quickstart", checkout / L"docs" / L"AGENT_WELCOME.md",
-                exe.parent_path() / L"DynSysLabViewerCli.exe"};
-    const auto root = exe.parent_path().parent_path() / L"resources";
-    return {root / L"examples" / L"quickstart", root / L"docs" / L"AGENT_WELCOME.md",
-            exe.parent_path() / L"DynSysLabViewerCli.exe"};
+        return {checkout / L"examples" / L"native" / L"quickstart", checkout / L"docs" / L"AGENT_WELCOME.md", viewer};
+    return {root / L"examples" / L"quickstart", root / L"docs" / L"AGENT_WELCOME.md", viewer};
 }
 
 std::string ascii(std::string text) {  // typographic punctuation survives any console code page

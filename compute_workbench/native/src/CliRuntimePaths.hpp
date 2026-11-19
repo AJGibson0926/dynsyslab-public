@@ -1,8 +1,8 @@
 #pragma once
 // Default archive root of dynsyslab_cli when --archive-root is not given. Same order as the
 // desktop apps (viewer/native/src/RuntimePaths.cpp), never the current working directory:
-//   1. source checkout containing the executable   -> <checkout>/archives
-//   2. <install>/resources/runtime.json             -> its archive_root (written by install.ps1)
+//   1. <install>/resources/runtime.json             -> its archive_root (written by install.ps1)
+//   2. source checkout containing the executable   -> <checkout>/archives
 //   3. %LOCALAPPDATA%/DynSysLab/runtime.json        -> its archive_root
 //   4. %LOCALAPPDATA%/DynSysLab/archives
 // A runtime.json is used only with schema dynsyslab.runtime-paths/v1 and an existing folder.

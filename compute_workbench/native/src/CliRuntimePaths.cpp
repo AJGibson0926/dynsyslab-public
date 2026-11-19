@@ -68,10 +68,11 @@ std::filesystem::path userDataRoot() {
 
 ArchiveRootChoice resolveArchiveRoot(const std::filesystem::path& executable,
                                      const std::filesystem::path& userData) {
-    if (const auto checkout = sourceCheckoutContaining(executable); !checkout.empty())
-        return {checkout / L"archives", "source_checkout"};
+    // An installation's own runtime.json wins, even when it is installed inside a checkout.
     if (auto saved = savedArchiveRoot(executable.parent_path().parent_path() / L"resources" / L"runtime.json");
         !saved.empty()) return {saved, "install_runtime"};
+    if (const auto checkout = sourceCheckoutContaining(executable); !checkout.empty())
+        return {checkout / L"archives", "source_checkout"};
     if (auto saved = savedArchiveRoot(userData / L"runtime.json"); !saved.empty())
         return {saved, "user_runtime"};
     return {userData / L"archives", "user_default"};

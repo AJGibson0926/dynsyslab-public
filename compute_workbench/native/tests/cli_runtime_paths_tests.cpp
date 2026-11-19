@@ -55,6 +55,13 @@ int main() {
         choice = resolveArchiveRoot(checkout / "build" / "bin" / "dynsyslab-cli.exe", user);
         require(choice.source == "source_checkout" && choice.path == checkout / "archives", "source checkout archives");
 
+        const auto nested = checkout / "build" / "install-test" / "app";  // an install inside a checkout
+        fs::create_directories(nested / "bin");
+        runtimeJson(nested / "resources" / "runtime.json", installArchives);
+        choice = resolveArchiveRoot(nested / "bin" / "dynsyslab-cli.exe", user);
+        require(choice.source == "install_runtime" && fs::equivalent(choice.path, installArchives),
+                "an installation's runtime.json wins inside a checkout");
+
         fs::remove_all(root);
         std::cout << "dynsyslab_cli_runtime_paths_tests: PASS\n";
         return 0;
