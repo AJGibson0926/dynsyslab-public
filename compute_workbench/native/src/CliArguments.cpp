@@ -1,4 +1,5 @@
 #include "CliArguments.hpp"
+#include "CliRuntimePaths.hpp"
 
 #include <dynsyslab/core/Text.hpp>
 
@@ -15,6 +16,8 @@ Arguments arguments(int count, wchar_t** values) {
             else result.progress = path;
         } else if (value == L"--days" && index + 1 < count) {
             result.auditDays = std::stod(values[++index]);
+        } else if (value == L"--help" || value == L"-h" || value == L"/?") {
+            result.help = true;
         } else if (value == L"--all-ages") {
             result.auditDays = -1.0;
         } else if ((value == L"--section" || value == L"--system") && index + 1 < count) {
@@ -61,8 +64,11 @@ Arguments arguments(int count, wchar_t** values) {
             result.fourierOneSided=false;
         } else result.positional.push_back(value);
     }
-    if (result.archiveRoot.empty()) result.archiveRoot =
-        std::filesystem::current_path() / L"archives";
+    if (result.archiveRoot.empty()) {
+        auto choice = defaultArchiveRoot();
+        result.archiveRoot = std::move(choice.path);
+        result.archiveRootSource = std::move(choice.source);
+    }
     return result;
 }
 }  // namespace dynsyslab::cli

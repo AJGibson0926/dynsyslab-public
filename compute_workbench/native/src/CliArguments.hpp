@@ -10,6 +10,8 @@ namespace dynsyslab::cli {
 struct Arguments {
     std::vector<std::wstring> positional;
     std::filesystem::path archiveRoot;
+    std::string archiveRootSource{"argument"};  // see CliRuntimePaths.hpp when not given
+    bool help{};
     std::filesystem::path progress;
     double auditDays{2.0};
     std::vector<std::string> auditSections;
@@ -27,7 +29,7 @@ struct Arguments {
     std::vector<std::pair<std::string, std::string>> params, sets;
 };
 
-// Parses argv (argv[0] is skipped). Unknown tokens become positional arguments;
-// archiveRoot defaults to ./archives.
+// Parses argv (argv[0] is skipped). Unknown tokens become positional arguments; --help/-h set
+// help. Without --archive-root, archiveRoot is defaultArchiveRoot() (never the working directory).
 Arguments arguments(int count, wchar_t** values);
 }  // namespace dynsyslab::cli

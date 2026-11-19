@@ -1,3 +1,4 @@
+#include <dynsyslab/core/LongPath.hpp>
 #include <dynsyslab/core/Archive.hpp>
 
 #include <archive.h>
@@ -210,7 +211,7 @@ NpzIndex readNpzIndex(const std::filesystem::path& path) {
 }
 
 static void writeNpzAtomicImpl(const std::filesystem::path& path, const NpzRecord& record, bool replaceExisting) {
-    std::filesystem::create_directories(path.parent_path());
+    std::filesystem::create_directories(extendedLengthPath(path.parent_path()));
     const auto token = std::chrono::high_resolution_clock::now().time_since_epoch().count();
     const auto temporary = path.parent_path() / (path.filename().wstring() + L"."
         + std::to_wstring(token) + L".partial");
@@ -245,12 +246,7 @@ static void writeNpzAtomicImpl(const std::filesystem::path& path, const NpzRecor
         handle = nullptr;
 #ifdef _WIN32
         // libarchive supports long paths; the final Win32 rename must use them too.
-        const auto extended = [](const std::filesystem::path& source) {
-            auto value = std::filesystem::absolute(source).lexically_normal().make_preferred().wstring();
-            if (value.rfind(LR"(\\?\)", 0) == 0) return value;
-            if (value.rfind(LR"(\\)", 0) == 0) return std::wstring(LR"(\\?\UNC\)") + value.substr(2);
-            return std::wstring(LR"(\\?\)") + value;
-        };
+        const auto extended = [](const std::filesystem::path& source) { return extendedLengthPath(source).wstring(); };
         if (!MoveFileExW(extended(temporary).c_str(), extended(path).c_str(), (replaceExisting ? MOVEFILE_REPLACE_EXISTING : 0) | MOVEFILE_WRITE_THROUGH))
             throw std::runtime_error("unable to atomically publish NPZ archive");
 #else

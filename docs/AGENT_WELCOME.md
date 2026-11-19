@@ -1,8 +1,9 @@
 # Welcome to DynSysLab
 
 *Shown by AI coding agents (Claude Code, Codex, Gemini CLI and others) the first time they
-open this repository. Agents: present the greeting and overview below in your own words,
-briefly, then ask what the user wants to do.*
+open this repository, and after installing a release with `install.ps1`. Agents: present the
+greeting and overview below in the chat, in your own words, briefly, then ask what the user
+wants to do. Do not start the desktop applications unless the user asks.*
 
 ---
 

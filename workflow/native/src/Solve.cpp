@@ -6,6 +6,7 @@
 
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/Integrator.hpp>
+#include <dynsyslab/core/LongPath.hpp>
 #include <dynsyslab/core/System.hpp>
 #include <dynsyslab/core/Text.hpp>
 #include <dynsyslab/core/TimeSeriesArchive.hpp>
@@ -297,8 +298,23 @@ SolveResult executeSolve(const json::Value& job,
             buildEstimator(job.at("estimator"), job.at("solver"), *system, trajectoryCount, options.outputStep),
             trajectoryCount, usesEstimatedState(job) ? system->descriptor().stateDimension : 0);
     const std::string stamp = timestamp();
-    const auto hierarchy = prepareHierarchy(job, system->configuration(), trajectoryCount,
-                                            archiveRoot, stamp);
+    const std::string runLabel = job.at("label").string("native-solve");
+    const auto directory = archiveRoot / L"solutions" / dynsyslab::core::wide(configuration.identifier);
+    const auto archivePath = [&](std::size_t trajectory, const std::string& tag) {
+        return directory / dynsyslab::core::wide(safeName(runLabel + (trajectoryCount == 1 ? "" :
+            "-trajectory-" + std::to_string(trajectory))) + "__" + tag + ".npz");
+    };
+    // Run tag: the UTC second, made unique (-2, -3, ...) when an earlier run with this label used
+    // it, so runs in the same second never share archives, a manifest or a batch identity.
+    std::string runTag = stamp;
+    auto hierarchy = prepareHierarchy(job, system->configuration(), trajectoryCount, archiveRoot, runTag);
+    const bool namedManifest = !job.at("batch").at("manifest_path").string().empty();
+    for (int next = 2; (!namedManifest && std::filesystem::exists(dynsyslab::core::extendedLengthPath(hierarchy.manifestPath)))
+             || std::filesystem::exists(dynsyslab::core::extendedLengthPath(archivePath(0, runTag))); ++next) {
+        if (next > 10000) throw std::runtime_error("unable to allocate an unused solve archive name");
+        runTag = stamp + "-" + std::to_string(next);
+        hierarchy = prepareHierarchy(job, system->configuration(), trajectoryCount, archiveRoot, runTag);
+    }
     progress(progressPath, solveProgressBase, 0, trajectoryCount,
              "running", "Starting native integration");
     dynsyslab::core::ExecutionContext solveExecution;
@@ -331,9 +347,10 @@ SolveResult executeSolve(const json::Value& job,
     result.trajectories = trajectoryCount; result.samplesPerTrajectory = solution.sampleCount;
     result.acceptedSteps = solution.statistics.acceptedSteps;
     result.rejectedSteps = solution.statistics.rejectedSteps;
-    const auto directory = archiveRoot / L"solutions" / dynsyslab::core::wide(configuration.identifier);
     const std::size_t dimension = solution.stateDimension;
     const auto& target = control.target;
+    // A failure while publishing removes this run's finished archives: no result without a manifest.
+    try {
     for (std::size_t trajectory = 0; trajectory < trajectoryCount; ++trajectory) {
         const std::string itemLabel = result.label + (trajectoryCount == 1 ? "" :
             "-trajectory-" + std::to_string(trajectory));
@@ -390,12 +407,19 @@ SolveResult executeSolve(const json::Value& job,
                 {"reason", solution.terminationReasons[trajectory]}};
             archive.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(json::dump(meta));
         }
-        const auto path = directory / dynsyslab::core::wide(safeName(itemLabel) + "__" + stamp + ".npz");
-        dynsyslab::core::writeNpzAtomic(path, archive); result.archives.push_back(path);
+        const auto path = archivePath(trajectory, runTag);
+        dynsyslab::core::writeNpzAtomicNew(path, archive); result.archives.push_back(path);
     }
     publishHierarchy(hierarchy, job, configuration, system->descriptor(),
                      system->configuration(), initials, result.archives, controlled,
                      static_cast<bool>(control.target), stamp);
+    } catch (...) {
+        for (const auto& written : result.archives) {
+            std::error_code ignored; std::filesystem::remove(dynsyslab::core::extendedLengthPath(written), ignored);
+        }
+        result.archives.clear();
+        throw;
+    }
     result.hierarchyManifest = hierarchy.manifestPath;
     progress(progressPath, 1.0, trajectoryCount, trajectoryCount, "complete", "Native solve archived");
     if (execution) execution->report({"solve", "Native solve archived", 1.0, 1, 1});

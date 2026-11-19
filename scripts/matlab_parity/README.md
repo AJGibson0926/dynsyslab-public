@@ -24,7 +24,7 @@ In MATLAB:
 addpath("scripts/matlab_parity")
 
 [matFile, jsonFile] = export_dynsyslab_rpe_hdmd_sindy( ...
-    OutputFile="~/Documents/Codex/2026-08-19/fi/matlab_rpe_hdmd_sindy_parity.mat");
+    OutputFile="<local-data>/matlab_rpe_hdmd_sindy_parity.mat");
 ```
 
 The defaults are the canonical comparison configuration:

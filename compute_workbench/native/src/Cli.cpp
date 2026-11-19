@@ -86,7 +86,9 @@ void usage() {
         << "dynsyslab_cli queue status <job-id> [--archive-root PATH]\n"
         << "dynsyslab_cli queue cancel <job-id> [--archive-root PATH]\n"
         << "dynsyslab_cli queue run-next [--archive-root PATH]\n"
-        << "dynsyslab_cli queue recover <age-seconds> [--archive-root PATH]\n";
+        << "dynsyslab_cli queue recover <age-seconds> [--archive-root PATH]\n\n"
+        << "Without --archive-root, results go to the installed archive folder (runtime.json, set by\n"
+        << "install.ps1), or <checkout>/archives when run from a source build; doctor reports which.\n";
 }
 dynsyslab::core::FourierWindow fourierWindow(const std::string& value) {
     if (value == "rectangular") return dynsyslab::core::FourierWindow::rectangular;
@@ -215,6 +217,7 @@ void doctor(const Arguments& args) {
     };
     paths["executable"] = describe(executable);
     paths["archive"] = describe(args.archiveRoot);
+    paths["archive"].object()["source"] = args.archiveRootSource;
     paths["start_document"] = describe(start);
     paths["extension_sdk"] = describe(sdk);
     paths["solver_ui"] = describe(computeUi);
@@ -380,7 +383,7 @@ int queue(const Arguments& args) {
 int wmain(int argc, wchar_t** argv) {
     try {
         const Arguments args = arguments(argc, argv);
-        if (args.positional.empty()) { usage(); return 0; }
+        if (args.positional.empty() || args.help || args.positional.front() == L"help") { usage(); return 0; }
         const std::wstring command = args.positional.front();
         if (command == L"capabilities") capabilities();
         else if (command == L"doctor") doctor(args);

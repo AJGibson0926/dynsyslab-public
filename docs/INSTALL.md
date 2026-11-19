@@ -27,11 +27,11 @@ a different data workspace; `-InstallRoot` chooses the application location.
 The installer does not delete scientific data. Verified downloads are retained
 in the temporary directory reported at completion.
 
-Pin a version with `-Version v0.6.0`. For offline installation, download the
+Pin a version with `-Version v0.6.1`. For offline installation, download the
 Windows ZIP and `SHA256SUMS.txt` from the same release, then run:
 
 ```powershell
-.\install.ps1 -PackagePath .\DynSysLab-0.6.0-windows-x64.zip -ChecksumPath .\SHA256SUMS.txt
+.\install.ps1 -PackagePath .\DynSysLab-0.6.1-windows-x64.zip -ChecksumPath .\SHA256SUMS.txt
 ```
 
 Alternatively extract the release ZIP and launch `bin\DynSysLab.exe` directly.
@@ -48,16 +48,20 @@ python -m pip install git+https://github.com/AJGibson0926/dynsyslab-public
 
 It needs a compiled DynSysLab installation (above) to run computations.
 
-## Ask Codex to set it up
+## Ask an AI agent to set it up
 
-Give another Codex installation this instruction:
+Give Claude Code, Codex or another agent this instruction:
 
 > Install AJGibson0926/dynsyslab-public from its latest official Windows x64 GitHub
 > release. Read its README and docs/INSTALL.md, use install.ps1, verify the
-> release checksum and native doctor, and run the bundled Duffing example in
-> a new archive directory. Keep my existing scientific data.
+> release checksum and native doctor, and run the bundled Duffing example.
+> Keep my existing scientific data.
 
-Codex should use the prebuilt release for ordinary use. Clone the source only
+Agents: do not start the desktop applications (Solver/Post-processor, Viewer) unless the user
+asks. After installing, present DynSysLab's welcome and overview in the chat: the installer
+prints it, and it is installed as `resources\docs\AGENT_WELCOME.md`.
+
+Agents should use the prebuilt release for ordinary use. Clone the source only
 when developing or inspecting code. A small checkout is sufficient:
 
 ```powershell
@@ -74,8 +78,11 @@ $app = Join-Path $env:LOCALAPPDATA 'Programs\DynSysLab'
 $data = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'DynSysLab\demo-archives'
 & "$app\bin\dynsyslab-cli.exe" doctor --archive-root $data
 & "$app\bin\dynsyslab-cli.exe" run "$app\resources\examples\duffing-free-solve.json" --archive-root $data
-& "$app\bin\DynSysLab.exe"
 ```
+
+Without `--archive-root` the CLI writes to the archive folder the installer configured
+(`Documents\DynSysLab\archives` by default), wherever it is run from; `doctor` reports the
+folder and where that setting came from. Open the desktop applications from the Start menu.
 
 The example generates fresh data. Large research datasets, case-study figures,
 PDF exports, machine-specific audits, and personal configuration are not release

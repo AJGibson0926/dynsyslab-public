@@ -25,8 +25,8 @@ despite its name; it is read-only orientation only.
 This section describes the author's own machine; in a public clone there is no Hub and no
 other agent, and it can be ignored.
 
-Codex also works in this checkout. Its front end (`AGENTS.md`, the routing Hub
-at `Documents\Codex\DynSysLab-Project-Hub`, and `~/.codex`) must keep working.
+Codex also works in this checkout. Its front end (`AGENTS.md`, the author's routing Hub
+outside this repository, and `~/.codex`) must keep working.
 
 - Before editing, run `git status`. Uncommitted changes you did not make are
   another agent's work in progress: do not modify, revert, stash, or commit

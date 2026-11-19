@@ -62,7 +62,7 @@ Trajectory archive:
 SHA-256: `e4529d55dd549e12c66dbb78c9521c6bc273aa8bb135637319568a2edfdc9eba`
 
 The provisional MATLAB `ode15s` reference available during this checkpoint was
-`~/Documents/Codex/2026-08-19/fi/matlab_rpe_training_reference_tau25_dtau0p001.mat`
+`<local-data>/matlab_rpe_training_reference_tau25_dtau0p001.mat`
 (SHA-256 `7a97c41a5e4a42afc2e3957f378255e42e9294dc03c115d215e7f0ccd4de0efe`).
 Against that file, the SciPy-BDF trajectory differences are:
 

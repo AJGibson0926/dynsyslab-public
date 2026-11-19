@@ -1,4 +1,5 @@
 #include <dynsyslab/core/Hierarchy.hpp>
+#include <dynsyslab/core/LongPath.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -190,7 +191,7 @@ std::string hierarchyJson(const BatchRecord& batch) {
 
 void writeHierarchyAtomic(const std::filesystem::path& path, const BatchRecord& batch) {
     if (path.empty()) throw std::invalid_argument("hierarchy path is empty");
-    std::filesystem::create_directories(path.parent_path());
+    std::filesystem::create_directories(extendedLengthPath(path.parent_path()));
     const auto temporary = path.parent_path() / (path.filename().wstring() + L".partial");
     BatchRecord portable = batch;
     for (auto& system : portable.systems)
@@ -199,13 +200,13 @@ void writeHierarchyAtomic(const std::filesystem::path& path, const BatchRecord& 
                 trajectory.solutionArchive = portableReference(
                     trajectory.solutionArchive, path.parent_path());
     {
-        std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
+        std::ofstream stream(extendedLengthPath(temporary), std::ios::binary | std::ios::trunc);
         if (!stream) throw std::runtime_error("unable to create hierarchy manifest");
         stream << hierarchyJson(portable) << '\n';
         if (!stream) throw std::runtime_error("unable to write hierarchy manifest");
     }
 #ifdef _WIN32
-    if (!MoveFileExW(temporary.c_str(), path.c_str(),
+    if (!MoveFileExW(extendedLengthPath(temporary).c_str(), extendedLengthPath(path).c_str(),
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
         throw std::runtime_error("unable to publish hierarchy manifest");
 #else

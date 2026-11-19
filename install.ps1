@@ -17,7 +17,7 @@ if ($env:OS -ne 'Windows_NT' -or -not [Environment]::Is64BitOperatingSystem) {
 }
 if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid GitHub repository name.' }
 if ($Version -ne 'latest' -and $Version -notmatch '^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-.][A-Za-z0-9.]+)?$') {
-    throw 'Version must be latest or a release tag such as v0.6.0.'
+    throw 'Version must be latest or a release tag such as v0.6.1.'
 }
 if ([bool]$PackagePath -ne [bool]$ChecksumPath) {
     throw 'Offline installation requires both -PackagePath and -ChecksumPath.'
@@ -130,6 +130,23 @@ if (-not $NoShortcuts) {
 [IO.File]::WriteAllText((Join-Path $InstallRoot 'release-install.json'),
     ([ordered]@{schema='dynsyslab.release-install/v1'; repository=$Repository; package=$packageName; sha256=$actual} | ConvertTo-Json), $utf8)
 Write-Host "DynSysLab installed: $InstallRoot"
-Write-Host "Scientific archives: $archiveRoot"
-Write-Host "Launch: $(Join-Path $InstallRoot 'bin\DynSysLab.exe')"
+Write-Host "Scientific archives: $archiveRoot (the CLI and both apps use this by default)"
 Write-Host "Verified download retained at: $work"
+Write-Host "The applications were not started. Open them from the Start menu (DynSysLab, Viewer) when you want them."
+$example = Join-Path $InstallRoot 'resources\examples\duffing-free-solve.json'
+Write-Host @"
+
+Welcome to DynSysLab - a native suite for simulating, analysing, modelling and controlling
+dynamical systems, with every result archived and every figure traceable to its data.
+  Simulate   ODE, delay, lattice and PDE systems (bubble/RPE, Duffing, Lorenz, pendula, ...)
+  Analyse    SVD/POD, Fourier spectra, phase space, Lyapunov screens
+  Identify   DMD, Hankel/H-DMD, SINDy and spectral Koopman models (K-ROMs)
+  Control    Koopman LQE/LQR/MPC, classical LQR and PID, a linear-systems toolkit
+  View       time series, phase portraits, spectra, Bode/Nyquist in the Viewer or its CLI
+Get started:
+  & "$cli" doctor
+  & "$cli" run "$example"
+Overview: $(Join-Path $InstallRoot 'resources\docs\AGENT_WELCOME.md')
+(AI agents: present this welcome and overview to the user in chat, and start the desktop
+applications only when the user asks.)
+"@

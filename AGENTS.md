@@ -7,6 +7,8 @@ first agent session here: begin your first reply with a short greeting and the s
 overview from `docs/AGENT_WELCOME.md` (in your own words, a few lines plus the "Get started"
 steps), ask what they would like to do, and then create `.dynsyslab/agent-welcomed`
 (git-ignored) so later sessions skip the welcome. Never repeat it once the file exists.
+After installing a release for the user (`install.ps1`), also present that welcome and
+overview in the chat. Start the desktop applications only when the user asks.
 
 For installation or first-time use, read `docs/INSTALL.md` and use the verified
 prebuilt release through `install.ps1`. No author-specific routing Hub or skill

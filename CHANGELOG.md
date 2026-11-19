@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.1 — 2026-11-19
+
+- CLI: without `--archive-root`, results go to the archive folder the installer configured
+  (`runtime.json`), or `<checkout>/archives` from a source build, never the working
+  directory; `doctor` reports the folder and its source. `<command> --help` prints usage.
+- Archives: runs in the same second get distinct names, manifests and batch identities
+  (`...Z-2.npz`) instead of replacing one another; archive and manifest paths past the
+  Windows 260-character limit work; a failed publication leaves no result without its
+  manifest.
+- Installer: never starts the applications; it ends with DynSysLab's welcome and overview,
+  which agents present in the chat after installing.
+- Source: personal absolute paths removed from tracked case-study files.
+
 ## 0.6.0 — 2026-11-19
 
 - Classical linear-systems toolkit: gramians, balanced truncation, structure, LQG,
@@ -18,7 +31,7 @@
   differentiation, deterministic pipeline jobs with plug-and-play inputs.
 - Solver: `on_failure: "truncate"` archives the computed part of a failed run.
 - Viewer and its CLI: archive figures without scripts, comparisons, time windows,
-  spectra, stem plots (MATLAB-style), integer index ticks, 3-D stem plots, mode weights.
+  spectra, stem plots with open-circle tips, integer index ticks, 3-D stem plots, mode weights.
 - Agent front end: a first-run welcome and overview (`docs/AGENT_WELCOME.md`) for
   Claude Code, Codex and other agents; release now also attaches the Python client wheel.
 
