@@ -1,3 +1,4 @@
+#include "CliArguments.hpp"
 #include <dynsyslab/workflow/Run.hpp>
 #include <dynsyslab/workflow/Pipeline.hpp>
 #include <dynsyslab/workflow/ObservableQuery.hpp>
@@ -37,89 +38,12 @@
 #endif
 namespace {
 namespace json = dynsyslab::core::json;
-struct Arguments {
-    std::vector<std::wstring> positional;
-    std::filesystem::path archiveRoot;
-    std::filesystem::path progress;
-    double auditDays{2.0};
-    std::vector<std::string> auditSections;
-    std::vector<std::string> auditSystems;
-    bool auditDerived{};
-    bool apply{};
-    std::string importSystem,importPreset,importCoordinates{"unknown"};
-    std::string importLabel{"legacy-dynbatch-import"},importParameters{"{}"};
-    double inputScale{1.0};
-    bool allowUnknownRecords{};
-    std::size_t fourierComponent{};
-    std::string fourierWindow{"hann"};
-    bool fourierRemoveMean{true};
-    bool fourierOneSided{true};
-    std::vector<std::pair<std::string, std::string>> params, sets;
-};
+using dynsyslab::cli::Arguments;
+using dynsyslab::cli::arguments;
 std::string readText(const std::filesystem::path& path) {
     std::ifstream stream(path, std::ios::binary);
     if (!stream) throw std::runtime_error("unable to open job manifest: " + path.u8string());
     std::ostringstream out; out << stream.rdbuf(); return out.str();
-}
-Arguments arguments(int count, wchar_t** values) {
-    Arguments result;
-    for (int index = 1; index < count; ++index) {
-        const std::wstring value = values[index];
-        if ((value == L"--archive-root" || value == L"--progress") && index + 1 < count) {
-            const auto path = std::filesystem::path(values[++index]);
-            if (value == L"--archive-root") result.archiveRoot = path;
-            else result.progress = path;
-        } else if (value == L"--days" && index + 1 < count) {
-            result.auditDays = std::stod(values[++index]);
-        } else if (value == L"--all-ages") {
-            result.auditDays = -1.0;
-        } else if ((value == L"--section" || value == L"--system") && index + 1 < count) {
-            auto name = dynsyslab::core::narrow(values[++index]);
-            if (value == L"--section") result.auditSections.push_back(std::move(name));
-            else result.auditSystems.push_back(std::move(name));
-        } else if (value == L"--include-derived") {
-            result.auditDerived = true;
-        } else if (value == L"--apply") {
-            result.apply = true;
-        } else if ((value == L"--map-system" || value == L"--preset"
-                    || value == L"--coordinates" || value == L"--label"
-                    || value == L"--parameters-json") && index + 1 < count) {
-            const auto item=dynsyslab::core::narrow(values[++index]);
-            if(value==L"--map-system")result.importSystem=item;
-            else if(value==L"--preset")result.importPreset=item;
-            else if(value==L"--coordinates")result.importCoordinates=item;
-            else if(value==L"--label")result.importLabel=item;
-            else result.importParameters=item;
-        } else if (value == L"--fresh") {
-            result.sets.emplace_back("__fresh", "true");
-        } else if (value == L"--refresh" && index + 1 < count) {
-            result.sets.emplace_back("__refresh", dynsyslab::core::narrow(values[++index]));
-        } else if (value == L"--until" && index + 1 < count) {
-            result.sets.emplace_back("__until", dynsyslab::core::narrow(values[++index]));
-        } else if ((value == L"--param" || value == L"--set") && index + 1 < count) {
-            const auto item = dynsyslab::core::narrow(values[++index]);
-            const auto equals = item.find('=');
-            if (equals == std::string::npos || equals == 0)
-                throw std::invalid_argument("--param/--set expects NAME=VALUE");
-            (value == L"--param" ? result.params : result.sets)
-                .emplace_back(item.substr(0, equals), item.substr(equals + 1));
-        } else if (value == L"--input-scale" && index + 1 < count) {
-            result.inputScale=std::stod(values[++index]);
-        } else if (value == L"--allow-unknown-records") {
-            result.allowUnknownRecords=true;
-        } else if (value == L"--component" && index + 1 < count) {
-            result.fourierComponent=static_cast<std::size_t>(std::stoull(values[++index]));
-        } else if (value == L"--window" && index + 1 < count) {
-            result.fourierWindow=dynsyslab::core::narrow(values[++index]);
-        } else if (value == L"--keep-mean") {
-            result.fourierRemoveMean=false;
-        } else if (value == L"--two-sided") {
-            result.fourierOneSided=false;
-        } else result.positional.push_back(value);
-    }
-    if (result.archiveRoot.empty()) result.archiveRoot =
-        std::filesystem::current_path() / L"archives";
-    return result;
 }
 void usage() {
     std::cout
@@ -348,11 +272,13 @@ void capabilities() {
               << "\"koopman_validation\",\"boundary_eigenfunctions\","
               << "\"eigenvalue_optimization\","
               << "\"echo_history_koopman\",\"history_basis\",\"history_projection\","
-              << "\"observability\",\"klqe\",\"linear_analysis\",\"linear_systems\",\"mode_selection\",\"controllability\",\"observable_reconstruction\"],\"workflows\":[\"krom_control_search\",\"observable_closure\"],\"desktop_ui\":{"
+              << "\"observability\",\"klqe\",\"linear_analysis\",\"linear_systems\",\"mode_selection\",\"controllability\",\"observable_reconstruction\"],\"workflows\":[\"krom_control_search\"],\"desktop_ui\":{"
               << "\"solver\":true,\"postprocessor\":true,\"viewer\":true,"
               << "\"native_jobs\":true,\"archive_tools\":true,"
               << "\"legacy_csv_import\":true,\"krom_control_search\":true,"
-              << "\"initial_condition_preview\":true},\"initial_condition_modes\":[";
+              << "\"initial_condition_preview\":true},"
+              // CLI-only query commands (like observable, analytic, phase-space): no desktop workflow.
+              << "\"queries\":[\"observable_closure\"],\"initial_condition_modes\":[";
     const auto modes = dynsyslab::workflow::supportedOdeInitialConditionModes();
     for (std::size_t index = 0; index < modes.size(); ++index) {
         if (index) std::cout << ',';

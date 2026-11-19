@@ -288,7 +288,7 @@
         {
           "path": "compute_workbench/native/src/Workbench.cpp",
           "tokens": [
-            "Import data\u2026"
+            "Import data…"
           ]
         }
       ],
@@ -332,14 +332,14 @@
             "Maximum attempts (hard limit 25)",
             "Run campaign",
             "Plan only",
-            "Save job\u2026",
+            "Save job…",
             "Queue"
           ]
         },
         {
           "path": "compute_workbench/native/src/PostprocessPanel.cpp",
           "tokens": [
-            "KROM control search\u2026"
+            "KROM control search…"
           ]
         }
       ],
@@ -389,7 +389,7 @@
           "path": "compute_workbench/native/src/KoopmanPipelineDialog.cpp",
           "tokens": [
             "H-DMD",
-            "Scalar observable"
+            "Channels (names or JSON list)"
           ]
         }
       ],
@@ -566,8 +566,8 @@
           "tokens": [
             "Control-map regression",
             "Additional controlled trajectory archives",
-            "Add files\u2026",
-            "Korda\u2013Mezi\u0107 multistep output regression",
+            "Add files…",
+            "Korda–Mezić multistep output regression",
             "Observable reconstruction C",
             "Exact-map sample stride",
             "Error-map columns"
@@ -650,8 +650,8 @@
             "ensemble_phase",
             "campaign_summary",
             "campaign_bifurcation",
-            "parameter \u00b7 ",
-            "group \u00b7 "
+            "parameter · ",
+            "group · "
           ]
         },
         {
@@ -843,10 +843,10 @@
       "id": "viewer.control_map_error_heatmaps",
       "app": "DynSysLabViewer.exe",
       "status": "implemented",
-      "native_service": "viewer/native/src/NativePayload.cpp",
+      "native_service": "viewer/native/src/ArchiveMatrixPayload.cpp",
       "ui_evidence": [
         {
-          "path": "viewer/native/src/NativePayload.cpp",
+          "path": "viewer/native/src/ArchiveMatrixPayload.cpp",
           "tokens": [
             "control_map_error",
             "Constant B absolute error"
@@ -897,7 +897,7 @@
           "path": "viewer/native/src/NativePayload.cpp",
           "tokens": [
             "decompositionPayload",
-            "observabilityPayload"
+            "buildObservabilityPayload"
           ]
         },
         {
@@ -1064,7 +1064,7 @@
         {
           "path": "compute_workbench/native/src/Workbench.cpp",
           "tokens": [
-            "Open job\u2026",
+            "Open job…",
             "openJobDefinition",
             "runJobJson(job,answer==IDYES)"
           ]
@@ -1073,6 +1073,113 @@
       "test_evidence": [
         "workflow/native/tests/echo_history_koopman_tests.cpp",
         "cmake/HistoryPackageSmoke.cmake"
+      ]
+    },
+    {
+      "id": "postprocess.spectral_koopman_saved_jobs",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "koopman_spectral",
+        "resdmd",
+        "mpedmd",
+        "hermitian_dmd",
+        "tlsdmd",
+        "multdmd",
+        "stochastic_resdmd",
+        "specrkhs"
+      ],
+      "interface": "Open job: saved postprocess JSON, plan or run. No dedicated settings dialog yet.",
+      "native_service": "workflow/native/src/KoopmanSpectralPostprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/Workbench.cpp",
+          "tokens": [
+            "Open job…",
+            "openJobDefinition",
+            "runJobJson(job,answer==IDYES)"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "native/tests/koopman_spectral_tests.cpp"
+      ]
+    },
+    {
+      "id": "postprocess.hankel_and_reconstruction_saved_jobs",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "hankel_svd",
+        "hankel_matrix",
+        "observable_reconstruction"
+      ],
+      "interface": "Open job: saved postprocess JSON, plan or run. No dedicated settings dialog yet.",
+      "native_service": "workflow/native/src/HankelAnalysis.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/Workbench.cpp",
+          "tokens": [
+            "Open job…",
+            "openJobDefinition",
+            "runJobJson(job,answer==IDYES)"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/hankel_observables_tests.cpp",
+        "workflow/native/tests/hdmd_scattered_krom_tests.cpp"
+      ]
+    },
+    {
+      "id": "postprocess.linear_analysis_saved_jobs",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "linear_analysis",
+        "controllability",
+        "linear_systems"
+      ],
+      "interface": "Open job: saved postprocess JSON, plan or run. No dedicated settings dialog yet.",
+      "native_service": "workflow/native/src/LinearSystemsPostprocess.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/Workbench.cpp",
+          "tokens": [
+            "Open job…",
+            "openJobDefinition",
+            "runJobJson(job,answer==IDYES)"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/linear_systems_postprocess_tests.cpp",
+        "native/tests/linear_systems_tests.cpp",
+        "native/tests/loop_robustness_tests.cpp",
+        "native/tests/empirical_observability_tests.cpp"
+      ]
+    },
+    {
+      "id": "postprocess.mode_selection_saved_jobs",
+      "app": "DynSysLab.exe",
+      "status": "implemented",
+      "covers": [
+        "mode_selection"
+      ],
+      "interface": "Open job: saved postprocess JSON, plan or run. No dedicated settings dialog yet.",
+      "native_service": "workflow/native/src/ModeSelection.cpp",
+      "ui_evidence": [
+        {
+          "path": "compute_workbench/native/src/Workbench.cpp",
+          "tokens": [
+            "Open job…",
+            "openJobDefinition",
+            "runJobJson(job,answer==IDYES)"
+          ]
+        }
+      ],
+      "test_evidence": [
+        "workflow/native/tests/mode_selection_tests.cpp"
       ]
     }
   ]

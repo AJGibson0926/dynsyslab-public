@@ -275,7 +275,7 @@ class ComputeWorkbenchTests(unittest.TestCase):
             encoding="utf-8")
         compute_arguments = (ROOT / "compute_workbench/native/src/WorkbenchArguments.cpp").read_text(
             encoding="utf-8")
-        viewer = (ROOT / "viewer/native/src/Workbench.cpp").read_text(encoding="utf-8")
+        viewer = (ROOT / "viewer/native/src/WorkbenchArguments.cpp").read_text(encoding="utf-8")
         self.assertIn("foreach(_ui DynSysLab.exe DynSysLabViewer.exe)", smoke)
         self.assertIn("--smoke-test", compute_arguments)
         self.assertIn("--smoke-test", viewer)

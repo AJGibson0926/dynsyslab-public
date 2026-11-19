@@ -47,6 +47,7 @@ add_library(dynsyslab_viewer_services STATIC
   src/HierarchyPayload.cpp
   src/LatticePayload.cpp
   src/NativePayload.cpp
+  src/ArchiveMatrixPayload.cpp
   src/ObservablePayload.cpp
   src/ObservableWorkspace.cpp
   src/PanelCatalog.cpp
@@ -74,6 +75,7 @@ add_executable(dynsyslab_viewer WIN32
   src/PanelPickerDialog.cpp
   src/PlotExport.cpp
   src/Workbench.cpp
+  src/WorkbenchArguments.cpp
   src/WorkbenchCheck.cpp
   src/WorkbenchKromCheck.cpp
   src/WorkbenchCatalog.cpp

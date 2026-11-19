@@ -29,7 +29,7 @@ if(NOT TARGET dynsyslab_ui_support)
 endif()
 
 if(DYNSYSLAB_COMPUTE_BUILD_CLI)
-add_executable(dynsyslab_cli src/Cli.cpp)
+add_executable(dynsyslab_cli src/Cli.cpp src/CliArguments.cpp)
   target_link_libraries(dynsyslab_cli PRIVATE dynsyslab_queue)
   target_compile_features(dynsyslab_cli PRIVATE cxx_std_17)
   if(MSVC)
@@ -87,7 +87,7 @@ endif()
 install(TARGETS dynsyslab_cli dynsyslab_compute RUNTIME DESTINATION bin)
 
 if(BUILD_TESTING AND DYNSYSLAB_COMPUTE_BUILD_TESTS)
-  add_executable(dynsyslab_native_solve_tests tests/native_solve_tests.cpp)
+  add_executable(dynsyslab_native_solve_tests tests/native_solve_tests.cpp tests/native_solve_controller_tests.cpp)
   target_link_libraries(dynsyslab_native_solve_tests PRIVATE dynsyslab_workflow)
   add_test(NAME dynsyslab_native_solve_tests COMMAND dynsyslab_native_solve_tests)
   add_executable(dynsyslab_krom_control_search_tests
