@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(dynsyslab_native VERSION 0.6.2 LANGUAGES CXX)
+project(dynsyslab_native VERSION 0.7.0 LANGUAGES CXX)
 
 include(CTest)
 option(DYNSYSLAB_BUILD_PYTHON "Build optional Python bindings" OFF)
@@ -53,7 +53,7 @@ function(dynsyslab_eigen_module target)
 endfunction()
 
 add_library(dynsyslab_foundation ${DYNSYSLAB_LIBRARY_KIND}
-  src/Models.cpp src/Npy.cpp src/Json.cpp src/Text.cpp src/FileDigest.cpp
+  src/Models.cpp src/Npy.cpp src/Json.cpp src/Text.cpp src/FileDigest.cpp src/OutputPath.cpp
   src/LegacyCsv.cpp src/LegacyCsvImport.cpp
   src/TimeSeries.cpp src/Fourier.cpp src/DiscreteFourier.cpp src/NumericalDifferentiation.cpp src/TimeSeriesArchive.cpp
   src/Extension.cpp src/ODE.cpp src/Integrator.cpp src/Hierarchy.cpp
@@ -382,6 +382,9 @@ if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
   target_link_libraries(dynsyslab_pde_tests PRIVATE dynsyslab_pde)
   add_test(NAME dynsyslab_pde_tests COMMAND dynsyslab_pde_tests)
   if(DYNSYSLAB_ENABLE_ARCHIVE_IO)
+    add_executable(dynsyslab_output_path_tests tests/output_path_tests.cpp)
+    target_link_libraries(dynsyslab_output_path_tests PRIVATE dynsyslab_operations)
+    add_test(NAME dynsyslab_output_path_tests COMMAND dynsyslab_output_path_tests)
     add_executable(dynsyslab_archive_tests tests/archive_tests.cpp)
     target_link_libraries(dynsyslab_archive_tests PRIVATE dynsyslab_operations)
     add_test(NAME dynsyslab_archive_tests COMMAND dynsyslab_archive_tests)

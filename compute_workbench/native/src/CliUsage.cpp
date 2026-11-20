@@ -1,0 +1,63 @@
+#include "CliUsage.hpp"
+
+#include <iostream>
+
+namespace dynsyslab::cli {
+
+void usage() {
+    std::cout
+        << "DynSysLab native CLI (Python is not required)\n\n"
+        << "dynsyslab_cli capabilities\n"
+        << "dynsyslab_cli quickstart [--archive-root PATH] [--format markdown|json]\n"
+        << "    welcome, overview, bundled examples, Fourier summary and figures; no GUI\n"
+        << "dynsyslab_cli hub [--format markdown|json] [--peek]\n"
+        << "    the DynSysLab Hub: greeting, first-login overview, what you can do\n"
+        << "dynsyslab_cli mcp\n"
+        << "    MCP server on stdio for Claude Code, Codex and other agents\n"
+        << "dynsyslab_cli agent-setup [--remove] [--workspace PATH]\n"
+        << "    connect Claude Code and Codex: MCP server, start-up hook, workspace files\n"
+        << "dynsyslab_cli doctor [--archive-root PATH]\n"
+        << "dynsyslab_cli docs\n"
+        << "dynsyslab_cli systems\n"
+        << "dynsyslab_cli koopman-spectral <query.json>\n"
+        << "dynsyslab_cli observable <query.json>\n"
+        << "dynsyslab_cli observable-closure <query.json>\n"
+        << "dynsyslab_cli coordinate-inverse <coordinates.npz> <input.npz> <output.npz>\n"
+        << "dynsyslab_cli analytic <query.json>\n"
+        << "dynsyslab_cli special-function <query.json>\n"
+        << "dynsyslab_cli phase-space <query.json> [--archive-root PATH]\n"
+        << "dynsyslab_cli research <query.json> [--archive-root PATH]\n"
+        << "dynsyslab_cli generate-ics <solve-job.json>\n"
+        << "dynsyslab_cli krom-validation-plan <krom.npz> [--archive-root PATH]\n"
+        << "dynsyslab_cli krom-info <krom.npz>\n"
+        << "dynsyslab_cli validate|plan|run <job.json> [--param NAME=VALUE]... [--set PATH=VALUE]...\n"
+        << "                  [--until STAGE] [--refresh STAGE]... [--fresh]\n"
+        << "                  [--archive-root PATH] [--progress PATH]\n"
+        << "    Relative --progress and --archive-root paths resolve against the current directory;\n"
+        << "    missing parent folders are created. Path errors are dynsyslab.cli-error/v1 JSON.\n"
+        << "    VALUE is JSON or plain text. Pipeline PATHs start with a stage id\n"
+        << "    (control.controller.settings.Q=1000); --until runs a pipeline through STAGE;\n"
+        << "    --refresh recomputes STAGE (and so everything downstream) instead of reusing it;\n"
+        << "    --fresh recomputes every stage.\n"
+        << "dynsyslab_cli fourier <trajectory.npz> [--component N]\n"
+        << "                      [--window rectangular|hann|hamming|blackman]\n"
+        << "                      [--keep-mean] [--two-sided]\n"
+        << "dynsyslab_cli archive audit [--archive-root PATH] [--days N|--all-ages]\n"
+        << "                            [--section NAME] [--system NAME] [--include-derived]\n"
+        << "dynsyslab_cli archive deduplicate [same scope options] [--apply]\n"
+        << "dynsyslab_cli archive index [--archive-root PATH]\n"
+        << "dynsyslab_cli import legacy-csv <source.csv> [--archive-root PATH]\n"
+        << "                     [--map-system ID] [--preset KEY] [--parameters-json JSON]\n"
+        << "                     [--coordinates NAME] [--input-scale N] [--label NAME]\n"
+        << "                     [--allow-unknown-records]\n"
+        << "dynsyslab_cli queue submit <job.json> [--archive-root PATH]\n"
+        << "dynsyslab_cli queue list [--archive-root PATH]\n"
+        << "dynsyslab_cli queue status <job-id> [--archive-root PATH]\n"
+        << "dynsyslab_cli queue cancel <job-id> [--archive-root PATH]\n"
+        << "dynsyslab_cli queue run-next [--archive-root PATH]\n"
+        << "dynsyslab_cli queue recover <age-seconds> [--archive-root PATH]\n\n"
+        << "Without --archive-root, results go to the installed archive folder (runtime.json, set by\n"
+        << "install.ps1), or <checkout>/archives when run from a source build; doctor reports which.\n";
+}
+
+}  // namespace dynsyslab::cli

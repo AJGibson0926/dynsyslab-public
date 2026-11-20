@@ -47,7 +47,7 @@ Expect-Rejection {
     & $installer -PackagePath $unsafeZip -ChecksumPath $unsafeChecksum -InstallRoot $install -DataRoot $data -NoShortcuts -NoUserConfig
 } 'unsafe path'
 
-$installOutput = & $installer -PackagePath $PackagePath -ChecksumPath $ChecksumPath -InstallRoot $install -DataRoot $data -NoShortcuts -NoUserConfig *>&1 | Out-String
+$installOutput = & $installer -PackagePath $PackagePath -ChecksumPath $ChecksumPath -InstallRoot $install -DataRoot $data -NoShortcuts -NoUserConfig -NoAgentSetup *>&1 | Out-String
 Write-Host $installOutput
 $cli = Join-Path $install 'bin\dynsyslab-cli.exe'
 $archives = Join-Path $data 'archives'
@@ -88,6 +88,70 @@ foreach ($figure in @($first.runs.figures) + @($second.runs.figures)) {
     if (-not $figure.rendered -or -not (Test-Path -LiteralPath $figure.path)) { throw "Quickstart figure not rendered: $($figure.title)" }
 }
 if (Get-ChildItem -LiteralPath $long -Force) { throw 'quickstart wrote into the working directory.' }
+# DynSysLab Hub and agent connection, sandboxed: --peek leaves the user's hub state alone and
+# --home/--no-agent-cli keep the user's own Claude Code and Codex configuration untouched.
+$hub = (& $cli hub --peek --format json | Out-String) | ConvertFrom-Json
+if ($hub.schema -ne 'dynsyslab.hub/v1' -or $hub.options.Count -lt 5 -or -not $hub.greeting_markdown.Contains('What would you like to do?')) {
+    throw 'hub greeting is incomplete.'
+}
+$sandbox = Join-Path $work 'agent-home'; $workspace = Join-Path $work 'workspace'
+New-Item -ItemType Directory -Force -Path (Join-Path $sandbox '.claude'), (Join-Path $sandbox '.codex') | Out-Null
+$setup = (& $cli agent-setup --home $sandbox --workspace $workspace --no-agent-cli --format json | Out-String) | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or $setup.schema -ne 'dynsyslab.agent-setup/v1') { throw 'agent-setup failed.' }
+if (-not (Select-String -Quiet -LiteralPath (Join-Path $sandbox '.claude\settings.json') -SimpleMatch 'hub --hook')) { throw 'Claude start-up hook missing.' }
+if (-not (Select-String -Quiet -LiteralPath (Join-Path $sandbox '.codex\config.toml') -SimpleMatch '[mcp_servers.dynsyslab]')) { throw 'Codex MCP entry missing.' }
+foreach ($file in @('AGENTS.md', 'CLAUDE.md', '.dynsyslab-workspace')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $workspace $file))) { throw "Workspace file missing: $file" }
+}
+$mcpInput = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' + "`n" +
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+$mcp = @($mcpInput | & $cli mcp | ForEach-Object { $_ | ConvertFrom-Json })
+if ($mcp.Count -ne 2 -or $mcp[0].result.serverInfo.name -ne 'dynsyslab' -or -not ($mcp[1].result.tools.name -contains 'hub')) {
+    throw 'MCP server handshake failed.'
+}
+& $cli agent-setup --remove --home $sandbox --workspace $workspace --no-agent-cli | Out-Null
+# Fresh install: every shipped example works with an empty archive folder (no shipped solver output).
+$examplesRoot = Join-Path $install 'resources\examples'
+$fresh = Join-Path $work 'fresh-archives'
+New-Item -ItemType Directory -Force -Path $fresh | Out-Null
+$longRunning = @((Get-Content -Raw -LiteralPath (Join-Path $examplesRoot 'long-running.json') | ConvertFrom-Json).long_running)
+$queryCommands = @{ 'dynsyslab.analytic-query/v1' = 'analytic'; 'dynsyslab.koopman-spectral-query/v1' = 'koopman-spectral'
+    'dynsyslab.observable-closure-query/v1' = 'observable-closure'; 'dynsyslab.observable-closure-query/v2' = 'observable-closure'
+    'dynsyslab.observable-query/v1' = 'observable'; 'dynsyslab.phase-space-query/v1' = 'phase-space'
+    'dynsyslab.special-function-query/v1' = 'special-function' }
+function Invoke-Example([string[]]$arguments, [int]$seconds) {
+    $info = [Diagnostics.ProcessStartInfo]::new($cli)
+    $info.Arguments = ($arguments | ForEach-Object { '"' + $_ + '"' }) -join ' '
+    $info.UseShellExecute = $false; $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
+    $process = [Diagnostics.Process]::Start($info)
+    $stdout = $process.StandardOutput.ReadToEndAsync(); $stderr = $process.StandardError.ReadToEndAsync()
+    if (-not $process.WaitForExit($seconds * 1000)) { $process.Kill(); return 'timeout' }
+    if ($process.ExitCode -ne 0) { return "exit $($process.ExitCode): $($stderr.Result)" }
+    return ''
+}
+$ran = 0; $planned = 0
+foreach ($file in Get-ChildItem -LiteralPath $examplesRoot -Recurse -Filter *.json) {
+    $relative = $file.FullName.Substring($examplesRoot.Length + 1).Replace('\', '/')
+    $schema = (Get-Content -Raw -LiteralPath $file.FullName | ConvertFrom-Json).schema
+    if ($schema -eq 'dynsyslab.compute-job/v1') {
+        foreach ($command in @('validate', 'plan')) {
+            $problem = Invoke-Example @($command, $file.FullName, '--archive-root', $fresh) 120
+            if ($problem) { throw "Fresh install: $command $relative failed: $problem" }
+        }
+        $planned++
+        if ($longRunning -contains $relative) { continue }
+        $arguments = @('run', $file.FullName, '--archive-root', $fresh)
+    } elseif ($queryCommands.ContainsKey($schema)) {
+        $arguments = @($queryCommands[$schema], $file.FullName)
+        if ($queryCommands[$schema] -eq 'phase-space') { $arguments += @('--archive-root', $fresh) }
+    } else { continue }
+    $problem = Invoke-Example $arguments 300
+    if ($problem -eq 'timeout') { throw "Fresh install: $relative ran past 5 minutes; list it in examples/native/long-running.json or shorten it." }
+    if ($problem) { throw "Fresh install: $relative failed: $problem" }
+    $ran++
+}
+Write-Host "Fresh install: $planned compute jobs validated and planned; $ran examples run from an empty archive folder."
+if (Select-String -Quiet -LiteralPath (Join-Path $sandbox '.claude\settings.json') -SimpleMatch 'hub --hook') { throw 'agent-setup --remove left the hook.' }
 $example = Join-Path $install 'resources\examples\duffing-free-solve.json'
 $resultText = & $cli run $example --archive-root (Join-Path $data 'archives')
 if ($LASTEXITCODE -ne 0) { throw 'Installed example solve failed.' }

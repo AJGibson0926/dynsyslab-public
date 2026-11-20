@@ -5,9 +5,9 @@
   "description": "Viscous RPE ring-down in three coordinate systems, (r,r') -> (e,e') -> xi_1..xi_4 (history of the echo alone), and SINDy rate laws within and across them. Train on IC 0 (r=2.3334), validate on held-out ICs r=1.25 and r=2.5 through the frozen training basis. Every coordinate change stores exact derivatives (system_derivatives) so fits learned from finite differences are scored against the analytic chain-rule reference, as in Codex's 5 November study.",
   "reuse_identical_stages": true,
   "parameters": {
-    "training": "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z.npz",
-    "validation_low": "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-1__20261002T001350Z.npz",
-    "validation_high": "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-4__20261002T001350Z.npz",
+    "training": "${free.archives[0]}",
+    "validation_low": "${free.archives[1]}",
+    "validation_high": "${free.archives[2]}",
     "degree": 4,
     "threshold": 0.001,
     "fit_stride": 4,
@@ -284,6 +284,74 @@
     }
   },
   "stages": [
+    {
+      "id": "free",
+      "job": {
+        "kind": "solve",
+        "label": "rpe-viscous-echo-long-training-ics-0-1-4",
+        "system": {
+          "name": "rpe",
+          "preset": "air_water_20c",
+          "parameters": {
+            "ambient_pressure_pa": 100000,
+            "equilibrium_radius_m": 1e-05,
+            "kappa": 1.3333333333333333,
+            "mu_pa_s": 0.001,
+            "pressure_input_sign": -1,
+            "rho_kg_m3": 998,
+            "sigma_n_m": 0.0725,
+            "vapor_pressure_pa": 2330
+          }
+        },
+        "time": {
+          "start": 0,
+          "stop": 80,
+          "output_step": 0.0001,
+          "coordinate_system": "dimensionless"
+        },
+        "initial_conditions": {
+          "mode": "explicit",
+          "count": 3,
+          "clusters": 1,
+          "seed": 0,
+          "values": [
+            [
+              2.333386598601735,
+              0
+            ],
+            [
+              1.25,
+              0
+            ],
+            [
+              2.5,
+              0
+            ]
+          ],
+          "ranges": []
+        },
+        "controller": {
+          "kind": "none",
+          "settings": {},
+          "target": {
+            "kind": "constant",
+            "state": [
+              1,
+              0
+            ]
+          }
+        },
+        "solver": {
+          "method": "BDF",
+          "rtol": 1e-09,
+          "atol": 1e-09
+        },
+        "archive": {
+          "enabled": true,
+          "data_role": "free_training"
+        }
+      }
+    },
     {
       "id": "state",
       "job": {

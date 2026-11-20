@@ -1,7 +1,7 @@
 # Start here: DynSysLab
 
 **Critical Koopman reference:** preserve and revisit the
-[exact unstable linear Duffing example](case-studies/KOOPMAN_LINEAR_DUFFING_EXACT_REFERENCE.md).
+exact unstable linear Duffing example (private development record `KOOPMAN_LINEAR_DUFFING_EXACT_REFERENCE.md`).
 The user designated it critically important on 2026-11-05; it records exact
 eigenfunctions, input/output maps and the successful position-only KLQE/KLQR run.
 
@@ -17,7 +17,9 @@ For an ordinary installation, follow [Install DynSysLab](INSTALL.md). The
 prebuilt release includes both desktop apps and the CLI; no build tools are
 required. Anyone can start from `AJGibson0926/dynsyslab-public` alone. Running
 DynSysLab means `dynsyslab-cli quickstart`: the overview, the bundled examples,
-their results and figures, as Markdown, without opening a window.
+their results and figures, as Markdown, without opening a window. All data is generated
+locally: the release ships no solver output, and every shipped example creates its own data in
+your archive folder.
 
 For source development, install and launch from the repository root:
 

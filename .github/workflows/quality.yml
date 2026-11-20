@@ -138,6 +138,11 @@ jobs:
         run: cmake --build build/native-suite-fast --target dynsyslab_package_smoke
       - name: Create the portable native distribution
         run: cmake --build build/native-suite-fast --target package
+      - name: Release gate - no solver output, archived runs or result images
+        shell: pwsh
+        run: |
+          ./tools/Test-ReleaseContents.ps1 -Tracked
+          ./tools/Test-ReleaseContents.ps1 -PackagePath (Get-ChildItem build/native-suite-fast/DynSysLab-*-windows-x64.zip)[0].FullName
       - uses: actions/upload-artifact@v4
         with:
           name: dynsyslab-native-product-windows-x64

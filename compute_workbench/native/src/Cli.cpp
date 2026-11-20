@@ -1,4 +1,8 @@
 #include "CliArguments.hpp"
+#include "CliUsage.hpp"
+#include "CliHub.hpp"
+#include "CliMcp.hpp"
+#include "CliAgentSetup.hpp"
 #include "CliQuickstart.hpp"
 #include <dynsyslab/workflow/Run.hpp>
 #include <dynsyslab/workflow/Pipeline.hpp>
@@ -21,6 +25,7 @@
 #include <dynsyslab/core/KoopmanInspection.hpp>
 #include <dynsyslab/core/Json.hpp>
 #include <dynsyslab/core/LegacyCsv.hpp>
+#include <dynsyslab/core/OutputPath.hpp>
 #include <dynsyslab/core/System.hpp>
 #include <dynsyslab/core/Text.hpp>
 #include <dynsyslab/core/TimeSeriesArchive.hpp>
@@ -41,57 +46,11 @@ namespace {
 namespace json = dynsyslab::core::json;
 using dynsyslab::cli::Arguments;
 using dynsyslab::cli::arguments;
+using dynsyslab::cli::usage;
 std::string readText(const std::filesystem::path& path) {
     std::ifstream stream(path, std::ios::binary);
     if (!stream) throw std::runtime_error("unable to open job manifest: " + path.u8string());
     std::ostringstream out; out << stream.rdbuf(); return out.str();
-}
-void usage() {
-    std::cout
-        << "DynSysLab native CLI (Python is not required)\n\n"
-        << "dynsyslab_cli capabilities\n"
-        << "dynsyslab_cli quickstart [--archive-root PATH] [--format markdown|json]\n"
-        << "    welcome, overview, bundled examples, Fourier summary and figures; no GUI\n"
-        << "dynsyslab_cli doctor [--archive-root PATH]\n"
-        << "dynsyslab_cli docs\n"
-        << "dynsyslab_cli systems\n"
-        << "dynsyslab_cli koopman-spectral <query.json>\n"
-        << "dynsyslab_cli observable <query.json>\n"
-        << "dynsyslab_cli observable-closure <query.json>\n"
-        << "dynsyslab_cli coordinate-inverse <coordinates.npz> <input.npz> <output.npz>\n"
-        << "dynsyslab_cli analytic <query.json>\n"
-        << "dynsyslab_cli special-function <query.json>\n"
-        << "dynsyslab_cli phase-space <query.json> [--archive-root PATH]\n"
-        << "dynsyslab_cli research <query.json> [--archive-root PATH]\n"
-        << "dynsyslab_cli generate-ics <solve-job.json>\n"
-        << "dynsyslab_cli krom-validation-plan <krom.npz> [--archive-root PATH]\n"
-        << "dynsyslab_cli krom-info <krom.npz>\n"
-        << "dynsyslab_cli validate|plan|run <job.json> [--param NAME=VALUE]... [--set PATH=VALUE]...\n"
-        << "                  [--until STAGE] [--refresh STAGE]... [--fresh]\n"
-        << "                  [--archive-root PATH] [--progress PATH]\n"
-        << "    VALUE is JSON or plain text. Pipeline PATHs start with a stage id\n"
-        << "    (control.controller.settings.Q=1000); --until runs a pipeline through STAGE;\n"
-        << "    --refresh recomputes STAGE (and so everything downstream) instead of reusing it;\n"
-        << "    --fresh recomputes every stage.\n"
-        << "dynsyslab_cli fourier <trajectory.npz> [--component N]\n"
-        << "                      [--window rectangular|hann|hamming|blackman]\n"
-        << "                      [--keep-mean] [--two-sided]\n"
-        << "dynsyslab_cli archive audit [--archive-root PATH] [--days N|--all-ages]\n"
-        << "                            [--section NAME] [--system NAME] [--include-derived]\n"
-        << "dynsyslab_cli archive deduplicate [same scope options] [--apply]\n"
-        << "dynsyslab_cli archive index [--archive-root PATH]\n"
-        << "dynsyslab_cli import legacy-csv <source.csv> [--archive-root PATH]\n"
-        << "                     [--map-system ID] [--preset KEY] [--parameters-json JSON]\n"
-        << "                     [--coordinates NAME] [--input-scale N] [--label NAME]\n"
-        << "                     [--allow-unknown-records]\n"
-        << "dynsyslab_cli queue submit <job.json> [--archive-root PATH]\n"
-        << "dynsyslab_cli queue list [--archive-root PATH]\n"
-        << "dynsyslab_cli queue status <job-id> [--archive-root PATH]\n"
-        << "dynsyslab_cli queue cancel <job-id> [--archive-root PATH]\n"
-        << "dynsyslab_cli queue run-next [--archive-root PATH]\n"
-        << "dynsyslab_cli queue recover <age-seconds> [--archive-root PATH]\n\n"
-        << "Without --archive-root, results go to the installed archive folder (runtime.json, set by\n"
-        << "install.ps1), or <checkout>/archives when run from a source build; doctor reports which.\n";
 }
 dynsyslab::core::FourierWindow fourierWindow(const std::string& value) {
     if (value == "rectangular") return dynsyslab::core::FourierWindow::rectangular;
@@ -390,8 +349,14 @@ int wmain(int argc, wchar_t** argv) {
         const std::wstring command = args.positional.front();
         if (command == L"capabilities") capabilities();
         else if (command == L"doctor") doctor(args);
+        else if (command == L"hub")
+            return dynsyslab::cli::hub({args.archiveRoot, args.format, args.hook, args.peek});
+        else if (command == L"mcp") return dynsyslab::cli::mcpServer();
+        else if (command == L"agent-setup")
+            return dynsyslab::cli::agentSetup({args.remove, args.agentCommands, args.home, args.workspace, args.format});
         else if (command == L"quickstart")
-            return dynsyslab::cli::quickstart({args.archiveRoot, args.archiveRootSource, args.format});
+            return dynsyslab::cli::quickstart({dynsyslab::core::prepareOutputDirectory(args.archiveRoot, "--archive-root"),
+                                               args.archiveRootSource, args.format});
         else if (command == L"docs") docs();
         else if (command == L"systems") systems();
         else if (command == L"krom-info") {
@@ -442,7 +407,7 @@ int wmain(int argc, wchar_t** argv) {
         else if (command == L"coordinate-inverse") {
             if(args.positional.size()!=4)throw std::invalid_argument(
                 "coordinate-inverse requires a coordinate archive, an input and an output NPZ");
-            const std::filesystem::path output(args.positional[3]);
+            const auto output = dynsyslab::core::prepareOutputFile(args.positional[3], "coordinate-inverse output");
             dynsyslab::workflow::invertCoordinates(args.positional[1],args.positional[2],output);
             std::cout << "{\"schema\":\"dynsyslab.coordinate-inverse/v1\",\"output\":"
                       << json::dump(json::Value(output.generic_u8string())) << "}\n";
@@ -458,8 +423,14 @@ int wmain(int argc, wchar_t** argv) {
         }
         else if (command == L"fourier") fourier(args);
         else if (command == L"archive") archive(args);
-        else if (command == L"import") importData(args);
-        else if (command == L"queue") return queue(args);
+        else if (command == L"import") {
+            (void)dynsyslab::core::prepareOutputDirectory(args.archiveRoot, "--archive-root");
+            importData(args);
+        }
+        else if (command == L"queue") {
+            (void)dynsyslab::core::prepareOutputDirectory(args.archiveRoot, "--archive-root");
+            return queue(args);
+        }
         else if (command == L"validate" || command == L"plan" || command == L"run") {
             if (args.positional.size() < 2) throw std::invalid_argument("command needs a job file");
             const auto job = dynsyslab::workflow::applyJobInputs(
@@ -468,10 +439,20 @@ int wmain(int argc, wchar_t** argv) {
             if (command == L"validate") std::cout << "valid\n";
             else if (command == L"plan")
                 std::cout << json::dump(dynsyslab::workflow::planJob(job)) << '\n';
-            else std::cout << json::dump(execute(job, args.archiveRoot, args.progress)) << '\n';
+            else {  // outputs are checked after validation and before any stage runs
+                const auto root = dynsyslab::core::prepareOutputDirectory(args.archiveRoot, "--archive-root");
+                const auto progress = args.progress.empty() ? std::filesystem::path{}
+                    : dynsyslab::core::prepareOutputFile(args.progress, "--progress");
+                std::cout << json::dump(execute(job, root, progress)) << '\n';
+            }
         } else { usage(); return 2; }
         return 0;
+    } catch (const dynsyslab::core::OutputPathError& error) {
+        std::cerr << json::dump(json::Value::Object{{"schema", "dynsyslab.cli-error/v1"}, {"error", error.what()},
+            {"option", error.option()}, {"path", error.path().u8string()}}) << '\n';
+        return 1;
     } catch (const std::exception& error) {
-        std::cerr << "DynSysLab: " << error.what() << '\n'; return 1;
+        std::cerr << json::dump(json::Value::Object{{"schema", "dynsyslab.cli-error/v1"}, {"error", error.what()}}) << '\n';
+        return 1;
     }
 }

@@ -172,7 +172,7 @@ observer convergence under model mismatch.
 The case-study protocol documents the required ranking and validation comparisons
 in `examples/native/case-studies/rpe-joint-hdmd-klqe-20261105/PROTOCOL.md`.
 
-The [RPE experiment report](../reports/JOINT_HDMD_KLQE_SELECTION_2026-11-05.html)
+The RPE experiment report (private development record `JOINT_HDMD_KLQE_SELECTION_2026-11-05.html`)
 records the 3,188-mode bank, failed subset observers, and conditioning comparisons.
 
 Definitions follow the standard [observability matrix](https://www.mathworks.com/help/control/ref/statespacemodel.obsv.html),

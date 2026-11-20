@@ -51,7 +51,6 @@ std::filesystem::path sourceCheckoutContaining(const std::filesystem::path& exec
     return {};
 }
 
-namespace {
 std::filesystem::path userDataRoot() {
 #ifdef _WIN32
     std::vector<wchar_t> local(32768);
@@ -64,7 +63,16 @@ std::filesystem::path userDataRoot() {
     return std::filesystem::current_path() / L"DynSysLab";
 }
 
-}  // namespace
+std::filesystem::path installedProjectRoot() {
+    const auto file = cliExecutablePath().parent_path().parent_path() / L"resources" / L"runtime.json";
+    std::error_code ignored;
+    if (!std::filesystem::is_regular_file(file, ignored)) return {};
+    try {
+        const auto root = core::json::load(file.wstring());
+        if (root.at("schema").string() != "dynsyslab.runtime-paths/v1") return {};
+        return std::filesystem::u8path(root.at("project_root").string());
+    } catch (...) { return {}; }
+}
 
 ArchiveRootChoice resolveArchiveRoot(const std::filesystem::path& executable,
                                      const std::filesystem::path& userData) {

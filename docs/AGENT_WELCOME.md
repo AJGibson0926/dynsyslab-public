@@ -18,8 +18,19 @@ to its data.
 5. **View** everything in the Viewer or headlessly with its CLI: time series, phase portraits,
    spectra, Bode/Nyquist, stem plots, multi-run comparisons.
 
-Every computation is a versioned JSON job (`dynsyslab.compute-job/v1`) that can be validated,
-planned, run and re-run; archives are immutable and record their provenance.
+## How DynSysLab fits together
+
+- **Native core (C++):** system definitions, integrators, numerics, DMD/Koopman/SINDy model
+  identification, estimation and control live in compiled libraries; Python is never required.
+- **Jobs and pipelines:** every computation is a versioned JSON job (`dynsyslab.compute-job/v1`):
+  a solve, a post-processing step, a campaign, or a pipeline that chains stages and generates its
+  own data. Jobs can be validated, planned, run and re-run.
+- **Archives:** results are immutable `.npz` archives in your archive folder, organised
+  Batch > System > Cluster > Trajectory, each recording its provenance. Nothing is shipped
+  pre-computed; every example creates its own data.
+- **Front ends over the same core:** `dynsyslab-cli` (with `quickstart`, the `hub` and an MCP
+  server for AI agents), the Solver/Post-processor and Viewer desktop apps, the headless Viewer
+  CLI for figures, and an optional Python client.
 
 ## Get started
 
@@ -30,6 +41,9 @@ planned, run and re-run; archives are immutable and record their provenance.
 - **Python client (optional, any OS):**
   `pip install git+https://github.com/AJGibson0926/dynsyslab-public` installs the
   dependency-free `dynsyslab` client that drives the compiled CLI.
+- **Chat with it:** installing connects Claude Code and Codex (you are asked to allow it). A new
+  chat then opens with the DynSysLab Hub: this overview on your first login after an install, and
+  "What would you like to do?" every time. `dynsyslab-cli hub` shows the same greeting.
 - **Run DynSysLab:** `dynsyslab-cli quickstart` (installed at
   `%LOCALAPPDATA%\Programs\DynSysLab\bin\dynsyslab-cli.exe`). It prints this overview, runs
   the bundled examples, and reports their results and figures as Markdown, without opening

@@ -1,6 +1,7 @@
 #include "dynsyslab_viewer/ViewerSession.hpp"
 #include "dynsyslab_viewer/TimeSeriesOverlay.hpp"
 #include "dynsyslab_viewer/RuntimePaths.hpp"
+#include <dynsyslab/core/OutputPath.hpp>
 #include <fstream>
 #include <cmath>
 #include <iostream>
@@ -197,7 +198,8 @@ int viewerSessionCommand(int argc,wchar_t** argv) {
             options.xRange=args.range(L"--x-range"); options.yRange=args.range(L"--y-range");
             auto payload=dsl::timeSeriesOverlay(source,request,4ULL*options.width);
             if (args.values.count(L"--scale")) dsl::setValueScale(payload,args.text(L"--scale"));
-            std::cout << dsl::json::dump(dsl::renderPlotPng(payload,output,options)) << '\n';
+            std::cout << dsl::json::dump(dsl::renderPlotPng(payload,
+                dynsyslab::core::prepareOutputFile(output,"--output"),options)) << '\n';
             return 0;
         }
         const auto paths = dsl::discoverRuntimePaths(L"Viewer",args.get(L"--project"),
@@ -283,7 +285,9 @@ int viewerSessionCommand(int argc,wchar_t** argv) {
                         if (args.values.count(L"--page")) throw std::runtime_error("Use --page or --figure, not both");
                         options.figure = static_cast<std::size_t>(args.number(L"--figure",0));
                     }
-                    result = dsl::renderPlotPng(payload,args.get(L"--output"),options);
+                    const auto output = args.get(L"--output");
+                    result = dsl::renderPlotPng(payload, output.empty() ? std::filesystem::path(output)
+                        : dynsyslab::core::prepareOutputFile(output,"--output"), options);
                 } else result = dsl::inspectPlot(payload,args.samples);
                 result.object()["workspace"] = workspace;
                 result.object()["selected_id"] = session.selected().id;
@@ -292,11 +296,15 @@ int viewerSessionCommand(int argc,wchar_t** argv) {
         }
         const auto encoded = dsl::json::dump(result);
         if (command != L"render" && !args.get(L"--output").empty()) {
-            std::ofstream output(std::filesystem::path(args.get(L"--output")),std::ios::binary);
+            std::ofstream output(dynsyslab::core::prepareOutputFile(args.get(L"--output"),"--output"),std::ios::binary);
             output << encoded << '\n';
             if (!output) throw std::runtime_error("Unable to write JSON output");
         } else std::cout << encoded << '\n';
         return 0;
+    } catch (const dynsyslab::core::OutputPathError& error) {
+        std::cerr << dsl::json::dump(dsl::json::Value::Object{{"schema","dynsyslab.viewer.error/v1"},
+            {"error",error.what()},{"option",error.option()},{"path",error.path().u8string()}}) << '\n';
+        return 1;
     } catch (const std::exception& error) {
         std::cerr << dsl::json::dump(dsl::json::Value::Object{
             {"schema","dynsyslab.viewer.error/v1"},{"error",error.what()}}) << '\n';

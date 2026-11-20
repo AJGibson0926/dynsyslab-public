@@ -26,7 +26,7 @@ The `hankel_matrix` stage prepares one immutable matrix archive for each source 
 
 ## Run the RPE example
 
-The [example job](../../examples/native/case-studies/rpe-observable-hankel.json) uses the archived RPE trajectory named in its `sources` list. Set this path to a local RPE solution if using another checkout. From the project root, run the compiled CLI.
+The example job (private development record `rpe-observable-hankel.json`) uses the archived RPE trajectory named in its `sources` list. Set this path to a local RPE solution if using another checkout. From the project root, run the compiled CLI.
 
 ```powershell
 dynsyslab-cli plan examples/native/case-studies/rpe-observable-hankel.json

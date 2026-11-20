@@ -1,4 +1,5 @@
 #include <dynsyslab/workflow/Pipeline.hpp>
+#include <dynsyslab/core/OutputPath.hpp>
 
 #include <dynsyslab/workflow/Plan.hpp>
 
@@ -352,7 +353,7 @@ RunResult archiveStage(const json::Value& job) {
 }
 
 void atomicText(const std::filesystem::path& path, const std::string& contents) {
-    std::filesystem::create_directories(path.parent_path());
+    (void)dynsyslab::core::prepareOutputFile(path, "pipeline manifest");
     const auto temporary = path.parent_path() / (path.filename().wstring() + L".partial");
     { std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
       if (!stream) throw std::runtime_error("unable to create pipeline manifest");

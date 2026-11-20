@@ -1,4 +1,5 @@
 #include "SolveSet.hpp"
+#include <dynsyslab/core/OutputPath.hpp>
 
 #include "SolveDispatch.hpp"
 #include "WorkflowSupport.hpp"
@@ -20,7 +21,7 @@ namespace dynsyslab::workflow::detail {
 namespace {
 
 void atomicJson(const std::filesystem::path& path, const json::Value& value) {
-    std::filesystem::create_directories(path.parent_path());
+    (void)dynsyslab::core::prepareOutputFile(path, "solve-set manifest");
     const auto temporary = path.parent_path() / (path.filename().wstring() + L".partial");
     { std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
       if (!stream) throw std::runtime_error("unable to create solve-set manifest");

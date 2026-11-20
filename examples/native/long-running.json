@@ -1,0 +1,13 @@
+{
+  "schema": "dynsyslab.example-runtimes/v1",
+  "description": "Shipped examples that take longer than 5 minutes to run from an empty archive folder. The release install test validates and plans them but does not run them to completion; every other shipped example is run, and one that exceeds 5 minutes without being listed here fails the test.",
+  "long_running": [
+    "pipelines/rpe-coordinate-dynamics/study.json",
+    "pipelines/rpe-echo-jet-klqr-rediscovery/20kpa.json",
+    "pipelines/rpe-klqe/echo-to-state.json",
+    "pipelines/rpe-viscous-klqr-multisine/base-r.json",
+    "pipelines/rpe-viscous-klqr-multisine/echo-jet.json",
+    "pipelines/rpe-viscous-klqr-multisine/xi4-history-exact.json",
+    "pipelines/rpe-viscous-klqr-multisine/xi4-history-regressed.json"
+  ]
+}

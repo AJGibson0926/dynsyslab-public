@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(DynSysLab VERSION 0.6.2 LANGUAGES CXX)
+project(DynSysLab VERSION 0.7.0 LANGUAGES CXX)
 
 include(CTest)
 include(cmake/DynSysLabExtensions.cmake)
@@ -70,7 +70,25 @@ if(WIN32)
   include(InstallRequiredSystemLibraries)
 endif()
 
+# Private-only files (export-ignore in .gitattributes: records of past studies, results derived
+# from past runs) are left out of the package exactly as they are left out of the public export.
+set(_dsl_private_docs)
+set(_dsl_private_examples)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/.gitattributes" _dsl_attributes REGEX "export-ignore$")
+foreach(_dsl_line IN LISTS _dsl_attributes)
+  string(REGEX REPLACE "[ \t]+export-ignore$" "" _dsl_path "${_dsl_line}")
+  string(REGEX REPLACE "/\\*\\*$" "" _dsl_path "${_dsl_path}")
+  string(REGEX REPLACE "([.+?^$()\\[\\]{}|])" "\\\\\\1" _dsl_regex "${_dsl_path}")
+  if(_dsl_path MATCHES "^docs/")
+    string(REGEX REPLACE "^docs/" "" _dsl_regex "${_dsl_regex}")
+    list(APPEND _dsl_private_docs REGEX "/${_dsl_regex}(/.*)?$" EXCLUDE)
+  elseif(_dsl_path MATCHES "^examples/native/")
+    string(REGEX REPLACE "^examples/native/" "" _dsl_regex "${_dsl_regex}")
+    list(APPEND _dsl_private_examples REGEX "/${_dsl_regex}(/.*)?$" EXCLUDE)
+  endif()
+endforeach()
 install(DIRECTORY docs/ DESTINATION resources/docs
+  ${_dsl_private_docs}
   PATTERN "archive" EXCLUDE
   PATTERN "assets" EXCLUDE
   PATTERN "DISK_SPACE_AUDIT*" EXCLUDE
@@ -88,6 +106,7 @@ install(FILES README.md ARCHITECTURE.md SOLVER.md PERFORMANCE.md CHANGELOG.md
   DESTINATION resources)
 install(FILES install.ps1 DESTINATION .)
 install(DIRECTORY examples/native/ DESTINATION resources/examples
+  ${_dsl_private_examples}
   PATTERN "case-studies" EXCLUDE)
 if(EXISTS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share")
   install(DIRECTORY "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/"

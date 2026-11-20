@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.7.0 — 2026-11-19
+
+**DynSysLab Hub: a plain chat session greets you.**
+
+- `dynsyslab-cli hub`: the DynSysLab greeting. On the first login after an install (tracked per
+  version in `%LOCALAPPDATA%\DynSysLab\hub.json`) it includes the welcome and an overview of the
+  suite and its architecture; every time it ends with "What would you like to do?" and numbered
+  options. `--format json`; `--peek` does not record a login.
+- `dynsyslab-cli mcp`: a Model Context Protocol server (stdio) for Claude Code, Codex and other
+  agents. Its instructions open the Hub at the start of a DynSysLab conversation; tools: `hub`,
+  `quickstart`, `list_systems`, `doctor`, `validate_job`, `plan_job`, `run_job`, `fourier`,
+  `render_figure` (returns the PNG); the `hub` prompt is the same greeting as a slash command.
+- `dynsyslab-cli agent-setup [--remove]`: registers the MCP server with Claude Code
+  (`claude mcp add --scope user`, including the copy bundled with the Claude desktop app) and Codex
+  (`codex mcp add`, or `~/.codex/config.toml`), adds a Claude Code SessionStart hook
+  (`dynsyslab-cli hub --hook`: greets on the first login after an install and in the DynSysLab
+  workspace, silent elsewhere), and writes `AGENTS.md`, `CLAUDE.md` and `.dynsyslab-workspace`
+  into the workspace (`Documents\DynSysLab`). `--remove` undoes all of it and keeps entries it did
+  not write.
+- `install.ps1` runs `agent-setup` after installing (`-NoAgentSetup` skips it), then `quickstart`.
+  `release-install.json` adds `workspace` and `hub_command`.
+
+**Data policy: DynSysLab ships no solver output.** The release and the public repository contain
+settings, parameters, schemas and instructions only; every shipped example generates its own
+data and runs with an empty archive folder; numerical results live only in `archives/`.
+
+- Converted to self-generating pipelines (same parameter values, data solved by a first stage):
+  `examples/native/rpe-echo-history-koopman.json` (training and validation ring-downs),
+  `pipelines/rpe-klqe/echo-to-state.json` (training and hold-out),
+  `pipelines/rpe-coordinate-dynamics/study.json` (training and validation initial conditions),
+  `pipelines/rpe-echo-jet-klqr-rediscovery/20kpa.json` (the 20 kPa, 100 kHz target orbit),
+  `duffing-hdmd-sindy-postprocess.json` and `spectral-koopman-job.json` (their sources).
+- Private development repository only (left out of the public export and the release with
+  `export-ignore` in `.gitattributes`, which packaging reads too): `examples/native/case-studies/`
+  (records of past studies, including `tuning-results.jsonl` and the fitted drive in
+  `forced/hard.json`), `examples/duffing-minimal-exact-klqr-transfer-release/`, the mode-selection
+  pools `pipelines/rpe-echo-mode-selection/{echo-pool,hdmd-pool,range-pool}.json` (they need
+  derived K-ROMs and closed-loop runs), `docs/reports/`, `docs/notes/` (including the controller
+  diagnostics JSON), `docs/case-studies/`, the local asset pointers, the RPE isolation SOP, the
+  August architecture audit, `tools/analyze_rpe_echo_jet_nonlinear_sine.py`, two `scripts/` that
+  read archived runs and the `rpe-successful-control` Viewer focus profile. The docs index lists
+  them in the private `docs/STUDY_RECORDS.md`.
+- Removed `docs/case-studies/assets/viewer-insets-2026-11-15/*.png`; `.gitignore` covers
+  `/docs/case-studies/**/assets/` and `/docs/**/assets/*.png`.
+- Release gate `tools/Test-ReleaseContents.ps1` (repository and package, in both workflows) fails on
+  `archives/(solutions|derived|campaigns|hierarchies)/` paths, `.npz .npy .mat .h5 .parquet`,
+  PNG/JPG outside the application icons, `.jsonl`, and text naming an archived run.
+- The release install test validates and plans every shipped example on a fresh install with an
+  empty archive folder and runs every one that finishes within 5 minutes
+  (`examples/native/long-running.json` lists the longer RPE campaigns).
+
+**CLI output paths.**
+
+- CLI output paths: `run --progress progress.jsonl` (a bare file name) no longer fails with
+  `create_directories: ... ""`. `--progress` and `--archive-root` resolve against the current
+  directory when parsed; missing parent folders are created; output paths are checked after
+  job validation and before any stage runs. Path failures are `dynsyslab.cli-error/v1` JSON
+  naming the option and the resolved path (every CLI error is now that JSON). Progress and
+  manifest writers, `coordinate-inverse` outputs and `DynSysLabViewerCli --output` share one
+  helper (`core::prepareOutputFile`).
+
 ## 0.6.2 — 2026-11-19
 
 - `dynsyslab-cli quickstart`: the first run as one command. It prints the welcome and

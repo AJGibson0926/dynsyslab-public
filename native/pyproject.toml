@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "dynsyslab-native"
-version = "0.6.2"
+version = "0.7.0"
 description = "Optional Python bindings for the standalone DynSysLab native core"
 requires-python = ">=3.10"
 license = {text = "MIT"}

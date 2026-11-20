@@ -137,7 +137,7 @@ monopole: rho times (2 R Rdot squared + R squared Rddot), with zero-input
 acceleration. In native coordinates it is S(2 r v^2 + r^2 a), S=R0 P*.
 Echo derivatives are with respect to model time tau. Older assets with the same
 name may lack one radius factor; compare the serialized formula and basis
-identity before reuse. See the [correction and provenance inventory](../reports/RPE_CORRECTED_MONOPOLE_RINGDOWN_2026-11-05.html).
+identity before reuse. See the correction and provenance inventory (private development record `RPE_CORRECTED_MONOPOLE_RINGDOWN_2026-11-05.html`).
 
 ## Marmottant model
 

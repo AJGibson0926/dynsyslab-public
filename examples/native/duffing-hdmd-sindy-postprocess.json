@@ -1,31 +1,86 @@
 {
   "schema": "dynsyslab.compute-job/v1",
-  "kind": "postprocess",
+  "kind": "pipeline",
   "label": "duffing-hdmd-sindy-example",
-  "sources": ["REPLACE_WITH_SOLUTION_ARCHIVE.npz"],
-  "methods": [
+  "description": "H-DMD then SINDy on a Duffing double-well trajectory that the pipeline generates itself ('train').",
+  "stages": [
     {
-      "name": "hdmd",
-      "enabled": true,
-      "settings": {
-        "observable": 0,
-        "matrix_size": 200,
-        "sampling_window": 1000,
-        "svd_tolerance": 1e-10,
-        "mode_sort": "terminal-amplitude-energy"
+      "id": "train",
+      "job": {
+        "kind": "solve",
+        "label": "duffing-hdmd-sindy-training",
+        "system": {
+          "name": "duffing",
+          "preset": "double_well_reference",
+          "parameters": {}
+        },
+        "time": {
+          "start": 0,
+          "stop": 30,
+          "output_step": 0.01,
+          "coordinate_system": "automatic"
+        },
+        "initial_conditions": {
+          "mode": "explicit",
+          "count": 1,
+          "clusters": 1,
+          "seed": 0,
+          "values": [
+            [
+              1.6,
+              0
+            ]
+          ],
+          "ranges": []
+        },
+        "solver": {
+          "method": "RK45",
+          "rtol": 1e-09,
+          "atol": 1e-11
+        },
+        "archive": {
+          "enabled": true,
+          "data_role": "free_training"
+        }
       }
     },
     {
-      "name": "sindy",
-      "enabled": true,
-      "settings": {
-        "polynomial_degree": 4,
-        "threshold": 0.05,
-        "archive_storage": "coefficient-first",
-        "coordinate_observable": "state",
-        "reconstruction_observables": ["state"]
+      "id": "models",
+      "job": {
+        "kind": "postprocess",
+        "sources": [
+          "${train.archive}"
+        ],
+        "methods": [
+          {
+            "name": "hdmd",
+            "enabled": true,
+            "settings": {
+              "observable": 0,
+              "matrix_size": 200,
+              "sampling_window": 1000,
+              "svd_tolerance": 1e-10,
+              "mode_sort": "terminal-amplitude-energy"
+            }
+          },
+          {
+            "name": "sindy",
+            "enabled": true,
+            "settings": {
+              "polynomial_degree": 4,
+              "threshold": 0.05,
+              "archive_storage": "coefficient-first",
+              "coordinate_observable": "state",
+              "reconstruction_observables": [
+                "state"
+              ]
+            }
+          }
+        ],
+        "archive": {
+          "enabled": true
+        }
       }
     }
-  ],
-  "archive": {"enabled": true}
+  ]
 }

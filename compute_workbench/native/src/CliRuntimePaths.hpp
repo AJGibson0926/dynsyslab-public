@@ -24,4 +24,9 @@ struct ArchiveRootChoice {
 [[nodiscard]] std::filesystem::path cliExecutablePath();
 [[nodiscard]] std::filesystem::path sourceCheckoutContaining(const std::filesystem::path& executable);
 
+// %LOCALAPPDATA%/DynSysLab (per-user state such as runtime.json and hub.json).
+[[nodiscard]] std::filesystem::path userDataRoot();
+// The data workspace the installer configured (runtime.json project_root); empty when none.
+[[nodiscard]] std::filesystem::path installedProjectRoot();
+
 }  // namespace dynsyslab::cli

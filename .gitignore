@@ -24,6 +24,8 @@ native/*.egg-info/
 # Rendered reports, screenshots, plots, and generated scientific sidecars stay
 # local. Version the report sources and lightweight pointers, not their media.
 /docs/reports/**/assets/
+/docs/case-studies/**/assets/
+/docs/**/assets/*.png
 /archives/system_metadata/
 
 # Private, potentially large conversation exports are stored locally and may be

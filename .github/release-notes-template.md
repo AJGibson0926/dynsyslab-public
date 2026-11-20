@@ -11,7 +11,14 @@ DynSysLab, runs the bundled examples (a Duffing double well and the chaotic Lore
 and reports their results as Markdown: a table of each run (samples, solver steps, dominant
 frequency, final state), the archive paths, and PNG figures rendered by the Viewer CLI. The
 installer runs it once at the end (skip with `-NoQuickstart`). Results are saved in
-`Documents\DynSysLab\archives`. No window opens.
+`Documents\DynSysLab\archives`. No window opens. Nothing is shipped pre-computed: every example
+generates its own data.
+
+**Chat with DynSysLab.** The installer also connects Claude Code and Codex (the `dynsyslab` MCP
+server, a Claude Code start-up hook, and a workspace in `Documents\DynSysLab`; skip with
+`-NoAgentSetup`, undo with `dynsyslab-cli agent-setup --remove`). From the next chat session on,
+the agent opens with the DynSysLab Hub: a welcome and overview on your first login after an
+install, then "What would you like to do?" with options. `dynsyslab-cli hub` shows the same.
 
 The desktop applications (Solver/Post-processor and Viewer) are optional; open them from the
 Start menu when you want them. More: [INSTALL.md](https://github.com/AJGibson0926/dynsyslab-public/blob/{{TAG}}/docs/INSTALL.md)

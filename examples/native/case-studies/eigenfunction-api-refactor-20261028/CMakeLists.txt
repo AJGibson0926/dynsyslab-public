@@ -1,8 +1,0 @@
-cmake_minimum_required(VERSION 3.24)
-project(EigenfunctionApiParity LANGUAGES CXX)
-add_executable(eigenfunction_api_parity parity.cpp)
-target_compile_features(eigenfunction_api_parity PRIVATE cxx_std_17)
-target_include_directories(eigenfunction_api_parity PRIVATE "${DYNSYSLAB_SOURCE_DIR}/native/include")
-foreach(module foundation eigenfunctions koopman)
-  target_link_libraries(eigenfunction_api_parity PRIVATE "${DYNSYSLAB_SUITE_BUILD}/lib/dynsyslab_${module}.lib")
-endforeach()

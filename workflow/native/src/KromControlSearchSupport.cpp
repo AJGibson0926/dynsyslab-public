@@ -1,4 +1,5 @@
 #include "KromControlSearchSupport.hpp"
+#include <dynsyslab/core/OutputPath.hpp>
 
 #include <dynsyslab/core/Archive.hpp>
 
@@ -112,7 +113,7 @@ json::Value metricsJson(const CaseMetrics& source){json::Value::Object result;
     return json::Value(std::move(result));}
 
 void writeJsonAtomic(const std::filesystem::path& path,const json::Value& value){
-    std::filesystem::create_directories(path.parent_path());const auto temporary=path.wstring()+L".partial";
+    (void)dynsyslab::core::prepareOutputFile(path, "campaign ledger");const auto temporary=path.wstring()+L".partial";
     {std::ofstream stream(temporary,std::ios::binary|std::ios::trunc);
         if(!stream)throw std::runtime_error("unable to create campaign ledger");
         const auto text=json::dump(value);stream.write(text.data(),static_cast<std::streamsize>(text.size()));}

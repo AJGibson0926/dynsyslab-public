@@ -1,45 +1,96 @@
 {
   "schema": "dynsyslab.compute-job/v1",
-  "kind": "postprocess",
+  "kind": "pipeline",
   "label": "Shared Hankel spectral comparison",
-  "sources": [
-    "archives/rotation-source.npz"
-  ],
-  "methods": [
+  "description": "Shared Hankel spectral comparison on a pure rotation. Generates its own source (an undamped harmonic oscillator), then compares ResDMD and EDMD on one shared Hankel matrix.",
+  "stages": [
     {
-      "name": "hankel_matrix",
-      "settings": {
-        "observables": [
-          0,
-          1
+      "id": "rotation",
+      "job": {
+        "kind": "solve",
+        "label": "rotation-source",
+        "system": {
+          "name": "harmonic_oscillator",
+          "parameters": {}
+        },
+        "time": {
+          "start": 0,
+          "stop": 20,
+          "output_step": 0.05,
+          "coordinate_system": "automatic"
+        },
+        "initial_conditions": {
+          "mode": "explicit",
+          "count": 1,
+          "clusters": 1,
+          "seed": 0,
+          "values": [
+            [
+              1,
+              0
+            ]
+          ],
+          "ranges": []
+        },
+        "solver": {
+          "method": "RK45",
+          "rtol": 1e-09,
+          "atol": 1e-11
+        },
+        "archive": {
+          "enabled": true,
+          "data_role": "free_training"
+        }
+      }
+    },
+    {
+      "id": "spectra",
+      "job": {
+        "kind": "postprocess",
+        "sources": [
+          "${rotation.archive}"
         ],
-        "window": {
-          "delays": 10,
-          "columns": 200
-        }
-      }
-    },
-    {
-      "name": "resdmd",
-      "settings": {
-        "use_previous_hankel": true,
-        "rank": 2,
-        "dictionary": {
-          "kind": "linear",
-          "constant": false
-        }
-      }
-    },
-    {
-      "name": "koopman_spectral",
-      "settings": {
-        "method": "edmd",
-        "use_previous_hankel": true,
-        "rank": 2,
-        "weight_policy": "smooth-birkhoff",
-        "dictionary": {
-          "kind": "linear",
-          "constant": false
+        "methods": [
+          {
+            "name": "hankel_matrix",
+            "settings": {
+              "observables": [
+                0,
+                1
+              ],
+              "window": {
+                "delays": 10,
+                "columns": 200
+              }
+            }
+          },
+          {
+            "name": "resdmd",
+            "settings": {
+              "use_previous_hankel": true,
+              "rank": 2,
+              "dictionary": {
+                "kind": "linear",
+                "constant": false
+              }
+            }
+          },
+          {
+            "name": "koopman_spectral",
+            "settings": {
+              "method": "edmd",
+              "use_previous_hankel": true,
+              "rank": 2,
+              "weight_policy": "smooth-birkhoff",
+              "dictionary": {
+                "kind": "linear",
+                "constant": false
+              }
+            }
+          }
+        ],
+        "archive": {
+          "enabled": true
         }
       }
     }

@@ -1,49 +1,211 @@
 {
   "schema": "dynsyslab.compute-job/v1",
-  "kind": "postprocess",
+  "kind": "pipeline",
   "label": "RPE echo-only causal-history Koopman",
-  "sources": [
-    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z.npz",
-    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-1__20261002T001350Z.npz",
-    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-2__20261002T001350Z.npz",
-    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-3__20261002T001350Z.npz",
-    "archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-4__20261002T001350Z.npz"
-  ],
-  "methods": [
+  "description": "Echo-only causal-history Koopman model of the viscous RPE. Generates its own data: five free ring-downs for training ('train') and five held-out ones ('validate'), 80 tau each, then fits the history Koopman model on the far-field echo.",
+  "reuse_identical_stages": true,
+  "stages": [
     {
-      "name": "echo_history_koopman",
-      "enabled": true,
-      "settings": {
-        "observable": "far_field_acoustic_echo",
-        "decimation": 5,
-        "delays": 8644,
-        "hankel_rank": 4,
-        "coordinate_rank": 2,
-        "hankel_oversampling": 4,
-        "hankel_subspace_iterations": 12,
-        "seed": 20261002,
-        "fit_start": 50.0,
-        "fit_end": 80.0,
-        "polynomial_degree": 5,
-        "pair_stride": 20,
-        "relative_ridge": 1e-10,
-        "minimum_discrete_magnitude": 0.90,
-        "maximum_discrete_magnitude": 1.005,
-        "minimum_continuous_real": -1.0,
-        "maximum_continuous_real": 0.1,
-        "minimum_continuous_imaginary": 4.0,
-        "maximum_continuous_imaginary": 7.0,
-        "validation_sources": [
-          "archives/solutions/rpe/rpe-viscous-echo-long-validation-five-ics-trajectory-0__20261002T001403Z.npz",
-          "archives/solutions/rpe/rpe-viscous-echo-long-validation-five-ics-trajectory-1__20261002T001403Z.npz",
-          "archives/solutions/rpe/rpe-viscous-echo-long-validation-five-ics-trajectory-2__20261002T001403Z.npz",
-          "archives/solutions/rpe/rpe-viscous-echo-long-validation-five-ics-trajectory-3__20261002T001403Z.npz",
-          "archives/solutions/rpe/rpe-viscous-echo-long-validation-five-ics-trajectory-4__20261002T001403Z.npz"
-        ]
+      "id": "train",
+      "job": {
+        "kind": "solve",
+        "label": "rpe-viscous-echo-long-training-five-ics",
+        "system": {
+          "name": "rpe",
+          "preset": "air_water_20c",
+          "parameters": {
+            "ambient_pressure_pa": 100000,
+            "equilibrium_radius_m": 1e-05,
+            "kappa": 1.3333333333333333,
+            "mu_pa_s": 0.001,
+            "pressure_input_sign": -1,
+            "rho_kg_m3": 998,
+            "sigma_n_m": 0.0725,
+            "vapor_pressure_pa": 2330
+          }
+        },
+        "time": {
+          "start": 0,
+          "stop": 80,
+          "output_step": 0.0001,
+          "coordinate_system": "dimensionless"
+        },
+        "initial_conditions": {
+          "mode": "explicit",
+          "count": 5,
+          "clusters": 1,
+          "seed": 0,
+          "values": [
+            [
+              2.333386598601735,
+              0
+            ],
+            [
+              1.25,
+              0
+            ],
+            [
+              1.65,
+              0
+            ],
+            [
+              2.15,
+              0
+            ],
+            [
+              2.5,
+              0
+            ]
+          ],
+          "ranges": []
+        },
+        "controller": {
+          "kind": "none",
+          "settings": {},
+          "target": {
+            "kind": "constant",
+            "state": [
+              1,
+              0
+            ]
+          }
+        },
+        "solver": {
+          "method": "BDF",
+          "rtol": 1e-09,
+          "atol": 1e-09
+        },
+        "archive": {
+          "enabled": true,
+          "data_role": "free_training"
+        }
+      }
+    },
+    {
+      "id": "validate",
+      "job": {
+        "kind": "solve",
+        "label": "rpe-viscous-echo-long-validation-five-ics",
+        "system": {
+          "name": "rpe",
+          "preset": "air_water_20c",
+          "parameters": {
+            "ambient_pressure_pa": 100000,
+            "equilibrium_radius_m": 1e-05,
+            "kappa": 1.3333333333333333,
+            "mu_pa_s": 0.001,
+            "pressure_input_sign": -1,
+            "rho_kg_m3": 998,
+            "sigma_n_m": 0.0725,
+            "vapor_pressure_pa": 2330
+          }
+        },
+        "time": {
+          "start": 0,
+          "stop": 80,
+          "output_step": 0.0001,
+          "coordinate_system": "dimensionless"
+        },
+        "initial_conditions": {
+          "mode": "explicit",
+          "count": 5,
+          "clusters": 1,
+          "seed": 0,
+          "values": [
+            [
+              1.1,
+              0.3
+            ],
+            [
+              1.5,
+              -2
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              2.45,
+              0
+            ],
+            [
+              2.6,
+              0
+            ]
+          ],
+          "ranges": []
+        },
+        "controller": {
+          "kind": "none",
+          "settings": {},
+          "target": {
+            "kind": "constant",
+            "state": [
+              1,
+              0
+            ]
+          }
+        },
+        "solver": {
+          "method": "BDF",
+          "rtol": 1e-09,
+          "atol": 1e-09
+        },
+        "archive": {
+          "enabled": true,
+          "data_role": "free_training"
+        }
+      }
+    },
+    {
+      "id": "history",
+      "job": {
+        "kind": "postprocess",
+        "sources": [
+          "${train.archives[0]}",
+          "${train.archives[1]}",
+          "${train.archives[2]}",
+          "${train.archives[3]}",
+          "${train.archives[4]}"
+        ],
+        "methods": [
+          {
+            "name": "echo_history_koopman",
+            "enabled": true,
+            "settings": {
+              "observable": "far_field_acoustic_echo",
+              "decimation": 5,
+              "delays": 8644,
+              "hankel_rank": 4,
+              "coordinate_rank": 2,
+              "hankel_oversampling": 4,
+              "hankel_subspace_iterations": 12,
+              "seed": 20261002,
+              "fit_start": 50.0,
+              "fit_end": 80.0,
+              "polynomial_degree": 5,
+              "pair_stride": 20,
+              "relative_ridge": 1e-10,
+              "minimum_discrete_magnitude": 0.9,
+              "maximum_discrete_magnitude": 1.005,
+              "minimum_continuous_real": -1.0,
+              "maximum_continuous_real": 0.1,
+              "minimum_continuous_imaginary": 4.0,
+              "maximum_continuous_imaginary": 7.0,
+              "validation_sources": [
+                "${validate.archives[0]}",
+                "${validate.archives[1]}",
+                "${validate.archives[2]}",
+                "${validate.archives[3]}",
+                "${validate.archives[4]}"
+              ]
+            }
+          }
+        ],
+        "archive": {
+          "enabled": true
+        }
       }
     }
-  ],
-  "archive": {
-    "enabled": true
-  }
+  ]
 }

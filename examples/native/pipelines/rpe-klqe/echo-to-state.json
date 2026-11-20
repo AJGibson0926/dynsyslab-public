@@ -20,79 +20,255 @@
       }
     },
     "training": {
-      "kind": "archive",
-      "archives": ["archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-0__20261002T001350Z.npz"]
+      "kind": "solve",
+      "label": "rpe-viscous-echo-long-training-ic0",
+      "system": {
+        "name": "rpe",
+        "preset": "air_water_20c",
+        "parameters": {
+          "ambient_pressure_pa": 100000,
+          "equilibrium_radius_m": 1e-05,
+          "kappa": 1.3333333333333333,
+          "mu_pa_s": 0.001,
+          "pressure_input_sign": -1,
+          "rho_kg_m3": 998,
+          "sigma_n_m": 0.0725,
+          "vapor_pressure_pa": 2330
+        }
+      },
+      "time": {
+        "start": 0,
+        "stop": 80,
+        "output_step": 0.0001,
+        "coordinate_system": "dimensionless"
+      },
+      "initial_conditions": {
+        "mode": "explicit",
+        "count": 1,
+        "clusters": 1,
+        "seed": 0,
+        "values": [
+          [
+            2.333386598601735,
+            0
+          ]
+        ],
+        "ranges": []
+      },
+      "controller": {
+        "kind": "none",
+        "settings": {},
+        "target": {
+          "kind": "constant",
+          "state": [
+            1,
+            0
+          ]
+        }
+      },
+      "solver": {
+        "method": "BDF",
+        "rtol": 1e-09,
+        "atol": 1e-09
+      },
+      "archive": {
+        "enabled": true,
+        "data_role": "free_training"
+      }
     },
     "holdout": {
-      "kind": "archive",
-      "archives": ["archives/solutions/rpe/rpe-viscous-echo-long-training-five-ics-trajectory-2__20261002T001350Z.npz"]
+      "kind": "solve",
+      "label": "rpe-viscous-echo-long-training-ic2",
+      "system": {
+        "name": "rpe",
+        "preset": "air_water_20c",
+        "parameters": {
+          "ambient_pressure_pa": 100000,
+          "equilibrium_radius_m": 1e-05,
+          "kappa": 1.3333333333333333,
+          "mu_pa_s": 0.001,
+          "pressure_input_sign": -1,
+          "rho_kg_m3": 998,
+          "sigma_n_m": 0.0725,
+          "vapor_pressure_pa": 2330
+        }
+      },
+      "time": {
+        "start": 0,
+        "stop": 80,
+        "output_step": 0.0001,
+        "coordinate_system": "dimensionless"
+      },
+      "initial_conditions": {
+        "mode": "explicit",
+        "count": 1,
+        "clusters": 1,
+        "seed": 0,
+        "values": [
+          [
+            1.65,
+            0
+          ]
+        ],
+        "ranges": []
+      },
+      "controller": {
+        "kind": "none",
+        "settings": {},
+        "target": {
+          "kind": "constant",
+          "state": [
+            1,
+            0
+          ]
+        }
+      },
+      "solver": {
+        "method": "BDF",
+        "rtol": 1e-09,
+        "atol": 1e-09
+      },
+      "archive": {
+        "enabled": true,
+        "data_role": "free_training"
+      }
     },
     "hdmd": {
-      "observables": ["radius", "radial_velocity", "far_field_acoustic_echo"],
+      "observables": [
+        "radius",
+        "radial_velocity",
+        "far_field_acoustic_echo"
+      ],
       "matrix_size": 2000,
       "sampling_window": 2000,
       "sample_stride": 10,
       "snapshot_stride": 10,
       "window_alignment": "end",
-      "time_window": [50, 80],
+      "time_window": [
+        50,
+        80
+      ],
       "rank": 0,
       "svd_tolerance": 1e-10,
       "mode_sort": "terminal-amplitude-energy",
-      "reconstruction_observables": ["state"]
+      "reconstruction_observables": [
+        "state"
+      ]
     },
     "mode_selection": {
       "rule": "observable_energy",
-      "reconstructions": ["radius", "radial_velocity", "far_field_acoustic_echo"],
-      "thresholds": [0.99, 0.99, 0.99],
-      "caps": [30, 3, 200],
+      "reconstructions": [
+        "radius",
+        "radial_velocity",
+        "far_field_acoustic_echo"
+      ],
+      "thresholds": [
+        0.99,
+        0.99,
+        0.99
+      ],
+      "caps": [
+        30,
+        3,
+        200
+      ],
       "max_real_part": 0,
       "exclude_constant": true
     },
-    "estimator_weights": {"process": 1.0, "measurement": 1e-4},
-    "holdout_window": [30, 80],
-    "online_initial_state": [1.4, 0],
+    "estimator_weights": {
+      "process": 1.0,
+      "measurement": 0.0001
+    },
+    "holdout_window": [
+      30,
+      80
+    ],
+    "online_initial_state": [
+      1.4,
+      0
+    ],
     "online_stop": 80
   },
   "stages": [
-    {"id": "train", "job": "${params.training}"},
+    {
+      "id": "train",
+      "job": "${params.training}"
+    },
     {
       "id": "hdmd",
       "job": {
         "kind": "postprocess",
-        "sources": ["${train.archive}"],
-        "methods": [{"name": "hdmd", "settings": "${params.hdmd}"}],
-        "archive": {"enabled": true}
+        "sources": [
+          "${train.archive}"
+        ],
+        "methods": [
+          {
+            "name": "hdmd",
+            "settings": "${params.hdmd}"
+          }
+        ],
+        "archive": {
+          "enabled": true
+        }
       }
     },
     {
       "id": "krom",
       "job": {
         "kind": "postprocess",
-        "sources": ["${hdmd.output:hdmd}"],
-        "methods": [{"name": "krom_extract", "settings": {
-          "mode_selection": "${params.mode_selection}",
-          "refit_reconstructions": {"observables": ["state", "far_field_acoustic_echo"], "intercept": true, "ridge": 1e-10}
-        }}],
-        "archive": {"enabled": true}
+        "sources": [
+          "${hdmd.output:hdmd}"
+        ],
+        "methods": [
+          {
+            "name": "krom_extract",
+            "settings": {
+              "mode_selection": "${params.mode_selection}",
+              "refit_reconstructions": {
+                "observables": [
+                  "state",
+                  "far_field_acoustic_echo"
+                ],
+                "intercept": true,
+                "ridge": 1e-10
+              }
+            }
+          }
+        ],
+        "archive": {
+          "enabled": true
+        }
       }
     },
-    {"id": "holdout", "job": "${params.holdout}"},
+    {
+      "id": "holdout",
+      "job": "${params.holdout}"
+    },
     {
       "id": "offline",
       "job": {
         "kind": "postprocess",
-        "sources": ["${holdout.archive}"],
-        "methods": [{"name": "klqe", "settings": {
-          "krom": "${krom.archive}",
-          "measurement": "far_field_acoustic_echo",
-          "output_reconstruction": "state",
-          "process_variance": "${params.estimator_weights.process}",
-          "measurement_variance": "${params.estimator_weights.measurement}",
-          "initial_estimate": "zero",
-          "time_window": "${params.holdout_window}",
-          "sample_stride": 10
-        }}],
-        "archive": {"enabled": true}
+        "sources": [
+          "${holdout.archive}"
+        ],
+        "methods": [
+          {
+            "name": "klqe",
+            "settings": {
+              "krom": "${krom.archive}",
+              "measurement": "far_field_acoustic_echo",
+              "output_reconstruction": "state",
+              "process_variance": "${params.estimator_weights.process}",
+              "measurement_variance": "${params.estimator_weights.measurement}",
+              "initial_estimate": "zero",
+              "time_window": "${params.holdout_window}",
+              "sample_stride": 10
+            }
+          }
+        ],
+        "archive": {
+          "enabled": true
+        }
       }
     },
     {
@@ -100,9 +276,28 @@
       "job": {
         "kind": "solve",
         "system": "${params.system}",
-        "time": {"start": 0, "stop": "${params.online_stop}", "output_step": 0.01, "coordinate_system": "dimensionless"},
-        "initial_conditions": {"mode": "explicit", "count": 1, "clusters": 1, "seed": 0, "values": ["${params.online_initial_state}"], "ranges": []},
-        "solver": {"method": "BDF", "rtol": 1e-9, "atol": 1e-9, "max_step": 0.001},
+        "time": {
+          "start": 0,
+          "stop": "${params.online_stop}",
+          "output_step": 0.01,
+          "coordinate_system": "dimensionless"
+        },
+        "initial_conditions": {
+          "mode": "explicit",
+          "count": 1,
+          "clusters": 1,
+          "seed": 0,
+          "values": [
+            "${params.online_initial_state}"
+          ],
+          "ranges": []
+        },
+        "solver": {
+          "method": "BDF",
+          "rtol": 1e-09,
+          "atol": 1e-09,
+          "max_step": 0.001
+        },
         "estimator": {
           "kind": "klqe",
           "krom": "${krom.archive}",
@@ -113,7 +308,10 @@
           "initial_estimate": "zero",
           "sample_time": 0.001
         },
-        "archive": {"enabled": true, "data_role": "estimation_study"}
+        "archive": {
+          "enabled": true,
+          "data_role": "estimation_study"
+        }
       }
     }
   ]

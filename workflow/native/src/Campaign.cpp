@@ -1,4 +1,5 @@
 #include <dynsyslab/workflow/Campaign.hpp>
+#include <dynsyslab/core/OutputPath.hpp>
 
 #include <dynsyslab/core/Hierarchy.hpp>
 #include <dynsyslab/core/Text.hpp>
@@ -63,7 +64,7 @@ std::size_t pointCount(const std::vector<Axis>& axes) {
 }
 
 void atomicText(const std::filesystem::path& path, const std::string& contents) {
-    std::filesystem::create_directories(path.parent_path());
+    (void)dynsyslab::core::prepareOutputFile(path, "campaign manifest");
     const auto temporary = path.parent_path() / (path.filename().wstring() + L".partial");
     { std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
       if (!stream) throw std::runtime_error("unable to create campaign manifest");

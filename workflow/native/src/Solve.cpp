@@ -1,4 +1,5 @@
 #include <dynsyslab/workflow/Solve.hpp>
+#include <dynsyslab/core/OutputPath.hpp>
 #include "AnalyticArchive.hpp"
 #include <dynsyslab/workflow/ControlFactory.hpp>
 #include <dynsyslab/workflow/EstimatorFactory.hpp>
@@ -67,7 +68,7 @@ std::string safeName(std::string value) {
 
 void atomicText(const std::filesystem::path& path, const std::string& text) {
     if (path.empty()) return;
-    std::filesystem::create_directories(path.parent_path());
+    (void)dynsyslab::core::prepareOutputFile(path, "progress file");
     const auto temporary = path.parent_path() / (path.filename().wstring() + L".partial");
     { std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
       if (!stream) throw std::runtime_error("unable to create progress record"); stream << text; }

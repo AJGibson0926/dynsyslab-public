@@ -1,6 +1,7 @@
 #include "CliArguments.hpp"
 #include "CliRuntimePaths.hpp"
 
+#include <dynsyslab/core/OutputPath.hpp>
 #include <dynsyslab/core/Text.hpp>
 
 #include <stdexcept>
@@ -11,7 +12,8 @@ Arguments arguments(int count, wchar_t** values) {
     for (int index = 1; index < count; ++index) {
         const std::wstring value = values[index];
         if ((value == L"--archive-root" || value == L"--progress") && index + 1 < count) {
-            const auto path = std::filesystem::path(values[++index]);
+            // relative paths resolve against the current directory, at parse time
+            const auto path = dynsyslab::core::resolveOutputPath(std::filesystem::path(values[++index]));
             if (value == L"--archive-root") result.archiveRoot = path;
             else result.progress = path;
         } else if (value == L"--days" && index + 1 < count) {
@@ -20,6 +22,13 @@ Arguments arguments(int count, wchar_t** values) {
             result.help = true;
         } else if (value == L"--format" && index + 1 < count) {
             result.format = dynsyslab::core::narrow(values[++index]);
+        } else if (value == L"--hook") { result.hook = true;
+        } else if (value == L"--peek") { result.peek = true;
+        } else if (value == L"--remove") { result.remove = true;
+        } else if (value == L"--no-agent-cli") { result.agentCommands = false;
+        } else if ((value == L"--workspace" || value == L"--home") && index + 1 < count) {
+            const auto path = dynsyslab::core::resolveOutputPath(std::filesystem::path(values[++index]));
+            (value == L"--workspace" ? result.workspace : result.home) = path;
         } else if (value == L"--all-ages") {
             result.auditDays = -1.0;
         } else if ((value == L"--section" || value == L"--system") && index + 1 < count) {

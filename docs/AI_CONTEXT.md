@@ -23,7 +23,7 @@ measures or adjoint RKHS sections as a finite forward eigenmode model.
 ## Non-negotiable architecture
 
 The user-designated **critically important Koopman reference** is the
-[exact linear Duffing benchmark](case-studies/KOOPMAN_LINEAR_DUFFING_EXACT_REFERENCE.md)
+exact linear Duffing benchmark (private development record `KOOPMAN_LINEAR_DUFFING_EXACT_REFERENCE.md`)
 (reference ID: `koopman-linear-duffing-exact`). Preserve this baseline and its
 local asset pointers for future analysis. Its eigenfunctions and Bpsi are
 analytic ground truth, not a learned-model success. Keep new variants separate.

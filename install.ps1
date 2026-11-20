@@ -9,7 +9,8 @@ param(
     [string]$ChecksumPath,
     [switch]$NoShortcuts,
     [switch]$NoUserConfig,
-    [switch]$NoQuickstart
+    [switch]$NoQuickstart,
+    [switch]$NoAgentSetup
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,7 +19,7 @@ if ($env:OS -ne 'Windows_NT' -or -not [Environment]::Is64BitOperatingSystem) {
 }
 if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid GitHub repository name.' }
 if ($Version -ne 'latest' -and $Version -notmatch '^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-.][A-Za-z0-9.]+)?$') {
-    throw 'Version must be latest or a release tag such as v0.6.2.'
+    throw 'Version must be latest or a release tag such as v0.7.0.'
 }
 if ([bool]$PackagePath -ne [bool]$ChecksumPath) {
     throw 'Offline installation requires both -PackagePath and -ChecksumPath.'
@@ -133,11 +134,19 @@ $welcome = Join-Path $InstallRoot 'resources\docs\AGENT_WELCOME.md'
 [IO.File]::WriteAllText((Join-Path $InstallRoot 'release-install.json'),
     ([ordered]@{schema='dynsyslab.release-install/v1'; repository=$Repository; version=$installedVersion
         package=$packageName; sha256=$actual; cli=$cli; welcome_document=$welcome
-        archive_root=$archiveRoot; quickstart_command="& `"$cli`" quickstart"} | ConvertTo-Json), $utf8)
+        archive_root=$archiveRoot; workspace=$DataRoot; quickstart_command="& `"$cli`" quickstart"
+        hub_command="& `"$cli`" hub"} | ConvertTo-Json), $utf8)
 Write-Host "DynSysLab $installedVersion installed: $InstallRoot"
 Write-Host "Scientific archives: $archiveRoot (the CLI and both apps use this by default)"
 Write-Host "Verified download retained at: $work"
 Write-Host "The applications were not started. Open them from the Start menu (DynSysLab, Viewer) when you want them."
+if (-not $NoAgentSetup) {
+    # Connects Claude Code and Codex (MCP server, Claude start-up hook, workspace files) so new chat
+    # sessions open with the DynSysLab Hub. Undo: dynsyslab-cli agent-setup --remove
+    Write-Host ''
+    & $cli agent-setup --workspace $DataRoot
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Agent connection incomplete. Retry: & `"$cli`" agent-setup" }
+}
 if ($NoQuickstart) {
     Write-Host "Next: & `"$cli`" quickstart"
 } else {

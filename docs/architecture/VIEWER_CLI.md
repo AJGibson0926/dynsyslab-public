@@ -15,6 +15,8 @@ There are two entry points:
 
 Both write a PNG and print a `dynsyslab.viewer.render/v1` JSON report (page count,
 axis bounds). Errors are `dynsyslab.viewer.error/v1` JSON on stderr with a nonzero exit.
+A relative `--output` (including a bare `plot.png`) resolves against the current directory and
+missing folders are created; a path that cannot be created is an error with `option` and `path`.
 
 ## Archive views
 

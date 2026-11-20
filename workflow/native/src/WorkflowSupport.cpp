@@ -1,4 +1,5 @@
 #include "WorkflowSupport.hpp"
+#include <dynsyslab/core/OutputPath.hpp>
 
 #include <chrono>
 #include <cctype>
@@ -49,7 +50,7 @@ void atomicProgress(const std::filesystem::path& path, double fraction,
                     std::size_t complete, std::size_t planned,
                     const std::string& message) {
     if (path.empty()) return;
-    std::filesystem::create_directories(path.parent_path());
+    (void)dynsyslab::core::prepareOutputFile(path, "progress file");
     const auto temporary = path.parent_path() / (path.filename().wstring() + L".partial");
     std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
     out << "{\"schema\":\"dynsyslab.compute-progress/v1\",\"determinate\":true,"

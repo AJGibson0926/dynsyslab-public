@@ -8,7 +8,70 @@
     "Q": 5000,
     "R": 0.0001,
     "echo_training": "${train.archive}",
-    "rediscovery_target": "archives/solutions/rpe/rpe-periodic-100khz-20kpa-phase-portrait__20260911T214426Z.npz",
+    "rediscovery_target": {
+      "kind": "solve",
+      "label": "rpe-periodic-100khz-20kpa-phase-portrait",
+      "system": {
+        "name": "rpe",
+        "preset": "air_water_20c",
+        "parameters": {
+          "ambient_pressure_pa": 100000,
+          "equilibrium_radius_m": 1e-05,
+          "pressure_input_sign": -1
+        }
+      },
+      "time": {
+        "start": 0,
+        "stop": 300,
+        "output_step": 0.02,
+        "coordinate_system": "dimensionless"
+      },
+      "initial_conditions": {
+        "mode": "explicit",
+        "count": 1,
+        "clusters": 1,
+        "seed": 0,
+        "values": [
+          [
+            1,
+            0
+          ]
+        ],
+        "ranges": []
+      },
+      "controller": {
+        "kind": "waveform",
+        "settings": {
+          "amplitudes": [
+            20000
+          ],
+          "frequencies_hz": [
+            100000
+          ],
+          "offset": 0,
+          "phases_rad": [
+            1.5707963267948966
+          ]
+        },
+        "target": {
+          "kind": "constant",
+          "state": [
+            1,
+            0
+          ]
+        }
+      },
+      "solver": {
+        "method": "BDF",
+        "rtol": 1e-09,
+        "atol": 1e-11,
+        "max_step": 0.02,
+        "control_evaluation": "continuous_rhs"
+      },
+      "archive": {
+        "enabled": true
+      }
+    },
     "echo_coordinates": {
       "kind": "observable",
       "observable": "echo_jet2",
@@ -189,12 +252,7 @@
     {
       "id": "target_orbit",
       "before": "control",
-      "job": {
-        "kind": "archive",
-        "archives": [
-          "${params.rediscovery_target}"
-        ]
-      }
+      "job": "${params.rediscovery_target}"
     },
     {
       "id": "target_lift",

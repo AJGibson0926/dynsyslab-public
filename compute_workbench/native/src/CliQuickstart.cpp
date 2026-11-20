@@ -1,4 +1,5 @@
 #include "CliQuickstart.hpp"
+#include "CliResources.hpp"
 #include "CliRuntimePaths.hpp"
 #include "CliViewerFigures.hpp"
 
@@ -26,58 +27,6 @@ namespace {
 namespace fs = std::filesystem;
 namespace json = core::json;
 
-struct Resources { fs::path examples, welcome, viewer; };
-
-Resources locate() {
-    const auto exe = cliExecutablePath();
-    const auto viewer = exe.parent_path() / L"DynSysLabViewerCli.exe";
-    const auto root = exe.parent_path().parent_path() / L"resources";  // installed or packaged layout first
-    std::error_code ignored;
-    if (fs::is_regular_file(root / L"examples" / L"quickstart" / L"quickstart.json", ignored))
-        return {root / L"examples" / L"quickstart", root / L"docs" / L"AGENT_WELCOME.md", viewer};
-    if (const auto checkout = sourceCheckoutContaining(exe); !checkout.empty())
-        return {checkout / L"examples" / L"native" / L"quickstart", checkout / L"docs" / L"AGENT_WELCOME.md", viewer};
-    return {root / L"examples" / L"quickstart", root / L"docs" / L"AGENT_WELCOME.md", viewer};
-}
-
-std::string ascii(std::string text) {  // typographic punctuation survives any console code page
-    const std::pair<const char*, const char*> folds[]{{"\xE2\x80\x93", "-"}, {"\xE2\x80\x94", "-"},
-        {"\xE2\x80\xA6", "..."}, {"\xE2\x86\x92", "->"}, {"\xE2\x80\x98", "'"}, {"\xE2\x80\x99", "'"},
-        {"\xE2\x80\x9C", "\""}, {"\xE2\x80\x9D", "\""}, {"\xC3\xA9", "e"}};
-    for (const auto& [from, to] : folds)
-        for (auto at = text.find(from); at != std::string::npos; at = text.find(from, at + std::strlen(to)))
-            text.replace(at, std::strlen(from), to);
-    return text;
-}
-
-struct Welcome { std::string overview; std::vector<std::string> next; };
-
-// Overview = the document up to "## Get started"; next steps = bullets under "## Things you can ask".
-Welcome welcome(const fs::path& path) {
-    Welcome out;
-    std::ifstream stream(path, std::ios::binary);
-    if (!stream) {
-        out.overview = "# Welcome to DynSysLab\n\nA native suite for simulating, analysing, modelling and "
-                       "controlling dynamical systems.\n";
-        return out;
-    }
-    std::string line; bool overview = true, asks = false;
-    while (std::getline(stream, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (line.rfind("## ", 0) == 0) {
-            if (line.rfind("## Get started", 0) == 0) overview = false;
-            asks = line.rfind("## Things you can ask", 0) == 0;
-            if (!overview) continue;
-        }
-        if (asks && line.rfind("- ", 0) == 0) out.next.push_back(ascii(line.substr(2)));
-        if (overview && line != "---") out.overview += ascii(line) + "\n";
-    }
-    while (out.overview.size() > 1 && out.overview.substr(out.overview.size() - 2) == "\n\n") out.overview.pop_back();
-    return out;
-}
-
-std::string shown(const fs::path& path) { return path.lexically_normal().make_preferred().u8string(); }
-
 std::string number(double value, int digits = 4) {
     std::ostringstream out; out << std::setprecision(digits) << value; return out.str();
 }
@@ -100,7 +49,7 @@ Run runExample(const json::Value& example, const fs::path& examples, const fs::p
     Run run;
     run.title = example.at("title").string(); run.about = example.at("about").string();
     run.system = result.system; run.preset = job.at("system").at("preset").string();
-    run.archive = shown(result.archives.front());
+    run.archive = shownPath(result.archives.front());
     run.samples = result.samplesPerTrajectory; run.accepted = result.acceptedSteps; run.rejected = result.rejectedSteps;
     const auto record = core::readNpz(result.archives.front());
     const auto series = core::loadTimeSeries(record, {{"time"}, {"values"}});
@@ -130,7 +79,7 @@ void markdown(const Welcome& w, const std::vector<Run>& runs, const QuickstartOp
               const fs::path& figures, double seconds) {
     std::cout << w.overview << "\n## Quickstart results\n\n"
               << "Ran " << runs.size() << " bundled examples in " << number(seconds, 3) << " s. Results are in `"
-              << shown(options.archiveRoot) << "`.\n\n"
+              << shownPath(options.archiveRoot) << "`.\n\n"
               << "| Example | System (preset) | Time span | Samples | Steps accepted / rejected | "
                  "Dominant frequency | Final state |\n|---|---|---|---|---|---|---|\n";
     for (const auto& r : runs)
@@ -139,7 +88,7 @@ void markdown(const Welcome& w, const std::vector<Run>& runs, const QuickstartOp
                   << number(r.dominant) << " cycles per time unit (" << r.fourierState << ") | " << r.finalState << " |\n";
     std::cout << "\n";
     for (const auto& r : runs) std::cout << "- **" << r.title << "**: " << r.about << " Archive: `" << r.archive << "`\n";
-    std::cout << "\n## Figures\n\nRendered by the DynSysLab Viewer CLI into `" << shown(figures) << "`:\n\n";
+    std::cout << "\n## Figures\n\nRendered by the DynSysLab Viewer CLI into `" << shownPath(figures) << "`:\n\n";
     for (const auto& r : runs)
         for (const auto& f : r.figures)
             std::cout << "- " << f.title << ": " << (f.error.empty() ? "`" + f.path + "`" : "not rendered (" + f.error + ")") << "\n";
@@ -166,8 +115,8 @@ void jsonReport(const Welcome& w, const std::vector<Run>& runs, const Quickstart
     for (const auto& item : w.next) next.push_back(item);
     std::cout << json::dump(json::Value::Object{{"schema", "dynsyslab.quickstart/v1"},
         {"version", std::string(core::version)}, {"welcome_markdown", w.overview},
-        {"archive_root", shown(options.archiveRoot)}, {"archive_root_source", options.archiveRootSource},
-        {"figure_folder", shown(figures)}, {"seconds", seconds}, {"runs", json::Value(std::move(items))},
+        {"archive_root", shownPath(options.archiveRoot)}, {"archive_root_source", options.archiveRootSource},
+        {"figure_folder", shownPath(figures)}, {"seconds", seconds}, {"runs", json::Value(std::move(items))},
         {"next", json::Value(std::move(next))}, {"desktop_applications_started", false}}) << '\n';
 }
 
@@ -177,7 +126,7 @@ int quickstart(const QuickstartOptions& options) {
     if (options.format != "markdown" && options.format != "json")
         throw std::invalid_argument("quickstart --format must be markdown or json");
     const auto started = std::chrono::steady_clock::now();
-    const auto resources = locate();
+    const auto resources = locateResources();
     const auto index = json::load((resources.examples / L"quickstart.json").wstring());
     std::vector<Run> runs;
     for (const auto& example : index.at("examples").array()) runs.push_back(runExample(example, resources.examples, options.archiveRoot));
@@ -192,13 +141,13 @@ int quickstart(const QuickstartOptions& options) {
                                   figures / core::wide(spec.at("name").string() + ".png")};
             if (!spec.at("options").isNull())
                 for (const auto& option : spec.at("options").array()) request.extra.push_back(core::wide(option.string()));
-            Figure figure{spec.at("title").string(), shown(request.output), {}};
+            Figure figure{spec.at("title").string(), shownPath(request.output), {}};
             if (!renderFigure(resources.viewer, request, cache, figure.error)) figure.path.clear();
             runs[k].figures.push_back(std::move(figure));
         }
     std::error_code ignored; fs::remove_all(core::extendedLengthPath(cache), ignored);
     const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
-    const auto w = welcome(resources.welcome);
+    const auto w = readWelcome(resources.welcome);
     if (options.format == "json") jsonReport(w, runs, options, figures, seconds);
     else markdown(w, runs, options, figures, seconds);
     return 0;

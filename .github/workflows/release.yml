@@ -19,6 +19,9 @@ jobs:
           python-version: '3.12'
       - name: Check the native UI capability ledger
         run: python -m unittest tester.tests.test_native_ui_parity_contract -v
+      - name: Release gate (repository) - no solver output, archived runs or result images
+        shell: pwsh
+        run: ./tools/Test-ReleaseContents.ps1 -Tracked
       - name: Locate vcpkg
         shell: pwsh
         run: |
@@ -46,6 +49,7 @@ jobs:
           if ($zip.Count -ne 1) { throw 'Expected one release ZIP' }
           $line = (Get-FileHash -LiteralPath $zip[0].FullName -Algorithm SHA256).Hash.ToLower() + '  ' + $zip[0].Name
           [IO.File]::WriteAllText('build/native-suite-fast/SHA256SUMS.txt', $line + "`n", [Text.UTF8Encoding]::new($false))
+          ./tools/Test-ReleaseContents.ps1 -PackagePath $zip[0].FullName
           ./tools/Test-ReleaseInstall.ps1 -PackagePath $zip[0].FullName -ChecksumPath build/native-suite-fast/SHA256SUMS.txt
       - name: Build the Python client wheel
         run: |

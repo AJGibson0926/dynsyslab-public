@@ -35,11 +35,11 @@ chooses a different data workspace; `-InstallRoot` chooses the application locat
 installer does not delete scientific data. Verified downloads are retained in the temporary
 directory reported at completion.
 
-Pin a version with `-Version v0.6.2`. For offline installation, download the
+Pin a version with `-Version v0.7.0`. For offline installation, download the
 Windows ZIP and `SHA256SUMS.txt` from the same release, then run:
 
 ```powershell
-.\install.ps1 -PackagePath .\DynSysLab-0.6.2-windows-x64.zip -ChecksumPath .\SHA256SUMS.txt
+.\install.ps1 -PackagePath .\DynSysLab-0.7.0-windows-x64.zip -ChecksumPath .\SHA256SUMS.txt
 ```
 
 Alternatively extract the release ZIP and run `bin\dynsyslab-cli.exe quickstart` directly.
@@ -56,14 +56,24 @@ python -m pip install git+https://github.com/AJGibson0926/dynsyslab-public
 
 It needs a compiled DynSysLab installation (above) to run computations.
 
-## Install with an AI agent
+## Install with an AI agent, then chat with it
 
 In Claude Code, Codex or another agent, ask:
 
 > Install and run DynSysLab at https://github.com/AJGibson0926/dynsyslab-public/releases/latest
 
 The release notes and this page give the three commands above. The installer's own output
-then contains the welcome, the example results and the figure paths.
+contains the welcome, the example results and the figure paths. It also connects your agents
+(`dynsyslab-cli agent-setup`; skip with `-NoAgentSetup`): it registers the `dynsyslab` MCP server
+with Claude Code and Codex, adds a Claude Code start-up hook, and writes `AGENTS.md`/`CLAUDE.md`
+into the `Documents\DynSysLab` workspace. The agent may ask you to allow these changes once.
+
+From the next chat session on, the agent opens with the **DynSysLab Hub**: on your first login
+after an install a welcome and an overview of the suite, every time a short greeting and
+"What would you like to do?" with options (run the quickstart, simulate a system, analyse runs,
+build a K-ROM, estimate and control, open the desktop apps). Nothing needs to be set up by hand.
+`dynsyslab-cli hub` prints the same greeting; `dynsyslab-cli agent-setup --remove` undoes the
+connection.
 
 Use the prebuilt release for ordinary use. Clone the source only when developing or inspecting
 code. A small checkout is sufficient:
@@ -86,12 +96,14 @@ $cli = Join-Path $env:LOCALAPPDATA 'Programs\DynSysLab\bin\dynsyslab-cli.exe'
 `run` accepts any `dynsyslab.compute-job/v1` job; `--archive-root PATH` writes elsewhere. The
 bundled jobs are in `resources\examples`; the quickstart's are in `resources\examples\quickstart`.
 
-The examples generate fresh data. Large research datasets, case-study figures,
-PDF exports, machine-specific audits, and personal configuration are not release
-contents. Historical report links can point to local-only artifacts; consult
-[local asset pointers](LOCAL_ASSET_POINTERS.json) and the report's job settings.
-The public repository starts from a clean source snapshot. Historical scientific
-media remain in the author's private repository and local archives.
+## All data is generated locally
+
+DynSysLab ships settings, parameters, schemas and instructions, never solver output. Every
+shipped example generates its own data from scratch, so all of them run with an empty archive
+folder; numerical results live only in your archive folder (`Documents\DynSysLab\archives`), which
+nothing in the release or the public repository contains. The release gate
+(`tools/Test-ReleaseContents.ps1`) rejects trajectories, derived spectra or K-ROMs, run metrics
+and plots of runs, and the release install test runs the shipped examples on a fresh install.
 
 ## Develop and extend
 

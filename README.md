@@ -219,7 +219,7 @@ plot payloads natively, so archive meaning is not duplicated in the UI.
 ```powershell
 dynsyslab-viewer build
 dynsyslab-viewer launch
-dynsyslab-viewer launch --source archives/solutions/example.npz
+dynsyslab-viewer launch --source <a run .npz from your archive folder>
 ```
 
 Use `python -m viewer.ui_cli` for the source-tree equivalent. `catalog` and

@@ -12,7 +12,10 @@ struct Arguments {
     std::filesystem::path archiveRoot;
     std::string archiveRootSource{"argument"};  // see CliRuntimePaths.hpp when not given
     bool help{};
-    std::string format{"markdown"};  // quickstart: markdown | json
+    std::string format{"markdown"};  // quickstart, hub, agent-setup: markdown | json
+    bool hook{}, peek{};             // hub
+    bool remove{}, agentCommands{true};  // agent-setup (--remove, --no-agent-cli)
+    std::filesystem::path workspace, home;  // agent-setup --workspace, --home
     std::filesystem::path progress;
     double auditDays{2.0};
     std::vector<std::string> auditSections;

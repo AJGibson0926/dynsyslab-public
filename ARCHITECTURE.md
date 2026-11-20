@@ -113,6 +113,6 @@ replaced by a compiled quality command.
 See [Start here](docs/START_HERE.md),
 [the engineering policy](AGENTS.md), and
 [the native-core migration plan](docs/architecture/NATIVE_CORE_MIGRATION.md),
-[the dated architecture audit](docs/architecture/DYNSYSLAB_SUITE_ARCHITECTURE_AUDIT_2026-08-31.md).
+the dated architecture audit (private development record `DYNSYSLAB_SUITE_ARCHITECTURE_AUDIT_2026-08-31.md`).
 The audit roadmap's completed implementation and final gates are recorded in
 the [architecture remediation report](docs/architecture/DYNSYSLAB_SUITE_ARCHITECTURE_REMEDIATION_2026-08-31.md).

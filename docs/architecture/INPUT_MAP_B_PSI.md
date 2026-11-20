@@ -60,7 +60,7 @@ Examples:
 
     dynsyslab-cli run .../20kpa.json --param 'B_psi={"representation":"constant","fit_start":5}'
     dynsyslab-cli run .../20kpa.json --param 'B_psi={"representation":"bilinear","drift":"affine"}' \
-        --param 'forced_training={"kind":"archive","archives":["archives/solutions/rpe/<forced>.npz"]}'
+        --param 'forced_training={"kind":"archive","archives":["<a forced run you generated>"]}'
 
 `KLQR` (like every feedback controller) accepts `control_limit`: a number for a
 symmetric clip, `[low, high]` for an asymmetric one, and `null`/`false` for none.

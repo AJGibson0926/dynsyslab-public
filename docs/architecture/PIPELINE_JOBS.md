@@ -91,7 +91,7 @@ sequence; `--refresh methods` recomputes all of it.
 dynsyslab-cli run base-r.json --param methods='["hdmd"]'           # K-ROM straight from H-DMD
 dynsyslab-cli run base-r.json --param methods='["mpedmd"]'         # mpEDMD instead of H-DMD + SINDy
 dynsyslab-cli run base-r.json --param training.initial_conditions.values='[[1.8,0]]'
-dynsyslab-cli run base-r.json --param training='{"kind":"archive","archives":["archives/solutions/rpe/run.npz"]}'
+dynsyslab-cli run base-r.json --param training='{"kind":"archive","archives":["<a run you generated>"]}'
 dynsyslab-cli run base-r.json --param method_settings.sindy.threshold=0.02
 ```
 

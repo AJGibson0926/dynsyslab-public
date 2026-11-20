@@ -7,7 +7,7 @@
 **Implementation branch:** `refactor/audit-roadmap`
 
 **Scope:** all P1, P2, and P3 work prioritized by the
-[suite-wide architecture audit](DYNSYSLAB_SUITE_ARCHITECTURE_AUDIT_2026-08-31.md),
+suite-wide architecture audit (private development record `DYNSYSLAB_SUITE_ARCHITECTURE_AUDIT_2026-08-31.md`),
 plus the requested low-overhead Solver progress display and the later
 system-agnostic KROM-training generalization.
 

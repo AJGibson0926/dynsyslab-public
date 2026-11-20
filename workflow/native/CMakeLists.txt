@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(dynsyslab_workflow VERSION 0.6.2 LANGUAGES CXX)
+project(dynsyslab_workflow VERSION 0.7.0 LANGUAGES CXX)
 
 if(MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
@@ -187,8 +187,10 @@ if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
   set_tests_properties(dynsyslab_eigenvalue_optimization_postprocess_tests PROPERTIES
     LABELS "native;workflow;postprocess;koopman;spectrum")
   set(_dsl_case_study_root "${CMAKE_CURRENT_SOURCE_DIR}/../..")
-  set(_dsl_duffing_case_archive
-    "${_dsl_case_study_root}/archives/derived/koopman-krom-extract/duffing-reference-free-training-30-exact-ics__20260827T210833.268198Z__koopman-krom-extract__20260827T210834.130724Z__f5b4dab7.npz")
+  # Private parity test: runs only where the author's local K-ROM archive exists (never in a
+  # public clone or a release), so the archive is located by pattern rather than named.
+  file(GLOB _dsl_duffing_case_archive
+    "${_dsl_case_study_root}/archives/derived/koopman-krom-extract/duffing-reference-free-training-30-exact-ics__*__f5b4dab7.np[z]")
   if(DYNSYSLAB_ENABLE_ARCHIVE_IO AND DYNSYSLAB_ENABLE_LINALG
       AND DYNSYSLAB_ENABLE_SUNDIALS AND EXISTS "${_dsl_duffing_case_archive}")
     add_executable(dynsyslab_klqr_case_study_parity_tests
