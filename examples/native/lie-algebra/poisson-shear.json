@@ -1,0 +1,44 @@
+{
+  "schema": "dynsyslab.lie-algebra-query/v1",
+  "dimension": 2,
+  "coordinate_names": [
+    "x_1",
+    "x_2"
+  ],
+  "action": "poisson",
+  "a": [
+    {
+      "coefficient": "1",
+      "powers": [
+        1,
+        0
+      ]
+    }
+  ],
+  "b": [
+    {
+      "coefficient": "1",
+      "powers": [
+        0,
+        1
+      ]
+    },
+    {
+      "coefficient": "-1",
+      "powers": [
+        2,
+        0
+      ]
+    }
+  ],
+  "tensor": [
+    "0",
+    "1",
+    "-1",
+    "0"
+  ],
+  "provenance": {
+    "case": "poisson-shear",
+    "source": "analytic equations; exact rational coefficients; no trajectory fit"
+  }
+}

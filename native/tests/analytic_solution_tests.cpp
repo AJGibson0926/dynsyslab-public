@@ -15,6 +15,16 @@ void near(double a, double b, double tolerance, const std::string &label) {
         throw std::runtime_error(label + ": " + std::to_string(a) + " != " + std::to_string(b));
 }
 void specialFunctions() {
+    for(double m : {.02,.2,.5,.7132007163556104,.9}) {
+        const auto j=special::jacobi(-special::ellipticK(m),m);
+        near(j.sn,-1,1e-14,"Jacobi quarter sn");
+        near(j.cn,0,1e-14,"Jacobi quarter cn");
+        near(j.dn,std::sqrt(1-m),1e-14,"Jacobi quarter dn");
+        for(int turn : {-3,-1,1,3}) for(double offset : {-1e-8,0.,1e-8}) {
+            const auto q=special::jacobi(turn*special::ellipticK(m)+offset,m);
+            near(q.dn*q.dn+m*q.sn*q.sn,1,2e-14,"Quarter-period elliptic identity");
+        }
+    }
     near(special::ellipticK(.5), 1.8540746773013719184, 2e-15, "elliptic K");
     auto j = special::jacobi(1, .5);
     near(j.sn, .80300182489564388764, 2e-15, "Jacobi sn reference");
@@ -116,6 +126,11 @@ void catalogue() {
                         {{"kappa", kappa}, {"mu_pa_s", 0}, {"sigma_n_m", kappa == 1.5 ? 0 : .072}});
         c.preset = "air_water_20c";
         compare(c, {1.15, .04}, 6, 2e-7);
+        const auto system=createSystem(c);
+        const auto trajectory=system->analyticSolutions().front().instantiate({1.15,.04},0);
+        check(trajectory.period>0,"RPE exposes a physical-time period");
+        const auto returned=trajectory.evaluate(trajectory.period);
+        check(std::abs(returned[0]-1.15)<1e-9&&std::abs(returned[1]-.04)<1e-9,"RPE period closes in physical time");
     }
     auto damped = createSystem(config("duffing"));
     check(!damped->analyticSolutions().front().instantiate({.2, 0}, 0),

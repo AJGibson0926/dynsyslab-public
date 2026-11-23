@@ -2,6 +2,7 @@
 
 #include <dynsyslab/core/DmdControl.hpp>
 #include <dynsyslab/core/EdmdControl.hpp>
+#include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/workflow/KromValidationPlan.hpp>
 
 #include <algorithm>
@@ -56,7 +57,7 @@ std::filesystem::path runDmdControl(const std::filesystem::path& path,
     const auto input=core::readNpz(path);
     const auto key=settings.at("snapshot_array").string(input.contains("values")?"values":"states");
     const auto source=measuredSource(path,input,key);
-    const auto pairs=source.samples-1,n=source.dimension,m=source.inputDimension;
+    const auto n=source.dimension,m=source.inputDimension;
     core::DmdControlOptions options;
     options.rank=rankSetting(settings,"rank");
     options.augmentedRank=rankSetting(settings,"augmented_rank");
@@ -67,8 +68,32 @@ std::filesystem::path runDmdControl(const std::filesystem::path& path,
         if(source.time[i]<=source.time[i-1]||std::abs((source.time[i]-source.time[i-1])-dt)
             >1e-7*dt+16*std::numeric_limits<double>::epsilon()*std::abs(source.time[i]))
             throw std::invalid_argument("DMDc requires uniform positive sample intervals");
-    const std::vector<double> x(source.values.begin(),source.values.begin()+pairs*n);
-    const std::vector<double> y(source.values.begin()+n,source.values.end());
+    // Optional pair selection: time_window [t0, t1] and state_window [[lo, hi], ...] per snapshot
+    // component. A pair is kept only when both of its snapshots lie inside both windows, so a fit can be
+    // restricted to the neighbourhood of an operating point (for example an unstable target).
+    const auto& timeWindow=settings.at("time_window");
+    const auto& stateWindow=settings.at("state_window");
+    if(!stateWindow.isNull()&&stateWindow.array().size()!=n)
+        throw std::invalid_argument("DMDc state_window needs one [low, high] pair per snapshot component");
+    auto inside=[&](std::size_t k) {
+        if(!timeWindow.isNull()&&(source.time[k]<timeWindow.array().at(0).number()
+                ||source.time[k]>timeWindow.array().at(1).number())) return false;
+        if(!stateWindow.isNull()) for(std::size_t j=0;j<n;++j) {
+            const double v=source.values[k*n+j];
+            const auto& b=stateWindow.array().at(j).array();
+            if(v<b.at(0).number()||v>b.at(1).number()) return false;
+        }
+        return true;
+    };
+    std::vector<double> x,y,u;
+    for(std::size_t k=0;k+1<source.samples;++k) {
+        if(!inside(k)||!inside(k+1)) continue;
+        x.insert(x.end(),source.values.begin()+k*n,source.values.begin()+(k+1)*n);
+        y.insert(y.end(),source.values.begin()+(k+1)*n,source.values.begin()+(k+2)*n);
+        u.insert(u.end(),source.inputs.begin()+k*m,source.inputs.begin()+(k+1)*m);
+    }
+    const std::size_t pairs=x.size()/n;
+    if(pairs<2) throw std::invalid_argument("DMDc time_window/state_window keep fewer than two snapshot pairs");
     std::optional<core::EdmdControlResult> polynomial;
     core::DmdControlResult linear;
     if(extended) {
@@ -81,8 +106,8 @@ std::filesystem::path runDmdControl(const std::filesystem::path& path,
         liftedOptions.includeConstant=settings.at("include_constant").boolean(true);
         liftedOptions.normalize=settings.at("normalize").boolean(true);
         polynomial=core::extendedDynamicModeDecompositionWithControl(
-            x,y,source.inputs,pairs,n,m,dt,liftedOptions);
-    } else linear=core::dynamicModeDecompositionWithControl(x,y,source.inputs,pairs,n,m,dt,options);
+            x,y,u,pairs,n,m,dt,liftedOptions);
+    } else linear=core::dynamicModeDecompositionWithControl(x,y,u,pairs,n,m,dt,options);
     const auto& fit=polynomial?polynomial->lifted:linear;
     const auto r=fit.rank,features=fit.dimension;
     const std::string method=extended?"edmdc":"dmdc";
@@ -134,7 +159,7 @@ std::filesystem::path runDmdControl(const std::filesystem::path& path,
     json::Value::Object details{
         {"model_schema",extended?"dynsyslab.edmdc/v1":"dynsyslab.dmdc/v1"},{"eigenvalue_domain","discrete-time"},
         {"delta_t",dt},{"rank",static_cast<double>(r)},
-        {"pairs",static_cast<double>(pairs)},
+        {"pairs",static_cast<double>(pairs)},{"available_pairs",static_cast<double>(source.samples-1)},
         {"augmented_rank",static_cast<double>(fit.augmentedRank)},
         {"augmented_numerical_rank",static_cast<double>(fit.augmentedNumericalRank)},
         {"snapshot_dimension",static_cast<double>(n)},{"input_dimension",static_cast<double>(m)},
@@ -166,6 +191,7 @@ std::filesystem::path runDmdControl(const std::filesystem::path& path,
     }
     const auto text=json::dump(json::Value(std::move(details)));
     auto meta=json::parse(metadata(source,method,label,text.substr(1,text.size()-2)));
+    std::optional<core::KoopmanModel> exportable;
     if(polynomial&&fit.hasEigenfunctions&&continuous.size()==r) {
         const auto sourceMeta=json::parse(source.metadataJson);
         // Only a native solution's values have an unambiguous physical-state
@@ -179,11 +205,42 @@ std::filesystem::path runDmdControl(const std::filesystem::path& path,
             for(const auto& ref:core::koopmanDatasetReferencesFromMetadata(plan))core::mergeKoopmanDatasetReference(refs,ref);
             meta.object()["dataset_references"]=core::koopmanDatasetReferencesJson(refs);
             meta.object()["autonomous_validation_plan"]=plan;
+            if(settings.at("export_krom").boolean(false)) exportable.emplace(std::move(model));
         } else meta.object()["autonomous_validation_plan"]=json::Value::Object{
             {"status","coordinate-provider-required"},{"simulation_executed",false},
             {"message","Export the KROM with its system and frozen coordinate provider, then run the reuse-first autonomous validation lookup. Do not assume measured snapshots are physical states."}};
     }
     archive.arrays["metadata_json"]=core::NpyArray::fromString(json::dump(meta));
-    return publish(root,source,"koopman-"+method,label,std::move(archive));
+    const auto fitPath=publish(root,source,"koopman-"+method,label,std::move(archive));
+    if(!settings.at("export_krom").boolean(false)) return fitPath;
+    if(!exportable)
+        throw std::invalid_argument("EDMDc export_krom needs a polynomial fit with eigenfunctions and finite "
+            "continuous rates on a native solution's state values");
+    // Export the eigenfunction bank as a standard K-ROM (koopman-model/v2) so krom_extract, input_map,
+    // KLQE and KLQR can use it. The selected (windowed) training states and their eigenfunction values
+    // are attached so krom_extract can refit named reconstructions on exactly the fitted domain.
+    const auto values=core::evaluateEdmdControlEigenfunctions(*polynomial,x,pairs);
+    std::map<std::string,core::NpyArray> extra;
+    extra["training_states"]=core::NpyArray::fromDoubles({pairs,n},x);
+    extra["eigenfunction_values"]=core::NpyArray::fromComplex({pairs,r},values);
+    // Per-mode consistency on the fitted pairs: ||psi_j(x+) - mu_j psi_j(x) - b_j u|| / ||psi_j(x+) - psi_j(x)||
+    // (ResDMD-style relative residual of the controlled model; Colbrook & Townsend, Comm. Pure Appl.
+    // Math. 77, 2024, arXiv:2111.14889). krom_extract's principal rule uses it.
+    const auto next=core::evaluateEdmdControlEigenfunctions(*polynomial,y,pairs);
+    std::vector<double> consistency(r,0.0);
+    for(std::size_t j=0;j<r;++j) {
+        double num=0,den=0;
+        for(std::size_t k=0;k<pairs;++k) {
+            std::complex<double> drive=0; for(std::size_t i=0;i<m;++i) drive+=fit.modalInputMatrix[j*m+i]*u[k*m+i];
+            num+=std::norm(next[k*r+j]-fit.discreteEigenvalues[j]*values[k*r+j]-drive);
+            den+=std::norm(next[k*r+j]-values[k*r+j]);
+        }
+        consistency[j]=den>0?std::sqrt(num/den):0.0;
+    }
+    extra["mode_consistency"]=core::NpyArray::fromDoubles({r},consistency);
+    meta.object()["edmdc_fit_archive"]=fitPath.generic_u8string();
+    meta.object()["extraction_algorithm"]="edmdc";
+    auto krom=core::makeKoopmanArchive(*exportable,json::dump(meta),std::move(extra));
+    return publish(root,source,"koopman-edmdc-krom",label,std::move(krom));
 }
 } // namespace dynsyslab::workflow::postprocess_detail

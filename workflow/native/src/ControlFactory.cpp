@@ -2,6 +2,7 @@
 #include "KlqrAugmentation.hpp"
 #include "ModelBindingOptions.hpp"
 #include "BalancedTruncationSettings.hpp"
+#include "BilinearCertificateBinding.hpp"
 #include "HistoryControl.hpp"
 #include "EstimatedControl.hpp"
 #include <dynsyslab/core/HistoryObservationArchive.hpp>
@@ -408,6 +409,13 @@ ControllerSetup buildController(
         if(reduction)result.modelBindingEvidence.object()["controller_balanced_truncation"]=
             balancedTruncationRequest(*reduction);
         const bool historyExact=representation=="history_exact";
+        std::optional<detail::BoundBilinearCertificate> certificate;
+        if(!settings.at("bilinear_certificate").isNull()) {
+            if(kind!="klqr"||historyExact)
+                throw std::invalid_argument("bilinear_certificate applies to klqr with a stored bilinear map");
+            certificate=detail::bindBilinearCertificate(settings,*model,representation);
+            result.modelBindingEvidence.object()["bilinear_certificate"]=certificate->evidence;
+        }
         if(historyExact&&(!history||kind!="klqr"))
             throw std::invalid_argument("control_representation history_exact needs a causal-history KROM and klqr");
         if (kind == "klqr" && historyExact) {
@@ -425,6 +433,7 @@ ControllerSetup buildController(
                 model, Q, R, target, representation, referenceSpace);
             if(reduction)controller->setBalancedReduction(*reduction);
             applyKlqrAugmentations(*controller, *model, settings);
+            if(certificate)controller->setCertifiedFeedback(certificate->feedback);
             if(controller->stateful())
                 result.modelBindingEvidence.object()["klqr_augmentations"]=klqrAugmentationEvidence(settings);
             if(history)result.policy.value=detail::coordinateControllerBank(*controller,trajectoryCount);
@@ -480,7 +489,8 @@ ControllerSetup buildController(
             + " controller has not yet been ported to the native control core");
     }
 
-    const bool sampledRequired = kind == "sdre" || kind == "pid" || (kind == "klqr" && klqrIsStateful(settings));
+    const bool sampledRequired = kind == "sdre" || kind == "pid" || (kind == "klqr"
+        && (klqrIsStateful(settings) || !settings.at("bilinear_certificate").isNull()));
     if (kind != "mpc" && kind != "kmpc" && !historyClock) {
         const auto clock = resolveClock(kind, solver, settings,
                                         defaultSampleTime, sampledRequired);
@@ -489,6 +499,9 @@ ControllerSetup buildController(
         result.evaluation = clock.label;
         result.sampleTime = clock.sampleTime;
     }
+    if (kind == "klqr" && !settings.at("bilinear_certificate").isNull())
+        detail::requireCertifiedActuation(settings, result.policy.evaluation == dynsyslab::core::ControlEvaluationMode::sampled,
+                                          result.policy.sampleTime);
     // Optional actuator cap (the cap toggle), for every controller kind except MPC and
     // KMPC, whose optimizers enforce control_limit as a constraint. A scalar L clips
     // to [-L, L], a pair [low, high] clips asymmetrically. Absent, null or false: no cap.

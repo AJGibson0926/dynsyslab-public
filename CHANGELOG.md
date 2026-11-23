@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.8.0 — 2026-11-23
+
+**Data packs: version-pinned job files that regenerate published results offline.** See
+`docs/DATA_PACKS.md`.
+
+- Job kinds: `job_group` (child job files, dependency order, symbolic archive links, resume ledger,
+  reference-counted cleanup, free-space floor) and `viewer_figure` (headless Viewer CLI render).
+- Post-processing: `krom_recenter`, `krom_readout`, `reference_signal`, `control_score`, `figure_dataset`.
+- `dynsyslab-cli datapack inspect|validate|plan|run|verify|seal|export|trace|rehash`.
+- Archives record the resolved job, version, source commit and build identity (`run_provenance`).
+- **Changes results:** the Hankel basis start matrix now uses a compiler-independent normal stream
+  (`mt19937_64+as241-inverse-cdf/v1`; Wichura, Applied Statistics 37(3), 1988), so history-coordinate
+  (xi) results can differ from earlier releases.
+
+**Koopman output feedback (KLQG) away from the RPE.** Upgrades made during the 2026-11-20 KLQG study
+of classical systems, so a K-ROM can be identified around an operating point and used by KLQE -> KLQR:
+
+- `dmdc` / `edmdc`: `time_window` and `state_window` (`[[low, high], ...]` per snapshot component)
+  keep only snapshot pairs whose two snapshots lie inside both windows, so a fit can be restricted to
+  the neighbourhood of a target (for example an unstable equilibrium). `available_pairs` is recorded
+  beside `pairs`. A window that keeps fewer than two pairs is an error.
+- `edmdc`: `export_krom: true` also publishes the eigenfunction bank as a standard
+  `koopman-model/v2` K-ROM (`derived/koopman-edmdc-krom`), with the fitted (windowed) training states,
+  their eigenfunction values and a per-mode `mode_consistency` (relative one-step residual including
+  the modal input term, in the spirit of ResDMD: Colbrook & Townsend, Comm. Pure Appl. Math. 77, 2024). `krom_extract`, `input_map`, KLQE and KLQR then use it directly.
+- `krom_extract`: `mode_selection: {"rule": "principal", "target_state": [...]}` selects the principal
+  eigenfunctions of an operating point: modes whose gradients at the target are independent, the first
+  pick being the most consistent growing mode. Products and harmonics of selected eigenfunctions (zero
+  gradient at the target) are never selected; at an unstable target they make the lifted (A, B)
+  unstabilizable for a constant input map. `max_residual` (default 0.3) sets the consistency filter.
+  Principal eigenfunctions follow Mauroy & Mezić (IEEE TAC 61(11), 2016) and Kvalheim & Revzen
+  (Physica D 425, 2021).
+- `input_map`: `state_window` restricts the B_psi regression to forced samples inside a state box;
+  each run of consecutive inside samples is its own record.
+
 ## 0.7.0 — 2026-11-19
 
 **DynSysLab Hub: a plain chat session greets you.**

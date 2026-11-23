@@ -1,29 +1,41 @@
 #include <dynsyslab/core/SpectralKROM.hpp>
 #include <dynsyslab/core/FileDigest.hpp>
 #include <algorithm>
+#include <set>
+#include <dynsyslab/core/BasisFunctions.hpp>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 namespace dynsyslab::core {
 void SpectralDictionary::validate() const {
     if(!dimension)throw std::invalid_argument("Dictionary dimension must be positive");
-    if(kind!="linear"&&kind!="polynomial"&&kind!="gaussian"&&kind!="partition")
-        throw std::invalid_argument("Unknown spectral dictionary");
+    const bool product=basis::isProduct(kind),radial=basis::isRadial(kind);
+    if(kind!="linear"&&!product&&!radial&&kind!="partition")throw std::invalid_argument("Unknown spectral dictionary");
     if((!center.empty()&&center.size()!=dimension)||(!scale.empty()&&scale.size()!=dimension))
         throw std::invalid_argument("Dictionary normalization shape mismatch");
     for(double v:center)if(!std::isfinite(v))throw std::invalid_argument("Nonfinite dictionary center");
     for(double v:scale)if(!std::isfinite(v)||v<=0)throw std::invalid_argument("Dictionary scales must be positive");
     for(double v:nodes)if(!std::isfinite(v))throw std::invalid_argument("Nonfinite dictionary node");
-    if((kind=="gaussian"||kind=="partition")&&(nodes.empty()||nodes.size()%dimension))
+    if((radial||kind=="partition")&&(nodes.empty()||nodes.size()%dimension))
         throw std::invalid_argument("Dictionary nodes must be centers x dimension");
-    if(kind=="gaussian"&&(!std::isfinite(bandwidth)||bandwidth<=0))
-        throw std::invalid_argument("Gaussian bandwidth must be positive");
-    if(kind=="polynomial"&&(exponents.empty()||exponents.size()%dimension))
-        throw std::invalid_argument("Polynomial exponents must be features x dimension");
+    if(radial)basis::radialKernel(kind,0,bandwidth,smoothness,amplitude);
+    if(product) {
+        if(exponents.empty()||exponents.size()%dimension)throw std::invalid_argument("Basis indices must be features x dimension");
+        std::set<std::vector<std::size_t>> seen;
+        for(std::size_t j=0;j<exponents.size();j+=dimension) {
+            if(!seen.emplace(exponents.begin()+j,exponents.begin()+j+dimension).second)
+                throw std::invalid_argument("Duplicate dictionary multi-index");
+            for(std::size_t k=0;k<dimension;++k)
+                if(exponents[j+k]>(kind=="fourier_hermite"&&k==0?1024:512))
+                    throw std::invalid_argument("Dictionary basis order exceeds limit");
+        }
+    }
+    if(kind=="fourier_hermite"&&(dimension!=2||(!scale.empty()&&scale[0]!=1)))
+        throw std::invalid_argument("Fourier-Hermite requires (angle,velocity), with unscaled radian angle");
 }
 std::size_t SpectralDictionary::size() const {
     if(kind=="linear")return dimension+std::size_t(constant);
-    if(kind=="polynomial")return dimension?exponents.size()/dimension:0;
+    if(basis::isProduct(kind))return dimension?exponents.size()/dimension:0;
     return dimension?nodes.size()/dimension:0;
 }
 std::vector<double> SpectralDictionary::evaluate(const std::vector<double>& points) const {
@@ -31,6 +43,7 @@ std::vector<double> SpectralDictionary::evaluate(const std::vector<double>& poin
     if(points.empty()||points.size()%dimension)throw std::invalid_argument("Dictionary points shape mismatch");
     const auto m=points.size()/dimension,n=size();
     std::vector<double> out(m*n),q(dimension);
+    const double pi=3.14159265358979323846;
     for(std::size_t i=0;i<m;++i) {
         for(std::size_t d=0;d<dimension;++d) {
             if(!std::isfinite(points[i*dimension+d]))throw std::invalid_argument("Nonfinite dictionary input");
@@ -39,22 +52,33 @@ std::vector<double> SpectralDictionary::evaluate(const std::vector<double>& poin
         if(kind=="linear") {
             if(constant)out[i*n]=1;
             for(std::size_t d=0;d<dimension;++d)out[i*n+d+std::size_t(constant)]=q[d];
-        } else if(kind=="polynomial") {
+        } else if(basis::isProduct(kind)) {
             for(std::size_t j=0;j<n;++j) {
                 double v=1;
-                for(std::size_t d=0;d<dimension;++d)v*=std::pow(q[d],double(exponents[j*dimension+d]));
+                for(std::size_t d=0;d<dimension;++d) {
+                    const auto order=exponents[j*dimension+d];
+                    if(kind=="polynomial")v*=std::pow(q[d],double(order));
+                    else if(kind=="chebyshev")v*=basis::chebyshev(order,q[d]);
+                    else if(kind=="laguerre")v*=basis::laguerre(order,q[d]);
+                    else if(kind=="hermite"||d==1)v*=basis::hermiteFunction(order,q[d]);
+                    else if(order==0)v/=std::sqrt(2*pi);
+                    else {
+                        const auto k=(order+1)/2;
+                        v*=(order%2?std::cos(k*q[d]):std::sin(k*q[d]))/std::sqrt(pi);
+                    }
+                }
                 out[i*n+j]=v;
             }
         } else {
             double nearest=std::numeric_limits<double>::infinity();std::size_t best=0;
             for(std::size_t j=0;j<n;++j) {
-                double r2=0;
+                double distance=0;
                 for(std::size_t d=0;d<dimension;++d) {
                     const double node=(nodes[j*dimension+d]-(center.empty()?0:center[d]))/(scale.empty()?1:scale[d]);
-                    r2+=(q[d]-node)*(q[d]-node);
+                    distance=std::hypot(distance,q[d]-node);
                 }
-                if(kind=="gaussian")out[i*n+j]=std::exp(-r2/(2*bandwidth*bandwidth));
-                if(r2<nearest){nearest=r2;best=j;}
+                if(basis::isRadial(kind))out[i*n+j]=basis::radialKernel(kind,distance,bandwidth,smoothness,amplitude);
+                if(distance<nearest){nearest=distance;best=j;}
             }
             if(kind=="partition")out[i*n+best]=1;
         }

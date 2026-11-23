@@ -1,0 +1,25 @@
+{
+ "archive": {
+  "enabled": true
+ },
+ "kind": "postprocess",
+ "label": "rpe-echo-jet-klqr-rediscovery-20kpa / echo_krom",
+ "methods": [
+  {
+   "name": "krom_extract",
+   "settings": {
+    "mode_selection": {
+     "count": 1,
+     "rule": "oscillatory_pairs"
+    }
+   }
+  }
+ ],
+ "schema": "dynsyslab.compute-job/v1",
+ "sources": [
+  "${inputs.s17}"
+ ],
+ "resources": {
+  "peak_bytes": 16652565
+ }
+}

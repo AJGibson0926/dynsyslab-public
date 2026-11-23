@@ -48,6 +48,15 @@ int main() {
         result=globalJetClosure({one,y},map({x.unary("exp")*x.unary("sin")}));
         require(result.at("certified_order").number(-1)==1 && rhs(result).evaluateReal(q)==std::vector<double>({3,2}),
             "mixed exponential/trigonometric sensor equation");
+        result=globalJetClosure({one,y},map({x.unary("sech"),x.unary("tanh")}),GlobalJetOptions{0,2});
+        require(result.at("certified_order").number(-1)==0,"sech/tanh closed coordinates");
+        const double hyperbolic[]{1/std::cosh(.7),std::tanh(.7)};
+        const auto hyperbolicRate=rhs(result).evaluateReal(hyperbolic);
+        require(std::abs(hyperbolicRate[0]+hyperbolic[0]*hyperbolic[1])<1e-13
+            &&std::abs(hyperbolicRate[1]-(1-hyperbolic[1]*hyperbolic[1]))<1e-13,
+            "sech polynomial lift dynamics");
+        require(!result.at("polynomial_lift").at("real_algebraic_graph_exact").boolean(),
+            "transcendental graph must remain a relaxation");
         result=globalJetClosure({one,y},map({x.power(0.5)}));
         require(result.at("certified_order").isNull(),"unknown branch must not invent an order");
         GlobalJetOptions positive;

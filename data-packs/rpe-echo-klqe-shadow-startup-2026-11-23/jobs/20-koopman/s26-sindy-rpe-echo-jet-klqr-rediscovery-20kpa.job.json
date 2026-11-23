@@ -1,0 +1,36 @@
+{
+ "archive": {
+  "enabled": true
+ },
+ "kind": "postprocess",
+ "label": "rpe-echo-jet-klqr-rediscovery-20kpa / methods_2",
+ "methods": [
+  {
+   "name": "sindy",
+   "settings": {
+    "archive_storage": "coefficient-first",
+    "compute_training_values": false,
+    "gamma_method": "system_rhs",
+    "max_iterations": 20,
+    "normalize": true,
+    "polynomial_degree": 4,
+    "reconstruction": "none",
+    "reuse_conjugate_fits": true,
+    "sample_stride": 1,
+    "spectrum_archive": "${inputs.s25}",
+    "threshold": 0.05,
+    "time_window": [
+     0,
+     25
+    ]
+   }
+  }
+ ],
+ "schema": "dynsyslab.compute-job/v1",
+ "sources": [
+  "${inputs.s24}"
+ ],
+ "resources": {
+  "peak_bytes": 2455365
+ }
+}

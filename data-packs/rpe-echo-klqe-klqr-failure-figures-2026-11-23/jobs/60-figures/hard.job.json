@@ -1,0 +1,533 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "job_group",
+ "label": "figures-hard",
+ "jobs": [
+  {
+   "id": "hard-radius-startup-psi-r-rdot-exact-B",
+   "inputs": {
+    "table": "${inputs.hard_radius_psi_r_rdot_exact_B}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "hard_radius_startup_psi-r-rdot-exact-B",
+    "source": "${inputs.table}",
+    "output": "hard_radius_startup_psi-r-rdot-exact-B.png",
+    "figure": {
+     "view": "time-series",
+     "style": "${params.style}",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled",
+       "color": "#202020",
+       "line_width": 3.0,
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target",
+       "color": "#D8242A",
+       "line_width": 1.8,
+       "line_style": "dash"
+      }
+     ],
+     "axes": [
+      "ψ(r, r'), exact B_{\\psi}"
+     ],
+     "value_label": "r",
+     "title": "Hard target, start-up",
+     "time_label": "Time (τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 40.0
+    }
+   }
+  },
+  {
+   "id": "hard-phase-startup-psi-r-rdot-exact-B",
+   "inputs": {
+    "table": "${inputs.hard_phase_psi_r_rdot_exact_B}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "hard_phase_startup_psi-r-rdot-exact-B",
+    "source": "${inputs.table}",
+    "output": "hard_phase_startup_psi-r-rdot-exact-B.png",
+    "figure": {
+     "view": "time-series",
+     "style": "${params.style}",
+     "curves": [
+      {
+       "series": "r,v",
+       "label": "Controlled",
+       "color": "#202020",
+       "line_width": 3.0,
+       "line_style": "solid"
+      },
+      {
+       "series": "rT,vT",
+       "label": "Target",
+       "color": "#D8242A",
+       "line_width": 1.8,
+       "line_style": "dash"
+      }
+     ],
+     "axes": [
+      "ψ(r, r'), exact B_{\\psi}"
+     ],
+     "x_label": "r",
+     "value_label": "r'",
+     "title": "Hard target, phase portrait, start-up",
+     "time_label": "Time (τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 40.0
+    }
+   }
+  },
+  {
+   "id": "hard-radius-startup-psi-e-edot-exact-B",
+   "inputs": {
+    "table": "${inputs.hard_radius_psi_e_edot_exact_B}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "hard_radius_startup_psi-e-edot-exact-B",
+    "source": "${inputs.table}",
+    "output": "hard_radius_startup_psi-e-edot-exact-B.png",
+    "figure": {
+     "view": "time-series",
+     "style": "${params.style}",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled",
+       "color": "#202020",
+       "line_width": 3.0,
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target",
+       "color": "#D8242A",
+       "line_width": 1.8,
+       "line_style": "dash"
+      }
+     ],
+     "axes": [
+      "ψ(e, e'), exact B_{\\psi}"
+     ],
+     "value_label": "r",
+     "title": "Hard target, start-up",
+     "time_label": "Time (τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 40.0
+    }
+   }
+  },
+  {
+   "id": "hard-phase-startup-psi-e-edot-exact-B",
+   "inputs": {
+    "table": "${inputs.hard_phase_psi_e_edot_exact_B}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "hard_phase_startup_psi-e-edot-exact-B",
+    "source": "${inputs.table}",
+    "output": "hard_phase_startup_psi-e-edot-exact-B.png",
+    "figure": {
+     "view": "time-series",
+     "style": "${params.style}",
+     "curves": [
+      {
+       "series": "r,v",
+       "label": "Controlled",
+       "color": "#202020",
+       "line_width": 3.0,
+       "line_style": "solid"
+      },
+      {
+       "series": "rT,vT",
+       "label": "Target",
+       "color": "#D8242A",
+       "line_width": 1.8,
+       "line_style": "dash"
+      }
+     ],
+     "axes": [
+      "ψ(e, e'), exact B_{\\psi}"
+     ],
+     "x_label": "r",
+     "value_label": "r'",
+     "title": "Hard target, phase portrait, start-up",
+     "time_label": "Time (τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 40.0
+    }
+   }
+  },
+  {
+   "id": "hard-radius-startup-psi-xi-regressed-B",
+   "inputs": {
+    "table": "${inputs.hard_radius_psi_xi_regressed_B}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "hard_radius_startup_psi-xi-regressed-B",
+    "source": "${inputs.table}",
+    "output": "hard_radius_startup_psi-xi-regressed-B.png",
+    "figure": {
+     "view": "time-series",
+     "style": "${params.style}",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled",
+       "color": "#202020",
+       "line_width": 3.0,
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target",
+       "color": "#D8242A",
+       "line_width": 1.8,
+       "line_style": "dash"
+      }
+     ],
+     "axes": [
+      "ψ(ξ), regressed B_{\\psi}"
+     ],
+     "value_label": "r",
+     "title": "Hard target, start-up",
+     "time_label": "Time (τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 40.0
+    }
+   }
+  },
+  {
+   "id": "hard-phase-startup-psi-xi-regressed-B",
+   "inputs": {
+    "table": "${inputs.hard_phase_psi_xi_regressed_B}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "hard_phase_startup_psi-xi-regressed-B",
+    "source": "${inputs.table}",
+    "output": "hard_phase_startup_psi-xi-regressed-B.png",
+    "figure": {
+     "view": "time-series",
+     "style": "${params.style}",
+     "curves": [
+      {
+       "series": "r,v",
+       "label": "Controlled",
+       "color": "#202020",
+       "line_width": 3.0,
+       "line_style": "solid"
+      },
+      {
+       "series": "rT,vT",
+       "label": "Target",
+       "color": "#D8242A",
+       "line_width": 1.8,
+       "line_style": "dash"
+      }
+     ],
+     "axes": [
+      "ψ(ξ), regressed B_{\\psi}"
+     ],
+     "x_label": "r",
+     "value_label": "r'",
+     "title": "Hard target, phase portrait, start-up",
+     "time_label": "Time (τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 40.0
+    }
+   }
+  },
+  {
+   "id": "hard-radius-startup-klqe-klqr-echo-only",
+   "inputs": {
+    "table": "${inputs.hard_radius_klqe_klqr_echo_only}",
+    "ref_radius": "${inputs.ref_radius}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "hard_radius_startup_klqe-klqr-echo-only",
+    "source": "${inputs.table}",
+    "output": "hard_radius_startup_klqe-klqr-echo-only.png",
+    "figure": {
+     "view": "time-series",
+     "style": "${params.style}",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled",
+       "color": "#202020",
+       "line_width": 3.0,
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target",
+       "color": "#D8242A",
+       "line_width": 1.8,
+       "line_style": "dash"
+      }
+     ],
+     "axes": [
+      "KLQE to KLQR, echo only, ψ from H-DMD, regressed B_{\\psi}"
+     ],
+     "value_label": "r",
+     "title": "Hard target, start-up",
+     "time_label": "Time (τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 40.0
+    },
+    "axis_limits": {
+     "reference": {
+      "source": "${inputs.ref_radius}",
+      "axis": 0,
+      "figure": {
+       "view": "time-series",
+       "curves": [
+        {
+         "series": "radius",
+         "label": "Controlled",
+         "color": "#202020",
+         "line_width": 5.4,
+         "line_style": "solid"
+        },
+        {
+         "series": "target",
+         "label": "Target",
+         "color": "#D8242A",
+         "line_width": 3.24,
+         "line_style": "dash"
+        }
+       ],
+       "axes": [
+        "r"
+       ],
+       "time_label": "Time (τ)",
+       "width": 1400.0,
+       "height": 800.0,
+       "start": 0.0,
+       "stop": 40.0
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "hard-phase-startup-klqe-klqr-echo-only",
+   "inputs": {
+    "table": "${inputs.hard_phase_klqe_klqr_echo_only}",
+    "ref_phase": "${inputs.ref_phase}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "hard_phase_startup_klqe-klqr-echo-only",
+    "source": "${inputs.table}",
+    "output": "hard_phase_startup_klqe-klqr-echo-only.png",
+    "figure": {
+     "view": "time-series",
+     "style": "${params.style}",
+     "curves": [
+      {
+       "series": "r,v",
+       "label": "Controlled",
+       "color": "#202020",
+       "line_width": 3.0,
+       "line_style": "solid"
+      },
+      {
+       "series": "rT,vT",
+       "label": "Target",
+       "color": "#D8242A",
+       "line_width": 1.8,
+       "line_style": "dash"
+      }
+     ],
+     "axes": [
+      "KLQE to KLQR, echo only, ψ from H-DMD, regressed B_{\\psi}"
+     ],
+     "x_label": "r",
+     "value_label": "r'",
+     "title": "Hard target, phase portrait, start-up",
+     "time_label": "Time (τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 40.0
+    },
+    "axis_limits": {
+     "reference": {
+      "source": "${inputs.ref_phase}",
+      "axis": 0,
+      "figure": {
+       "view": "time-series",
+       "curves": [
+        {
+         "series": "r,v",
+         "label": "Controlled",
+         "color": "#202020",
+         "line_width": 5.4,
+         "line_style": "solid"
+        },
+        {
+         "series": "rT,vT",
+         "label": "Target",
+         "color": "#D8242A",
+         "line_width": 3.24,
+         "line_style": "dash"
+        }
+       ],
+       "axes": [
+        "r'"
+       ],
+       "x_label": "r",
+       "time_label": "Time (τ)",
+       "width": 1400.0,
+       "height": 800.0,
+       "start": 0.0,
+       "stop": 40.0
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "hard-drive-startup",
+   "inputs": {
+    "table": "${inputs.hard_drive}",
+    "ref_drive": "${inputs.ref_drive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "hard_drive_startup",
+    "source": "${inputs.table}",
+    "output": "hard_drive_startup.png",
+    "figure": {
+     "view": "time-series",
+     "style": "${params.style}",
+     "curves": [
+      {
+       "series": "u0",
+       "label": "ψ(r, r'), exact B_{\\psi}",
+       "color": "#004DB8",
+       "line_width": 3.0,
+       "line_style": "solid"
+      },
+      {
+       "series": "u1",
+       "label": "ψ(e, e'), exact B_{\\psi}",
+       "color": "#DE9B00",
+       "line_width": 1.8,
+       "line_style": "solid"
+      },
+      {
+       "series": "u2",
+       "label": "ψ(ξ), regressed B_{\\psi}",
+       "color": "#1E7B4F",
+       "line_width": 1.8,
+       "line_style": "dash-dot"
+      },
+      {
+       "series": "u_echo",
+       "label": "KLQE to KLQR, echo only, ψ from H-DMD, regressed B_{\\psi}",
+       "color": "#202020",
+       "line_width": 1.4,
+       "line_style": "dash"
+      },
+      {
+       "series": "u_exact",
+       "label": "exact inverse drive",
+       "color": "#D8242A",
+       "line_width": 1.4,
+       "line_style": "dot"
+      }
+     ],
+     "axes": [
+      "Drive (kPa)"
+     ],
+     "title": "Hard target, control, start-up",
+     "time_label": "Time (τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 40.0
+    },
+    "axis_limits": {
+     "reference": {
+      "source": "${inputs.ref_drive}",
+      "axis": 0,
+      "figure": {
+       "view": "time-series",
+       "curves": [
+        {
+         "series": "u0",
+         "label": "ψ(r, r'), exact B_{\\psi}",
+         "color": "#004DB8",
+         "line_width": 5.4,
+         "line_style": "solid"
+        },
+        {
+         "series": "u1",
+         "label": "ψ(e, e'), exact B_{\\psi}",
+         "color": "#DE9B00",
+         "line_width": 3.24,
+         "line_style": "solid"
+        },
+        {
+         "series": "u2",
+         "label": "ψ(ξ), regressed B_{\\psi}",
+         "color": "#1E7B4F",
+         "line_width": 3.24,
+         "line_style": "dash-dot"
+        },
+        {
+         "series": "u3",
+         "label": "KLQE to KLQR",
+         "color": "#202020",
+         "line_width": 2.52,
+         "line_style": "dash"
+        },
+        {
+         "series": "u_exact",
+         "label": "exact inverse drive",
+         "color": "#D8242A",
+         "line_width": 2.52,
+         "line_style": "dot"
+        }
+       ],
+       "axes": [
+        "Drive (kPa)"
+       ],
+       "time_label": "Time (τ)",
+       "width": 1400.0,
+       "height": 800.0,
+       "start": 0.0,
+       "stop": 40.0
+      }
+     }
+    }
+   }
+  }
+ ]
+}

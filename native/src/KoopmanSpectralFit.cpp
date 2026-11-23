@@ -102,14 +102,32 @@ void fitSpectralReconstruction(SpectralKROM& model,const std::string& name,
 std::vector<double> rolloutSpectralKrom(const SpectralKROM& model,const std::string& name,
     const std::vector<double>& point,std::size_t steps) {
     model.validate();if(point.size()!=model.dictionary.dimension)throw std::invalid_argument("Rollout needs one initial coordinate vector");
+    return rolloutSpectralKromBatch(model,name,point,steps);
+}
+std::vector<double> rolloutSpectralKromBatch(const SpectralKROM& model,const std::string& name,
+    const std::vector<double>& points,std::size_t steps) {
+    model.validate();
+    const auto dimension=model.dictionary.dimension;
+    if(points.empty()||points.size()%dimension)throw std::invalid_argument("Batch rollout needs complete initial coordinate vectors");
+    const auto trajectories=points.size()/dimension;
     const auto n=model.dictionary.size(),r=model.rank;const auto& readout=model.reconstructions.at(name);
-    auto q=product(model.dictionary.evaluate(point),model.basis,1,n,r);
+    const auto all=product(model.dictionary.evaluate(points),model.basis,trajectories,n,r);
     auto c=numerics::solveLeastSquares(model.basis,n,r,readout.coefficients,readout.outputs);
-    std::vector<double> out;out.reserve((steps+1)*readout.outputs);
-    for(std::size_t step=0;step<=steps;++step) {
-        auto v=product(q,c,1,r,readout.outputs);out.insert(out.end(),v.begin(),v.end());
-        if(step<steps)q=product(q,model.action,1,r,r);
-        for(double value:q)if(!std::isfinite(value))throw std::runtime_error("Spectral rollout overflow");
+    std::vector<double> out;
+    if(steps==std::numeric_limits<std::size_t>::max()||
+       trajectories>out.max_size()/readout.outputs/(steps+1))
+        throw std::invalid_argument("Batch rollout size overflow");
+    out.reserve(trajectories*(steps+1)*readout.outputs);
+    // Classical Koopman finite-section propagation (same operator orientation
+    // and source references as the single-trajectory API); no eigenbasis or
+    // matrix logarithm is required, including for a defective compression.
+    for(std::size_t trajectory=0;trajectory<trajectories;++trajectory){
+        std::vector<double> q(all.begin()+trajectory*r,all.begin()+(trajectory+1)*r);
+        for(std::size_t step=0;step<=steps;++step) {
+            auto v=product(q,c,1,r,readout.outputs);out.insert(out.end(),v.begin(),v.end());
+            if(step<steps)q=product(q,model.action,1,r,r);
+            for(double value:q)if(!std::isfinite(value))throw std::runtime_error("Spectral rollout overflow");
+        }
     }
     return out;
 }

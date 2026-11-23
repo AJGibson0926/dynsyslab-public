@@ -1,0 +1,41 @@
+{
+ "archive": {
+  "enabled": true
+ },
+ "kind": "postprocess",
+ "label": "rpe-echo-mode-selection-range / hdmd",
+ "methods": [
+  {
+   "name": "hdmd",
+   "settings": {
+    "matrix_size": 2000,
+    "mode_sort": "terminal-amplitude-energy",
+    "observables": [
+     "radius",
+     "radial_velocity",
+     "far_field_acoustic_echo"
+    ],
+    "rank": 0,
+    "reconstruction_observables": [
+     "state"
+    ],
+    "sample_stride": 10,
+    "sampling_window": 2000,
+    "snapshot_stride": 20,
+    "svd_tolerance": 1e-10,
+    "time_window": [
+     0,
+     42
+    ],
+    "window_alignment": "start"
+   }
+  }
+ ],
+ "schema": "dynsyslab.compute-job/v1",
+ "sources": [
+  "${inputs.s02}"
+ ],
+ "resources": {
+  "peak_bytes": 322365848
+ }
+}

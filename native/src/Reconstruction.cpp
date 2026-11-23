@@ -73,16 +73,24 @@ std::vector<std::complex<double>> reconstructObservable(
     const std::vector<std::complex<double>>& psiValues,
     std::size_t samples) {
     if (!samples || reconstruction.matrix.size()!=reconstruction.outputs*reconstruction.modes
-        || psiValues.size()!=samples*reconstruction.modes)
+        || psiValues.size()!=samples*reconstruction.modes
+        || (!reconstruction.offset.empty() && reconstruction.offset.size()!=reconstruction.outputs))
         throw std::invalid_argument("observable reconstruction shape mismatch");
+    for(double value:reconstruction.offset)
+        if(!std::isfinite(value))throw std::invalid_argument("observable reconstruction offset must be finite");
     std::vector<std::complex<double>> coefficients(
         reconstruction.modes*reconstruction.outputs);
     for(std::size_t mode=0;mode<reconstruction.modes;++mode)
         for(std::size_t output=0;output<reconstruction.outputs;++output)
             coefficients[mode*reconstruction.outputs+output]=
                 reconstruction.matrix[output*reconstruction.modes+mode];
-    return numerics::multiply(psiValues,samples,reconstruction.modes,
-                              coefficients,reconstruction.outputs);
+    auto result=numerics::multiply(psiValues,samples,reconstruction.modes,
+                                  coefficients,reconstruction.outputs);
+    if(!reconstruction.offset.empty())
+        for(std::size_t sample=0;sample<samples;++sample)
+            for(std::size_t output=0;output<reconstruction.outputs;++output)
+                result[sample*reconstruction.outputs+output]+=reconstruction.offset[output];
+    return result;
 }
 
 ReconstructionResult fitAndSetObservableReconstruction(KoopmanModel& model,

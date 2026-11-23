@@ -92,9 +92,9 @@ void KoopmanLQEObserver::setMeasurementFeedthrough(std::vector<double> feedthrou
     const auto m=model_->inputDimension(),p=design_.solution.measurementDimension;
     if(!feedthrough.empty())finite(feedthrough,p*m,"KLQE measurement feedthrough");
     const auto q=estimate_.output.size();
-    if(scaleOutput>=0&&static_cast<std::size_t>(scaleOutput)>=q)
+    if(scaleOutput < -1||(scaleOutput>=0&&static_cast<std::size_t>(scaleOutput)>=q))
         throw std::invalid_argument("KLQE feedthrough scale names a missing output component");
-    feedthrough_=std::move(feedthrough);feedthroughScale_=scaleOutput;
+    feedthrough_=std::move(feedthrough);feedthroughScale_=scaleOutput;heldDt_=-1;
 }
 
 KoopmanEstimate KoopmanLQEObserver::observe(double time,
@@ -105,23 +105,33 @@ KoopmanEstimate KoopmanLQEObserver::observe(double time,
     if(!std::isfinite(time)||(initialized_&&time<=estimate_.time))
         throw std::invalid_argument("KLQE measurement times must strictly increase");
     auto next=estimate_;
-    // Input seen directly by the sensor over the held interval: D u (optionally scaled).
-    std::vector<double> direct(p,0.0);
-    if(!feedthrough_.empty()) {
-        const double scale=feedthroughScale_>=0?estimate_.output[static_cast<std::size_t>(feedthroughScale_)]:1.0;
-        for(std::size_t a=0;a<p;++a)for(std::size_t b=0;b<m;++b)
-            direct[a]+=scale*feedthrough_[a*m+b]*applied[b];
-    }
+    // Sensor samples and actuation have separate holds. y at the previous
+    // timestamp belongs to its latched input, not a subsequently issued command.
+    const auto directInput=[&](const std::vector<double>& u){
+        std::vector<double> d(p,0.0);
+        if(!feedthrough_.empty())for(std::size_t a=0;a<p;++a)for(std::size_t b=0;b<m;++b)d[a]+=feedthrough_[a*m+b]*u[b];
+        return d;
+    };
+    const auto currentDirect=directInput(applied);
+    const bool scaledMeasurement=!feedthrough_.empty()&&feedthroughScale_>=0;
     if(initialized_) {
+        const auto previousDirect=directInput(previousMeasurementInput_);
         const double dt=time-estimate_.time;
         const double tolerance=64*std::numeric_limits<double>::epsilon()
             *std::max(1.0,std::abs(time));
         if(heldDt_<0||std::abs(dt-heldDt_)>tolerance
-            ||(bilinear_&&heldInput_!=applied)) {
+            ||(bilinear_&&heldInput_!=applied)
+            ||(scaledMeasurement&&heldMeasurementInput_!=previousMeasurementInput_)) {
             auto generator=baseGenerator_;
             if(bilinear_)for(std::size_t a=0;a<m;++a)
                 for(std::size_t k=0;k<n*n;++k)
                     generator[k]+=applied[a]*inputOperators_[a*n*n+k];
+            // y = y0 + Cy z + (D u_sensor)(x0_s + Cx_s z).
+            // Retain the state-dependent part in the held observer generator;
+            // freezing the old decoded state would not be the same observer.
+            if(scaledMeasurement)for(std::size_t i=0;i<n;++i)for(std::size_t j=0;j<n;++j)
+                for(std::size_t a=0;a<p;++a)generator[i*n+j]-=design_.solution.gain[i*p+a]*previousDirect[a]
+                    *design_.stateReconstructionMatrix[std::size_t(feedthroughScale_)*n+j];
             std::vector<double> input(n*(p+m));
             for(std::size_t row=0;row<n;++row) {
                 for(std::size_t a=0;a<p;++a)
@@ -131,7 +141,7 @@ KoopmanEstimate KoopmanLQEObserver::observe(double time,
             }
             const auto held=numerics::zeroOrderHold(generator,input,n,p+m,dt);
             heldTransition_=held.transition;heldResponse_=held.response;
-            heldDt_=dt;heldInput_=applied;
+            heldDt_=dt;heldInput_=applied;heldMeasurementInput_=previousMeasurementInput_;
         }
         next.lifted.assign(n,0);
         for(std::size_t row=0;row<n;++row) {
@@ -139,20 +149,22 @@ KoopmanEstimate KoopmanLQEObserver::observe(double time,
                 next.lifted[row]+=heldTransition_[row*n+col]*estimate_.lifted[col];
             for(std::size_t a=0;a<p;++a)
                 next.lifted[row]+=heldResponse_[row*(p+m)+a]
-                    *(previousMeasurement_[a]-offsetY_[a]-direct[a]);
+                    *(previousMeasurement_[a]-offsetY_[a]-previousDirect[a]
+                        *(scaledMeasurement?offsetX_[std::size_t(feedthroughScale_)]:1.0));
             for(std::size_t a=0;a<m;++a)
                 next.lifted[row]+=heldResponse_[row*(p+m)+p+a]*applied[a];
         }
         finite(next.lifted,n,"KLQE propagated values");
     }
     next.time=time;
-    next.measurement=decode(design_.measurementMatrix,next.lifted,offsetY_);
-    for(std::size_t a=0;a<p;++a)next.measurement[a]+=direct[a];
     next.output=decode(design_.stateReconstructionMatrix,next.lifted,offsetX_);
+    next.measurement=decode(design_.measurementMatrix,next.lifted,offsetY_);
+    const double currentScale=scaledMeasurement?next.output[std::size_t(feedthroughScale_)]:1.0;
+    for(std::size_t a=0;a<p;++a)next.measurement[a]+=currentDirect[a]*currentScale;
     next.innovation.resize(p);
     for(std::size_t a=0;a<p;++a)next.innovation[a]=y[a]-next.measurement[a];
     finite(next.innovation,p,"KLQE innovation");
-    estimate_=std::move(next);previousMeasurement_=y;initialized_=true;
+    estimate_=std::move(next);previousMeasurement_=y;previousMeasurementInput_=applied;initialized_=true;
     return estimate_;
 }
 } // namespace dynsyslab::core

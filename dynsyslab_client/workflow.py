@@ -159,7 +159,11 @@ class NativeWorkflow:
             self._library.dsl_workflow_result_destroy(output)
 
     def observable(self, query: Mapping[str, Any]) -> dict[str, Any]:
-        """Evaluate values and analytic derivatives through the compiled engine."""
+        """Evaluate values and analytic derivatives through the compiled engine.
+
+        Complex outputs/Jacobian entries are [real, imag] pairs; value_type
+        distinguishes them. Use a catalog *_components observable for real fitting.
+        """
         function = getattr(self._library, "dsl_workflow_observable_json", None)
         if function is None:
             raise RuntimeError("This native installation predates observable queries; update DynSysLab.")
@@ -175,7 +179,9 @@ class NativeWorkflow:
     def koopman_spectral(self, query: Mapping[str, Any]) -> dict[str, Any]:
         """Fit, inspect, evaluate or roll out a spectral KROM in the compiled engine.
 
-        Arrays are row-major; complex values use [real, imag]. See SPECTRAL_KROM.md.
+        action="dictionary" also builds/evaluates frozen feature dictionaries.
+        Arrays are row-major; complex values use [real, imag]. See SPECTRAL_KROM.md
+        and docs/architecture/OSCILLATOR_OBSERVABLES_DICTIONARIES.md.
         """
         function = getattr(self._library, "dsl_workflow_koopman_spectral_json", None)
         if function is None:
@@ -183,6 +189,34 @@ class NativeWorkflow:
         function.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_void_p)]
         function.restype = ctypes.c_int
         request = {"schema": "dynsyslab.koopman-spectral-query/v1", **dict(query)}
+        output = ctypes.c_void_p()
+        status = int(function(json.dumps(request, separators=(",", ":")).encode(), ctypes.byref(output)))
+        if status != STATUS_OK:
+            self._error(status, output)
+        return self._result(output)
+
+    def krom_audit(self, query: Mapping[str, Any]) -> dict[str, Any]:
+        """Audit differential closure and local feedback through native services."""
+        function = getattr(self._library, "dsl_workflow_krom_audit_json", None)
+        if function is None:
+            raise RuntimeError("This native installation predates KROM audit queries.")
+        function.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_void_p)]
+        function.restype = ctypes.c_int
+        request = {"schema": "dynsyslab.krom-audit-query/v1", **dict(query)}
+        output = ctypes.c_void_p()
+        status = int(function(json.dumps(request, separators=(",", ":")).encode(), ctypes.byref(output)))
+        if status != STATUS_OK:
+            self._error(status, output)
+        return self._result(output)
+
+    def lie_algebra(self, query: Mapping[str, Any]) -> dict[str, Any]:
+        """Run exact polynomial Lie/module analysis through the compiled C ABI."""
+        function = getattr(self._library, "dsl_workflow_lie_algebra_json", None)
+        if function is None:
+            raise RuntimeError("This native installation predates Lie algebra queries.")
+        function.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_void_p)]
+        function.restype = ctypes.c_int
+        request = {"schema": "dynsyslab.lie-algebra-query/v1", **dict(query)}
         output = ctypes.c_void_p()
         status = int(function(json.dumps(request, separators=(",", ":")).encode(), ctypes.byref(output)))
         if status != STATUS_OK:

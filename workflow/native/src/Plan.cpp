@@ -13,6 +13,9 @@
 #include <dynsyslab/workflow/Run.hpp>
 #include <dynsyslab/workflow/SystemResolution.hpp>
 
+#include <dynsyslab/workflow/JobGroup.hpp>
+
+#include "ViewerFigureJob.hpp"
 #include "WorkflowExtensions.hpp"
 #include "TrainingPreflight.hpp"
 
@@ -90,8 +93,9 @@ bool supportedMethod(const json::Value& stage) {
         "dmd", "dmdc", "edmdc", "hdmd", "hankel_dmd", "sindy", "edmd", "havok",
         "koopman_spectral", "resdmd", "mpedmd", "hermitian_dmd", "tlsdmd", "multdmd", "stochastic_resdmd", "specrkhs",
         "control_regression", "krom_extract", "koopman_validation", "observable_reconstruction",
-        "echo_history_koopman", "history_basis", "history_projection", "history_control_regression", "input_map", "control_target", "derivative_benchmark", "mode_selection",
+        "echo_history_koopman", "history_basis", "history_projection", "history_control_regression", "input_map", "bilinear_certificate", "control_target", "derivative_benchmark", "mode_selection",
         "coordinate_transform", "sindy_dynamics", "dynamics_validation",
+        "krom_recenter", "krom_readout", "reference_signal", "control_score", "figure_dataset",
         "boundary_eigenfunctions", "eigenvalue_optimization",
         "observability", "klqe", "linear_analysis", "linear_systems", "controllability", "empirical_observability",
     };
@@ -259,6 +263,8 @@ json::Value planJob(const json::Value& job) {
     validateJob(job);
     const auto kind=job.at("kind").string();
     if(kind=="pipeline")return planPipeline(job);
+    if(kind=="job_group")return planJobGroup(job);
+    if(kind=="viewer_figure")return detail::planViewerFigure(job);
     detail::loadExtensions(job);
     if(kind=="krom_control_search")return planKromControlSearch(job);
     if(kind=="solve_set")return solveSetPlan(job);

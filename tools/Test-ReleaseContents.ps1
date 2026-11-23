@@ -16,6 +16,8 @@ function Get-Violation([string]$path) {
     if ($p -match '\.(npz|npy|mat|h5|parquet)$') { return 'numerical data file' }
     if ($p -match '\.(png|jpe?g)$' -and $p -notmatch '(^|/)(native_ui|resources)/assets/') { return 'image of results' }
     if ($p -match '\.jsonl$') { return 'JSON-lines record' }
+    # Data packs are instructions only: job files, a manifest, checksums and a README.
+    if ($p -match '(^|/)data-packs/' -and $p -notmatch '\.(json|md|sha256)$') { return 'non-text data-pack file' }
     return $null
 }
 

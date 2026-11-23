@@ -4,6 +4,9 @@
 #include "CliMcp.hpp"
 #include "CliAgentSetup.hpp"
 #include "CliQuickstart.hpp"
+#include "CliDataPack.hpp"
+#include <dynsyslab/workflow/JobGroup.hpp>
+#include <dynsyslab/math/Query.hpp>
 #include <dynsyslab/workflow/Run.hpp>
 #include <dynsyslab/workflow/Pipeline.hpp>
 #include <dynsyslab/workflow/ObservableQuery.hpp>
@@ -11,6 +14,9 @@
 #include <dynsyslab/workflow/CoordinateClosureQuery.hpp>
 #include <dynsyslab/workflow/CoordinateInverse.hpp>
 #include <dynsyslab/workflow/AnalyticQuery.hpp>
+#include <dynsyslab/workflow/PeriodicQuery.hpp>
+#include <dynsyslab/workflow/LieAlgebraQuery.hpp>
+#include <dynsyslab/workflow/KromAuditQuery.hpp>
 #include <dynsyslab/workflow/PhaseSpaceQuery.hpp>
 #include <dynsyslab/workflow/SystemKnowledge.hpp>
 #include <dynsyslab/workflow/Plan.hpp>
@@ -243,7 +249,7 @@ void capabilities() {
               << "\"legacy_csv_import\":true,\"krom_control_search\":true,"
               << "\"initial_condition_preview\":true},"
               // CLI-only query commands (like observable, analytic, phase-space): no desktop workflow.
-              << "\"queries\":[\"observable_closure\"],\"initial_condition_modes\":[";
+              << "\"queries\":[\"observable_closure\",\"lie_algebra\",\"krom_audit\",\"mathematics\"],\"initial_condition_modes\":[";
     const auto modes = dynsyslab::workflow::supportedOdeInitialConditionModes();
     for (std::size_t index = 0; index < modes.size(); ++index) {
         if (index) std::cout << ',';
@@ -294,7 +300,9 @@ int queue(const Arguments& args) {
     if (operation == L"submit") {
         if (args.positional.size() < 3) throw std::invalid_argument("queue submit needs a job file");
         const std::string text = readText(args.positional[2]);
-        const auto job = dynsyslab::workflow::applyJobInputs(json::parse(text), args.params, args.sets);
+        auto job = dynsyslab::workflow::applyJobInputs(dynsyslab::workflow::bindJobFile(
+            json::parse(text), args.positional[2]), args.params, args.sets);
+        dynsyslab::cli::applyJobGroupRuntime(job, args);
         requireJob(job);
         json::Value::Object submitted;
         submitted["job_id"] = jobs.submit(job);
@@ -357,6 +365,7 @@ int wmain(int argc, wchar_t** argv) {
         else if (command == L"quickstart")
             return dynsyslab::cli::quickstart({dynsyslab::core::prepareOutputDirectory(args.archiveRoot, "--archive-root"),
                                                args.archiveRootSource, args.format});
+        else if (command == L"datapack") return dynsyslab::cli::dataPackCommand(args);
         else if (command == L"docs") docs();
         else if (command == L"systems") systems();
         else if (command == L"krom-info") {
@@ -398,6 +407,26 @@ int wmain(int argc, wchar_t** argv) {
             std::cout << json::dump(dynsyslab::workflow::evaluateObservableQuery(
                 json::parse(readText(args.positional[1])))) << '\n';
         }
+        else if (command == L"krom-audit") {
+            if(args.positional.size()!=2)throw std::invalid_argument("krom-audit requires a query JSON file");
+            std::cout << json::dump(dynsyslab::workflow::evaluateKromAuditQuery(
+                json::parse(readText(args.positional[1])))) << '\n';
+        }
+        else if (command == L"mathematics") {
+            if(args.positional.size()!=2)throw std::invalid_argument("mathematics requires a query JSON file");
+            std::cout << json::dump(dynsyslab::math::evaluateQuery(
+                json::parse(readText(args.positional[1])))) << '\n';
+        }
+        else if (command == L"periodic-analysis") {
+            if(args.positional.size()!=2)throw std::invalid_argument("periodic-analysis requires a query JSON file");
+            std::cout << json::dump(dynsyslab::workflow::evaluatePeriodicQuery(
+                json::parse(readText(args.positional[1])))) << '\n';
+        }
+        else if (command == L"lie-algebra") {
+            if(args.positional.size()!=2)throw std::invalid_argument("lie-algebra requires a query JSON file");
+            std::cout << json::dump(dynsyslab::workflow::evaluateLieAlgebraQuery(
+                json::parse(readText(args.positional[1])))) << '\n';
+        }
         else if (command == L"observable-closure") {
             if(args.positional.size()!=2)throw std::invalid_argument(
                 "observable-closure requires a query JSON file");
@@ -433,10 +462,14 @@ int wmain(int argc, wchar_t** argv) {
         }
         else if (command == L"validate" || command == L"plan" || command == L"run") {
             if (args.positional.size() < 2) throw std::invalid_argument("command needs a job file");
-            const auto job = dynsyslab::workflow::applyJobInputs(
-                json::parse(readText(args.positional[1])), args.params, args.sets);
+            auto job = dynsyslab::workflow::applyJobInputs(dynsyslab::workflow::bindJobFile(
+                json::parse(readText(args.positional[1])), args.positional[1]), args.params, args.sets);
+            dynsyslab::cli::applyJobGroupRuntime(job, args);
             requireJob(job);
-            if (command == L"validate") std::cout << "valid\n";
+            if (command == L"validate") {
+                if (job.at("kind").string() == "job_group") (void)dynsyslab::workflow::planJob(job);
+                std::cout << "valid\n";
+            }
             else if (command == L"plan")
                 std::cout << json::dump(dynsyslab::workflow::planJob(job)) << '\n';
             else {  // outputs are checked after validation and before any stage runs

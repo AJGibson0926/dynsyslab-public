@@ -233,7 +233,9 @@ void findPoincareReturns(const ODESystem &system, PhaseSpaceResult &result,
     for (const auto &seed : result.options.sectionSeeds) {
         try {
             result.poincareMaps.push_back(
-                firstPoincareReturn(system, seed, result.options, execution));
+                result.options.dynamics == "periodic-forcing"
+                    ? stroboscopicReturn(system, seed, result.options, execution)
+                    : firstPoincareReturn(system, seed, result.options, execution));
         } catch (const ExecutionCancelled &) {
             throw;
         } catch (const std::exception &error) {
@@ -250,6 +252,38 @@ void findPoincareReturns(const ODESystem &system, PhaseSpaceResult &result,
 } // namespace dynsyslab::core::phase_detail
 
 namespace dynsyslab::core {
+PhasePoincareMap stroboscopicReturn(const ODESystem &system, const PhaseState &seed,
+                                   const PhaseSpaceOptions &options,
+                                   const ExecutionContext *execution) {
+    validatePhaseSpaceOptions(system, options);
+    if (options.dynamics != "periodic-forcing" || seed.size()!=system.descriptor().stateDimension ||
+        !phase_detail::inside(seed,options))
+        throw std::invalid_argument("Stroboscopic return requires periodic forcing and an in-box seed");
+    const auto n=seed.size();
+    const double duration=phaseSpaceForcingPeriod(system,options.forcingPeriod)*options.forcingPeriods;
+    // Variational flow: Kuznetsov, Elements of Applied Bifurcation Theory, ch. 5.
+    auto coarse=phase_detail::flow(system,seed,duration,options,true,true,execution,options.forcingSectionTime);
+    auto refinedOptions=options;
+    refinedOptions.maximumStep*=.5;refinedOptions.relativeTolerance*=.125;refinedOptions.absoluteTolerance*=.125;
+    auto refined=phase_detail::flow(system,seed,duration,refinedOptions,true,true,execution,options.forcingSectionTime);
+    if(!coarse.complete||!refined.complete)throw std::runtime_error("Stroboscopic integration failed: "+coarse.reason+refined.reason);
+    PhasePoincareMap result;
+    result.kind="fixed-forcing-phase";result.status="complete";
+    result.initialState=result.sectionState=seed;result.returnState=refined.state;result.returnTime=duration;
+    result.returnDerivative=result.reducedDerivative=refined.monodromy;
+    result.tangentBasis.assign(n*n,0);for(std::size_t j=0;j<n;++j)result.tangentBasis[j*n+j]=1;
+    auto delta=seed,change=seed;
+    for(std::size_t j=0;j<n;++j){delta[j]=refined.state[j]-seed[j];change[j]=refined.state[j]-coarse.state[j];}
+    result.fixedPointResidual=phase_detail::norm(delta,options);
+    result.endpointRefinementError=phase_detail::norm(change,options);
+    for(std::size_t j=0;j<n*n;++j)result.derivativeRefinementError=std::max(result.derivativeRefinementError,
+        std::abs(refined.monodromy[j]-coarse.monodromy[j])/(1+std::abs(refined.monodromy[j])));
+    result.multipliers=numerics::eigensystem(refined.monodromy,n,false).eigenvalues;
+    if(result.endpointRefinementError>20*options.residualTolerance||result.derivativeRefinementError>1e-5){
+        result.status="unresolved";result.reason="Stroboscopic endpoint or derivative refinement failed";
+    }
+    return result;
+}
 PhasePoincareMap firstPoincareReturn(const ODESystem &system, const PhaseState &seed,
                                      const PhaseSpaceOptions &options,
                                      const ExecutionContext *execution) {

@@ -58,8 +58,8 @@ json::Value poincareJson(const dynsyslab::core::PhasePoincareMap &map) {
         {"return_time_derivative", array(map.returnTimeDerivative)},
         {"multipliers", complexArray(map.multipliers)}, {"return_time", map.returnTime},
         {"fixed_point_residual", map.fixedPointResidual},
-        {"transversality", map.transversality},
-        {"transversality_angle", map.transversalityAngle},
+        {"transversality", map.kind=="fixed-forcing-phase" ? json::Value() : json::Value(map.transversality)},
+        {"transversality_angle", map.kind=="fixed-forcing-phase" ? json::Value() : json::Value(map.transversalityAngle)},
         {"endpoint_refinement_error", map.endpointRefinementError},
         {"derivative_refinement_error", map.derivativeRefinementError},
         {"direction", double(map.direction)}};

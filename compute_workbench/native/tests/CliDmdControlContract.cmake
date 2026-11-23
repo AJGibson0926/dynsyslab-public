@@ -33,5 +33,30 @@ list(LENGTH lifted count)
 if(NOT count EQUAL 1)
   message(FATAL_ERROR "Native EDMDc CLI did not publish its model: ${output}")
 endif()
+# Windowed EDMDc exported as a K-ROM, principal-mode extraction and a windowed input map (KLQG chain).
+set(window "[[-10,10],[-10,10]]")
+file(WRITE "${work}/chain.json" "{\"schema\":\"dynsyslab.compute-job/v1\",\"kind\":\"pipeline\",\"label\":\"windowed EDMDc K-ROM contract\",\"stages\":[
+ {\"id\":\"fit\",\"job\":{\"kind\":\"postprocess\",\"sources\":[\"${source}\"],\"methods\":[{\"name\":\"edmdc\",\"settings\":{\"polynomial_degree\":1,\"include_constant\":false,\"normalize\":false,\"state_window\":${window},\"export_krom\":true}}],\"archive\":{\"enabled\":true}}},
+ {\"id\":\"krom\",\"job\":{\"kind\":\"postprocess\",\"sources\":[\"\${fit.archive}\"],\"methods\":[{\"name\":\"krom_extract\",\"settings\":{\"mode_selection\":{\"rule\":\"principal\",\"target_state\":[0,0]},\"refit_reconstructions\":{\"observables\":[\"state\",\"force\"],\"intercept\":false}}}],\"archive\":{\"enabled\":true}}},
+ {\"id\":\"map\",\"job\":{\"kind\":\"postprocess\",\"sources\":[\"${source}\"],\"methods\":[{\"name\":\"input_map\",\"settings\":{\"krom\":\"\${krom.archive}\",\"representation\":\"constant\",\"fit\":\"controlled_residual\",\"state_window\":${window}}}],\"archive\":{\"enabled\":true}}}]}")
+execute_process(COMMAND "${CLI}" run "${work}/chain.json" --archive-root "${work}/archives"
+  RESULT_VARIABLE status OUTPUT_VARIABLE output ERROR_VARIABLE error)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "Windowed EDMDc K-ROM chain failed: ${output} ${error}")
+endif()
+foreach(kind koopman-edmdc-krom koopman-krom-extract koopman-input-map)
+  file(GLOB published "${work}/archives/derived/${kind}/*.npz")
+  list(LENGTH published count)
+  if(count LESS 1)
+    message(FATAL_ERROR "Windowed EDMDc chain did not publish ${kind}: ${output}")
+  endif()
+endforeach()
+# A window that keeps no snapshot pair must fail before any fit is published.
+file(WRITE "${work}/empty.json" "{\"schema\":\"dynsyslab.compute-job/v1\",\"kind\":\"postprocess\",\"label\":\"empty window\",\"sources\":[\"${source}\"],\"methods\":[{\"name\":\"dmdc\",\"settings\":{\"state_window\":[[100,101],[100,101]]}}],\"archive\":{\"enabled\":true}}")
+execute_process(COMMAND "${CLI}" run "${work}/empty.json" --archive-root "${work}/archives"
+  RESULT_VARIABLE status OUTPUT_VARIABLE output ERROR_VARIABLE error)
+if(status EQUAL 0 OR NOT "${output}${error}" MATCHES "fewer than two snapshot pairs")
+  message(FATAL_ERROR "An empty DMDc state_window was not rejected: ${output} ${error}")
+endif()
 file(REMOVE_RECURSE "${work}")
-message(STATUS "Recorded controls -> native DMDc and EDMDc -> immutable Koopman archives: PASS")
+message(STATUS "Recorded controls -> native DMDc and EDMDc -> immutable Koopman archives; windowed EDMDc K-ROM -> principal modes -> windowed input map: PASS")

@@ -1,9 +1,24 @@
 # Start here: DynSysLab
 
+**Central research question:** finite Koopman representations of drift/control Lie algebras with global state reconstruction and quantified control errors. The [native Lie algebra module](architecture/LIE_ALGEBRA.md) provides exact closure, structure, invariant-module and residual-bound queries.
+
 **Critical Koopman reference:** preserve and revisit the
 exact unstable linear Duffing example (private development record `KOOPMAN_LINEAR_DUFFING_EXACT_REFERENCE.md`).
 The user designated it critically important on 2026-11-05; it records exact
 eigenfunctions, input/output maps and the successful position-only KLQE/KLQR run.
+
+**Critical gradient-closure reference:** preserve the exact nonlinear triangular
+system (private development record `KOOPMAN_GRADIENT_CLOSED_TRIANGULAR_REFERENCE.md`,
+reference ID `koopman-triangular-gradient-closed`). Its finite eigenfunction
+collection closes under every partial derivative and gives exact global state
+reconstruction and bilinear control. The complementary user-designated important
+arctangent case (`KOOPMAN_ARCTANGENT_GRADIENT_REFERENCE.md`) proves why a finite
+autonomous linearization need not have finite gradient closure. Both are indexed
+in the private study records.
+
+The [quadratic triangular benchmark](QUADRATIC_TRIANGULAR_BENCHMARK.md) is available
+as a native system with exact solutions, analytic eigenfunctions and derivative
+operators. Its stable and saddle presets support finite-versus-infinite closure studies.
 
 This is the shortest safe route into DynSysLab for a scientist, developer, or
 AI agent. The compiled CLI, native Solver/Post-processor, native Viewer, and

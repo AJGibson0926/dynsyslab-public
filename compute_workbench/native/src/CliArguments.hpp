@@ -31,6 +31,10 @@ struct Arguments {
     bool fourierRemoveMean{true};
     bool fourierOneSided{true};
     std::vector<std::pair<std::string, std::string>> params, sets;
+    // job groups and data packs
+    bool allowVersionMismatch{}, noCleanup{};
+    double minFreeGb{-1.0};
+    std::filesystem::path referenceMap, output;
 };
 
 // Parses argv (argv[0] is skipped). Unknown tokens become positional arguments; --help/-h set

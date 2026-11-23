@@ -61,6 +61,12 @@ Arguments arguments(int count, wchar_t** values) {
                 throw std::invalid_argument("--param/--set expects NAME=VALUE");
             (value == L"--param" ? result.params : result.sets)
                 .emplace_back(item.substr(0, equals), item.substr(equals + 1));
+        } else if (value == L"--allow-version-mismatch") { result.allowVersionMismatch = true;
+        } else if (value == L"--no-cleanup") { result.noCleanup = true;
+        } else if (value == L"--min-free-gb" && index + 1 < count) { result.minFreeGb = std::stod(values[++index]);
+        } else if ((value == L"--reference-map" || value == L"--output") && index + 1 < count) {
+            const auto path = dynsyslab::core::resolveOutputPath(std::filesystem::path(values[++index]));
+            (value == L"--output" ? result.output : result.referenceMap) = path;
         } else if (value == L"--input-scale" && index + 1 < count) {
             result.inputScale=std::stod(values[++index]);
         } else if (value == L"--allow-unknown-records") {

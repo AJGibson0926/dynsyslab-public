@@ -132,6 +132,11 @@ Arrays such as `methods` are replaced wholesale by merge patches. Expose a value
 the study will vary as a parameter instead. A coordinate study is then a few
 lines (see `examples/native/pipelines/rpe-viscous-klqr-multisine/`).
 
+## Job groups
+
+A `job_group` job runs other job files by relative path, and a `viewer_figure` job renders a PNG
+with the Viewer CLI. Both are described in [Data packs](../DATA_PACKS.md).
+
 ## Provenance
 
 Each run publishes `archives/campaigns/pipelines/<label>__<utc>.pipeline.json`

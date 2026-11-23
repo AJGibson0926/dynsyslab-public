@@ -40,6 +40,7 @@ class ParametricBubble {
             throw std::domain_error("RPE analytic radius reached the model collapse boundary");
         return {r, v};
     }
+    double physicalPeriod() const { return clock_->increment(); }
 };
 } // namespace
 std::vector<AnalyticSolutionFamily> rpeAnalyticSolutions(const SystemConfiguration &c) {
@@ -85,7 +86,7 @@ std::vector<AnalyticSolutionFamily> rpeAnalyticSolutions(const SystemConfigurati
                  orbit = std::make_shared<ParametricBubble>(
                      std::array<double, 5>{2.25 * a, 0, 2.25 * c1, -3 * gas, 0},
                      std::pow(x[0], -1.5), -1.5 * x[1], -2. / 3., 2.5);
-             return {[orbit, t0](double t) { return orbit->evaluate(t - t0); }, {}};
+             return {[orbit, t0](double t) { return orbit->evaluate(t - t0); }, {}, orbit->physicalPeriod()};
          }}};
 }
 } // namespace dynsyslab::core::detail

@@ -85,6 +85,15 @@ they are not falsely cast as polynomials.
 
 ## Fitting paths
 
+Exact registered benchmarks use `knownPolynomialEigenfunctions(system)` from
+`core/KnownEigenfunctions.hpp`, owned by `dynsyslab_eigenfunctions`.
+It returns the same immutable bank, plus applicability, derivative operators,
+linear state readout and provenance; it does not fabricate fit diagnostics.
+The quadratic triangular family supports an exact four-mode bank away from
+nontrivial quadratic resonance. The existing analytic workflow query accepts
+`include_eigenfunctions: true`. See the
+[system guide](../QUADRATIC_TRIANGULAR_BENCHMARK.md).
+
 `fitSindyEigenfunctions(...)` calls the existing generator-PDE fitter and
 returns `EigenfunctionFitResult`. Its diagnostics explicitly identify
 `sindy-generator` and the residual `Dpsi(q) qdot - lambda psi(q)`.

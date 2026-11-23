@@ -31,6 +31,19 @@ class SpectralKoopmanTest(unittest.TestCase):
             "dimension": 2, "x": self.x.ravel().tolist(), "y": self.y.ravel().tolist()},
             "settings": settings, **extra})
 
+    def test_cyclic_state_pair_physical_matrix_orientation(self):
+        from dynsyslab_client.cyclic_dynamics import fit_cyclic_state_pair_models
+        x = np.array([[.03, .01], [-.02, .04], [.01, -.02], [-.04, -.01]])
+        matrices = [np.array([[1., .5], [0., .8]]), np.array([[.6, 0.], [-.2, 1.]])]
+        pairs = [dict(dimension=2, samples=len(x), x=x.ravel().tolist(),
+                      y=(x @ a.T).ravel().tolist()) for a in matrices]
+        fitted = fit_cyclic_state_pair_models(self.api, pairs, validation_pairs=pairs)
+        np.testing.assert_allclose(np.array(fitted['values']).reshape(2, 2, 2), matrices, atol=2e-13)
+        self.assertEqual(len(fitted['validation']), 2)
+        bad = [dict(dimension=2, samples=2, x=[1, 0, -1, 0], y=[1, 0, -1, 0])]
+        with self.assertRaises((ValueError, NativeWorkflowError)):
+            fit_cyclic_state_pair_models(self.api, bad)
+
     def test_wrapper_rollout_and_archive_reference(self):
         with tempfile.TemporaryDirectory() as folder:
             path = str(Path(folder) / "rotation.npz")
@@ -75,6 +88,24 @@ class SpectralKoopmanTest(unittest.TestCase):
         residual = np.sqrt(np.sum(w[:, None]*abs(y@c-(x@c)*lam)**2, axis=0)/
                            np.sum(w[:, None]*abs(x@c)**2, axis=0))
         np.testing.assert_allclose(result["spectral"]["residuals"]["eigenpair"], residual, atol=1e-12)
+
+    def test_batch_free_rollout_with_independent_rotation_reference(self):
+        model = self.fit('mpedmd')['model']
+        points = np.array([[1., 0.], [.3, -.7], [0., 0.]])
+        for steps in (0, 31):
+            result = self.api.koopman_spectral(dict(action='rollout_batch', model=model,
+                initial_points=points.ravel().tolist(), steps=steps))
+            theta = .31*np.arange(steps+1)
+            expected = np.stack([np.column_stack((x*np.cos(theta)-y*np.sin(theta),
+                x*np.sin(theta)+y*np.cos(theta))) for x, y in points])
+            np.testing.assert_allclose(np.array(result['values']).reshape(expected.shape), expected, atol=2e-12)
+            self.assertEqual(result['layout'], 'trajectory/time/output')
+            self.assertEqual(result['trajectories'], 3)
+            self.assertEqual(result['samples'], steps+1)
+        for points_bad, steps_bad in (([], 1), ([1], 1), ([1, 0], 10000000)):
+            with self.assertRaises(NativeWorkflowError):
+                self.api.koopman_spectral(dict(action='rollout_batch', model=model,
+                    initial_points=points_bad, steps=steps_bad))
 
     def test_shared_hankel_postprocessor(self):
         with tempfile.TemporaryDirectory() as folder:

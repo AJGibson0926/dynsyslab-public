@@ -31,7 +31,7 @@ dialog with estimator, dictionary, rank, normalization and explicit structural a
 | Method | Actual implemented calculation |
 |---|---|
 | EDMD / ResDMD | Weighted, SVD-whitened least-squares compression; explicit eigenfunction coefficients and residuals |
-| Gaussian-section EDMD / ResDMD | Same estimator on a frozen Gaussian kernel-section dictionary; explicit centers and out-of-sample evaluation |
+| Kernel-section EDMD / ResDMD | Same estimator on frozen Gaussian, Laplacian, Lorentzian or Matern sections; explicit centers and out-of-sample evaluation |
 | Weighted EDMD / ResDMD | Explicit nonnegative quadrature weights or normalized smooth Birkhoff weights |
 | mpEDMD | Orthogonal Procrustes in the weighted orthonormal trial basis; unitary finite compression |
 | Hermitian DMD | Symmetric compression in that basis, for an asserted self-adjoint problem |
@@ -48,7 +48,7 @@ dialog with estimator, dictionary, rank, normalization and explicit structural a
 The original exact DMD, Hankel DMD, DMDc and EDMDc remain available. Existing
 `edmd` Post-Processor jobs retain their old implementation. Use
 `koopman_spectral` with `settings.method="edmd"` for the new common spectral contract.
-Gaussian sections support a kernel dictionary but are **not labeled as the full
+Radial sections support a kernel dictionary but are **not labeled as the full
 dual kernel ResDMD algorithm**. Principal-angle diagnostics are not the entire
 TrustKoopman PAD selection/error-bound framework. PageRank is a reusable graph
 calculation, not yet a complete automatic EDMD-PPR dictionary-search workflow.
@@ -66,8 +66,8 @@ A `SpectralKROM` is a second KROM representation, separate from the existing
 polynomial/scattered eigenfunction `KoopmanModel`. It retains a finite operator
 even when a diagonal eigenmode representation is unreliable:
 
-- Frozen dictionary and normalization; linear, total-degree polynomial, Gaussian
-  sections, or nearest-center indicator partitions.
+- Frozen dictionary and normalization; linear, polynomial, Chebyshev, Laguerre,
+  Hermite, Fourier-Hermite, radial sections or nearest-center indicator partitions.
 - Basis B with columns orthonormal in the training quadrature metric, coefficient
   action A, discrete multipliers, and explicit eigenfunction coefficients.
 - Named dictionary readouts for measured coordinates or other supplied outputs.
@@ -77,7 +77,7 @@ even when a diagonal eigenmode representation is unreliable:
 - Sampling interval, coordinate-provider contract, method, assumptions and
   content identity.
 
-Automatic polynomial construction and deterministic farthest-point center selection
+Automatic basis construction and deterministic farthest-point or k-means center selection
 use training points only. Training normalization is frozen; evaluation never
 relearns it from held-out data. Explicit nodes/exponents/normalization are also accepted.
 Dictionary size defaults to a maximum of 4096 features. Dense SpecRKHS analysis
@@ -89,6 +89,16 @@ A free readout rollout starts from q0=P(x0)B and applies q(k+1)=q(k)A, using no 
 measurements. This also works for defective operators. No logarithm is taken
 implicitly; frequencies in spectral measures are radians per sample, and physical
 angular frequencies require division by the archived sample interval.
+
+For an ensemble, `action="rollout_batch"` accepts flat sample-major
+`initial_points`, `steps`, and the same named `reconstruction`. It returns flat
+`trajectory/time/output` values with `trajectories`, `samples`, `outputs`, and
+`sample_interval`. The compiled core factors the readout once for the ensemble;
+it neither refits nor uses later observations. The query bounds output at ten
+million scalars. The existing single-point operation is unchanged. These APIs
+advance only by the archived sample interval. For a centered history dictionary,
+causal use requires shifting the supplied history to end at acquisition time
+and choosing the corresponding readout; the API does not infer this convention.
 
 A spectral measure is not an eigenmode list. Wave packets are finite-width
 functions, not certified distributional limits. RKHS adjoint sections are stored
@@ -199,6 +209,12 @@ nonnegative transition graph; a signed EDMD matrix is not automatically such a g
 
 ## Pipeline jobs
 
+The [observable and dictionary guide](OSCILLATOR_OBSERVABLES_DICTIONARIES.md)
+documents the Pendulum/Duffing scalar observables, reusable Chebyshev, Laguerre,
+Hermite, Fourier-Hermite and radial dictionaries, normalization, source formulas,
+and the standalone `action:"dictionary"` API. These families are shared across
+systems, including Van der Pol. The SpecRKHS adjoint method remains Gaussian-only.
+
 Stages `resdmd`, `mpedmd`, `hermitian_dmd`, `tlsdmd`, `multdmd`,
 `stochastic_resdmd`, `specrkhs` or `koopman_spectral` accept the shared
 [observable/Hankel contract](OBSERVABLE_HANKEL.md). With no observable selection,
@@ -257,6 +273,17 @@ package; the upstream MATLAB parity test passed; the isolated package/SDK smoke
 gate passed; the strict architecture audit reported zero boundary violations,
 dependency cycles, broken links or unindexed documents. The installed application
 was not replaced; the rebuilt application is in `build/native-suite-fast/bin`.
+
+Rigged spectral grids reuse one complex Schur factorization of the frozen
+compression for all angles and kernel poles. The full upper-triangular factor
+is retained, rather than replacing it by eigenvalues; shifted triangular solves
+avoid repeatedly factoring dense matrices. This handles repeated eigenvalues
+without assuming numerically returned eigenvectors form a unitary matrix.
+The scalar kernel, finite compression, observable projection, and archive
+contracts are unchanged. The numerics API exposes `complexSchur` as row-major
+unitary and triangular factors. See the
+[Eigen factorization contract](https://libeigen.gitlab.io/eigen/docs-3.4/classEigen_1_1ComplexSchur.html)
+and the Rigged DMD source cited above.
 
 Source inventory and attribution:
 [reference acquisition](../../tools/experiments/miscellaneous_computes/references/colbrook/README.md),

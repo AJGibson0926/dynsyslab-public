@@ -11,6 +11,18 @@ GENERATED_DIRECTORIES=frozenset({
     "viewer_compute_archive", "viewer_outputs",
 })
 
+# Side research (downloaded papers, private studies and their vendored tools) is git-ignored and
+# not part of the suite, so source-oriented tools never walk it. See AGENTS.md.
+SIDE_RESEARCH_DIRECTORIES=frozenset({"research"})
+
+def is_side_research(path: str|Path) -> bool:
+    """Whether a path is inside the git-ignored top-level side-research folder."""
+    try:
+        parts=Path(path).resolve().relative_to(PROJECT_ROOT).parts
+    except ValueError:
+        return False
+    return bool(parts) and parts[0] in SIDE_RESEARCH_DIRECTORIES
+
 def is_generated(path: str|Path) -> bool:
     """Whether a path is inside a generated, non-source project directory."""
     target=Path(path).resolve()
@@ -20,5 +32,6 @@ def is_generated(path: str|Path) -> bool:
         return False
 
 def source_files(pattern: str="*.py") -> list[Path]:
-    """Source discovery that never walks generated package output."""
-    return [path for path in PROJECT_ROOT.rglob(pattern) if not is_generated(path)]
+    """Source discovery that never walks generated package output or side research."""
+    return [path for path in PROJECT_ROOT.rglob(pattern)
+            if not is_generated(path) and not is_side_research(path)]

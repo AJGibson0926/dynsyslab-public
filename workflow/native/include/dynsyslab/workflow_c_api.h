@@ -49,6 +49,11 @@ DSL_WORKFLOW_API dsl_status dsl_workflow_special_function_json(
     const char* query_json, dsl_workflow_result_handle** output);
 DSL_WORKFLOW_API dsl_status dsl_workflow_koopman_spectral_json(
     const char* query_json, dsl_workflow_result_handle** output);
+/* Optional additive ABI-v4 capability; dynsyslab.lie-algebra-query/v1. */
+DSL_WORKFLOW_API dsl_status dsl_workflow_lie_algebra_json(
+    const char* query_json, dsl_workflow_result_handle** output);
+DSL_WORKFLOW_API dsl_status dsl_workflow_krom_audit_json(
+    const char* query_json, dsl_workflow_result_handle** output);
 DSL_WORKFLOW_API dsl_status dsl_workflow_observable_json(
     const char* query_json, dsl_workflow_result_handle** output);
 DSL_WORKFLOW_API dsl_status dsl_workflow_plan_json(

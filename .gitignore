@@ -65,3 +65,7 @@ native/*.egg-info/
 /restructures/
 /side_tray/
 /state.json
+
+# Outside research: published-paper references, downloaded papers and our reading notes and
+# conclusions about them. It informs the project but is not part of it, so it stays local.
+/research/

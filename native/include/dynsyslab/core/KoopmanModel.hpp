@@ -106,6 +106,10 @@ public:
 
     [[nodiscard]] std::vector<std::complex<double>> evaluate(const double* state) const;
     [[nodiscard]] std::vector<double> evaluateSplit(const double* state) const;
+    // Row-major complex mode x physical-state Jacobian. History banks require
+    // an explicit history-state provider and cannot use this instantaneous map.
+    [[nodiscard]] std::vector<std::complex<double>> stateJacobian(const double* state) const;
+    [[nodiscard]] std::vector<double> stateJacobianSplit(const double* state) const;
     [[nodiscard]] const Observable& coordinateObservable() const;
     [[nodiscard]] bool requiresExternalCoordinates() const noexcept;
     [[nodiscard]] std::vector<std::complex<double>> evaluateCoordinates(const double* coordinates) const;

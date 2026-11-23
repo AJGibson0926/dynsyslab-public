@@ -1,0 +1,146 @@
+{
+  "schema": "dynsyslab.lie-algebra-query/v1",
+  "dimension": 3,
+  "coordinate_names": [
+    "sin(x_1)",
+    "cos(x_1)",
+    "x_2"
+  ],
+  "action": "module",
+  "observables": [
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          1,
+          0,
+          0
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          0,
+          1,
+          0
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          0,
+          0,
+          1
+        ]
+      }
+    ]
+  ],
+  "operators": [
+    [
+      [
+        {
+          "coefficient": "1",
+          "powers": [
+            0,
+            1,
+            1
+          ]
+        }
+      ],
+      [
+        {
+          "coefficient": "-1",
+          "powers": [
+            1,
+            0,
+            1
+          ]
+        }
+      ],
+      [
+        {
+          "coefficient": "-196133/20000",
+          "powers": [
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "coefficient": "-1/50",
+          "powers": [
+            0,
+            0,
+            1
+          ]
+        }
+      ]
+    ],
+    [
+      [
+        {
+          "coefficient": "1",
+          "powers": [
+            0,
+            1,
+            0
+          ]
+        }
+      ],
+      [
+        {
+          "coefficient": "-1",
+          "powers": [
+            1,
+            0,
+            0
+          ]
+        }
+      ],
+      []
+    ],
+    [
+      [],
+      [],
+      [
+        {
+          "coefficient": "1",
+          "powers": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    ]
+  ],
+  "extend": true,
+  "limits": {
+    "maximum_basis": 16,
+    "maximum_degree": 12,
+    "maximum_operations": 256
+  },
+  "provenance": {
+    "case": "pendulum-trig-completion",
+    "system": "nonlinear_pendulum",
+    "source": "analytic equations; exact rational coefficients; no trajectory fit",
+    "physical_state": "x_bar=(x_1,x_2)=(angle,angular velocity); native seconds",
+    "lift": "(s,c,v)=(sin(x_1),cos(x_1),x_2); s^2+c^2=1",
+    "gravity_over_length": "196133/20000",
+    "damping_over_inertia": "1/50"
+  }
+}

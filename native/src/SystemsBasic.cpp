@@ -1,4 +1,5 @@
 #include "SystemSupport.hpp"
+#include <dynsyslab/core/OscillatorObservables.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -67,6 +68,9 @@ std::unique_ptr<ODESystem> duffing(SystemConfiguration configuration) {
             return Observable::Values{std::complex<double>(0.0,1.0)*value,
                                       -value*std::tanh(x[1])};
         }, true));
+    auto phase=phaseEnvelopeObservables("phase_sech",1,OscillatorEnvelope::sech);
+    observables.insert(observables.end(),phase.begin(),phase.end());
+    observables.push_back(gaussianSumObservable());
     const std::vector<double> controlledInitial{
         alpha > 0.0 && beta > 0.0 ? std::sqrt(alpha / beta) : 0.0, 0.0};
     return std::make_unique<FunctionalSystem>(descriptorFor("duffing"), configuration,
@@ -242,6 +246,7 @@ std::unique_ptr<ODESystem> henonHeiles(SystemConfiguration configuration) {
 }  // namespace
 
 std::unique_ptr<ODESystem> makeBasicSystem(const SystemConfiguration& configuration) {
+    if (configuration.identifier == "quadratic_triangular") return makeTriangularSystem(configuration);
     if (configuration.identifier == "harmonic_oscillator") return makeHarmonicSystem(configuration);
     if (configuration.identifier == "duffing") return duffing(configuration);
     if (configuration.identifier == "van_der_pol") return vanDerPol(configuration);

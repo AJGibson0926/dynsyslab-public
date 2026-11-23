@@ -7,6 +7,19 @@
 
 namespace dynsyslab::numerics {
 
+ComplexSchurDecomposition complexSchur(const std::vector<double>& values,std::size_t n) {
+    if(!n||values.size()!=n*n)throw std::invalid_argument("Schur matrix shape mismatch");
+    using Matrix=Eigen::Matrix<double,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor>;
+    using CM=Eigen::Matrix<std::complex<double>,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor>;
+    const Matrix a=Eigen::Map<const Matrix>(values.data(),n,n);
+    if(!a.allFinite())throw std::invalid_argument("Finite Schur matrix required");
+    // Eigen ComplexSchur: https://libeigen.gitlab.io/eigen/docs-3.4/classEigen_1_1ComplexSchur.html
+    Eigen::ComplexSchur<Matrix> solver(a);
+    if(solver.info()!=Eigen::Success)throw std::runtime_error("Complex Schur decomposition did not converge");
+    const CM u=solver.matrixU(),t=solver.matrixT();
+    return {{u.data(),u.data()+u.size()},{t.data(),t.data()+t.size()},n};
+}
+
 RealEigensystem eigensystem(const std::vector<double>& values,
                             std::size_t dimension,bool computeEigenvectors) {
     if(!dimension||values.size()!=dimension*dimension)

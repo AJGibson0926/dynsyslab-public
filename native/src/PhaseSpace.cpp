@@ -158,7 +158,7 @@ PhaseSpaceResult analyzePhaseSpace(const ODESystem &system, const PhaseSpaceOpti
         phase_detail::traceManifolds(system, result, execution);
     if (!periodic && o.periodicOrbits && system.descriptor().stateDimension > 1)
         phase_detail::findPeriodicOrbits(system, result, execution);
-    if (!periodic && o.poincareMap && !o.sectionSeeds.empty())
+    if (o.poincareMap && !o.sectionSeeds.empty())
         phase_detail::findPoincareReturns(system, result, execution);
     if (o.vectorField) {
         auto &field = result.vectorField;

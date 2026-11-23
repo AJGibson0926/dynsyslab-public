@@ -2,6 +2,7 @@
 #include "ModelBindingOptions.hpp"
 #include "BalancedTruncationSettings.hpp"
 #include "KlqeProcessCovariance.hpp"
+#include "SensorBinding.hpp"
 
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/core/ReducedOrderEstimation.hpp>
@@ -75,6 +76,7 @@ KlqeBinding bindKlqe(const json::Value& spec, const core::KoopmanModel& model, c
     if (!spec.at("measurement_observables").array().empty())
         for (const auto& name : spec.at("measurement_observables").array()) b.sensors.push_back(catalog.at(name.string()));
     else b.sensors.push_back(catalog.at(spec.at("measurement_observable").string(b.measurement)));
+    b.sensor=bindInputSensor(spec,b.sensors,catalog);
     std::size_t width = 0; for (const auto& s : b.sensors) width += s.outputDimension();
     for (const auto& v : spec.at("measurement_derivatives").array()) {
         const double k = v.number(-1);
@@ -141,7 +143,7 @@ EstimatorSetup buildEstimator(const json::Value& spec, const json::Value& solver
     const auto& design = bound.design;
     const auto& measurementName = bound.measurement;
     const auto& outputName = bound.output;
-    auto sensors = bound.sensors;
+    auto sensor = bound.sensor;
     const auto representation = spec.at("control_representation").string("none");
     struct Stream { std::unique_ptr<core::KoopmanLQEObserver> observer; Trace trace; SensorDifferentiator derivative; };
     auto streams = std::make_shared<std::vector<Stream>>(count);
@@ -155,12 +157,9 @@ EstimatorSetup buildEstimator(const json::Value& spec, const json::Value& solver
     result.kind = kind; result.sampleTime = dt;
     const bool lift = bound.liftSensors;
     const auto liftModel = std::make_shared<const core::KoopmanModel>(model);
-    result.observe = [streams, sensors, lift, liftModel](std::size_t trajectory, double time, const double* state, double previous) {
+    result.observe = [streams, sensor, lift, liftModel](std::size_t trajectory, double time, const double* state, double previous) {
         auto& s = streams->at(trajectory);
-        std::vector<double> y;
-        for (const auto& sensor : sensors) {  // the only plant access: simulate the sensor
-            const auto v = sensor.evaluateReal(state); y.insert(y.end(), v.begin(), v.end());
-        }
+        auto y = sensor->evaluate(state, previous); // sampled before the next command
         s.derivative.append(y, time);  // numerically differentiated sensor outputs
         if (lift) y = liftModel->evaluateCoordinatesSplit(y.data());  // psi of the sensor values
         const auto estimate = s.observer->observe(time, y, {previous});
@@ -182,6 +181,8 @@ EstimatorSetup buildEstimator(const json::Value& spec, const json::Value& solver
         {"estimator_model_identity", json::Value(core::koopmanModelIdentity(model))},
         {"observer_integration", json::Value("exact-zoh-previous-measurement-and-applied-input")}};
     if (!bound.reduction.isNull()) evidence["estimator_balanced_truncation"] = bound.reduction;
+    evidence["sensor_feedthrough"] = spec.at("sensor_feedthrough");
+    evidence["sensor_input_timing"] = "previous-applied-input-before-new-command";
     if (!bound.processCovariance.isNull()) evidence["estimator_process_covariance"] = bound.processCovariance;
     result.evidence = json::Value(std::move(evidence));
     return result;

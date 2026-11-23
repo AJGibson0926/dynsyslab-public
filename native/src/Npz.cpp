@@ -1,5 +1,7 @@
 #include <dynsyslab/core/LongPath.hpp>
 #include <dynsyslab/core/Archive.hpp>
+#include <dynsyslab/core/BuildInfo.hpp>
+#include <dynsyslab/core/Json.hpp>
 
 #include <archive.h>
 #include <archive_entry.h>
@@ -210,6 +212,52 @@ NpzIndex readNpzIndex(const std::filesystem::path& path) {
     archive_read_free(handle); return result;
 }
 
+// Adds the active run provenance to metadata_json; numerical arrays are never touched.
+static NpyArray withRunProvenance(const NpyArray& array) {
+    const auto& provenance = activeRunProvenance();
+    if (provenance.empty()) return array;
+    auto text = array.string();
+    const auto end = text.find_last_not_of(" \r\n\t");
+    if (end == std::string::npos || text[end] != '}' || text.front() != '{') return array;
+    if (text.find("\"run_provenance\"") != std::string::npos) {  // copied from a parent archive
+        auto metadata = json::parse(text);
+        metadata.at("run_provenance") = json::parse(provenance);
+        return NpyArray::fromString(json::dump(metadata));
+    }
+    text.resize(end);
+    if (text.find_first_not_of(" \r\n\t", 1) != std::string::npos) text += ",";
+    return NpyArray::fromString(text + "\"run_provenance\":" + provenance + "}");
+}
+
+void writeTextZip(const std::filesystem::path& path, const std::vector<std::pair<std::string, std::string>>& entries) {
+    std::filesystem::create_directories(extendedLengthPath(path.parent_path()));
+    archive* handle = archive_write_new();
+    if (!handle) throw std::runtime_error("unable to allocate archive writer");
+    archive_write_set_format_zip(handle);
+    archive_write_set_options(handle, "zip:compression=deflate");
+#ifdef _WIN32
+    const int opened = archive_write_open_filename_w(handle, path.c_str());
+#else
+    const int opened = archive_write_open_filename(handle, path.c_str());
+#endif
+    if (opened != ARCHIVE_OK) archiveError(handle, "unable to create ZIP");
+    for (const auto& [name, text] : entries) {
+        archive_entry* entry = archive_entry_new();
+        archive_entry_set_pathname(entry, name.c_str());
+        archive_entry_set_filetype(entry, AE_IFREG);
+        archive_entry_set_perm(entry, 0644);
+        archive_entry_set_size(entry, static_cast<la_int64_t>(text.size()));
+        archive_entry_set_mtime(entry, 315532800, 0);  // 1980-01-01, the ZIP epoch
+        if (archive_write_header(handle, entry) != ARCHIVE_OK
+            || archive_write_data(handle, text.data(), text.size()) < 0) {
+            archive_entry_free(entry); archiveError(handle, "unable to write ZIP entry");
+        }
+        archive_entry_free(entry);
+    }
+    archive_write_close(handle);
+    archive_write_free(handle);
+}
+
 static void writeNpzAtomicImpl(const std::filesystem::path& path, const NpzRecord& record, bool replaceExisting) {
     std::filesystem::create_directories(extendedLengthPath(path.parent_path()));
     const auto token = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -227,7 +275,7 @@ static void writeNpzAtomicImpl(const std::filesystem::path& path, const NpzRecor
     if (opened != ARCHIVE_OK) archiveError(handle, "unable to create NPZ archive");
     try {
         for (const auto& [name, array] : record.arrays) {
-            const auto bytes = encodeNpy(array);
+            const auto bytes = encodeNpy(name == "metadata_json" ? withRunProvenance(array) : array);
             archive_entry* entry = archive_entry_new();
             archive_entry_set_pathname(entry, (name + ".npy").c_str());
             archive_entry_set_filetype(entry, AE_IFREG);

@@ -1,0 +1,103 @@
+{
+  "schema": "dynsyslab.lie-algebra-query/v1",
+  "dimension": 2,
+  "coordinate_names": [
+    "x_1",
+    "x_2"
+  ],
+  "action": "defect",
+  "observables": [
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          0,
+          0
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          1,
+          0
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          2,
+          0
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          0,
+          1
+        ]
+      },
+      {
+        "coefficient": "-1",
+        "powers": [
+          2,
+          0
+        ]
+      }
+    ]
+  ],
+  "field": [
+    [
+      {
+        "coefficient": "-1",
+        "powers": [
+          1,
+          0
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "-3",
+        "powers": [
+          0,
+          1
+        ]
+      },
+      {
+        "coefficient": "1",
+        "powers": [
+          2,
+          0
+        ]
+      }
+    ]
+  ],
+  "matrix": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-99/100",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-2",
+    "0",
+    "0",
+    "0",
+    "0",
+    "-3"
+  ],
+  "provenance": {
+    "case": "triangular-perturbed-drift",
+    "source": "analytic equations; exact rational coefficients; no trajectory fit"
+  }
+}

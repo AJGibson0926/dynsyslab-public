@@ -9,7 +9,8 @@ namespace {
 namespace j=dynsyslab::core::json;
 constexpr wchar_t windowClass[]=L"DynSysLabSpectralKoopman";
 const std::vector<std::string> methods{"resdmd","edmd","mpedmd","hermitian_dmd","tlsdmd","multdmd","stochastic_resdmd","specrkhs"};
-const std::vector<std::string> dictionaries{"linear","polynomial","gaussian","partition"};
+const std::vector<std::string> dictionaries{"linear","polynomial","chebyshev","laguerre","hermite","fourier_hermite",
+    "gaussian","laplacian","lorentzian","matern","partition"};
 struct State {
     HWND window{},method{},dictionary{},rank{},degree{},centers{},bandwidth{},normalize{},constant{},invariant{},hermitian{},advanced{};
     const theme::Fonts* fonts{};std::string current;std::optional<std::string> output;
@@ -38,11 +39,11 @@ void create(State& s) {
     s.dictionary=combo(s,L"Dictionary",dictionaries,d.at("kind").string("linear"),346,16,270);
     auto shown=[](const j::Value& v,const char* fallback){return v.isNull()?std::string(fallback):j::dump(v);};
     s.rank=field(s,L"Rank (0 = numerical rank)",shown(settings.at("rank"),"0"),18,82,192);
-    s.degree=field(s,L"Polynomial degree",shown(d.at("degree"),"2"),222,82,192);
-    s.centers=field(s,L"Gaussian / partition centers",shown(d.at("centers"),"32"),426,82,190);
-    s.bandwidth=field(s,L"Gaussian bandwidth",shown(d.at("bandwidth"),"1"),18,146,192);
+    s.degree=field(s,L"Basis degree",shown(d.at("degree"),"2"),222,82,192);
+    s.centers=field(s,L"Radial / partition centers",shown(d.at("centers"),"32"),426,82,190);
+    s.bandwidth=field(s,L"Radial bandwidth",shown(d.at("bandwidth"),"1"),18,146,192);
     s.normalize=makeCheck(s.window,0,L"Normalize training coordinates",s.fonts->body,d.at("normalize").boolean());place(s,s.normalize,222,165,270,28);
-    s.constant=makeCheck(s.window,0,L"Include constant",s.fonts->body,d.at("constant").boolean(true));place(s,s.constant,426,199,190,28);
+    s.constant=makeCheck(s.window,0,L"Include zero-order term",s.fonts->body,d.at("constant").boolean(true));place(s,s.constant,426,199,190,28);
     s.invariant=makeCheck(s.window,0,L"mpEDMD: assume invariant measure and measure-preserving dynamics",s.fonts->body,settings.at("assume_measure_preserving").boolean());place(s,s.invariant,18,238,600,28);
     s.hermitian=makeCheck(s.window,0,L"Hermitian DMD: assume a self-adjoint Koopman operator",s.fonts->body,settings.at("assume_self_adjoint").boolean());place(s,s.hermitian,18,272,600,28);
     label(s,L"Additional settings: observables, Hankel window, weights, residual grid, measures",18,314,600);

@@ -92,4 +92,9 @@ The standalone matrix archive also carries `time` for every X column and `succes
 
 ## Code ownership
 
+The [oscillator observable catalog](OSCILLATOR_OBSERVABLES_DICTIONARIES.md) adds
+Colbrook-example phase/sech and phase/Gaussian observables. Use their named real
+and imaginary components as channels; taps and derivatives follow this same
+contract. No separate Hankel implementation is needed for these measurements.
+
 The system and observable catalog own derivative relationships. [ObservableDerivative.hpp](../../native/include/dynsyslab/core/ObservableDerivative.hpp) resolves their scientific meaning. [Hankel.hpp](../../native/include/dynsyslab/core/Hankel.hpp) builds a window or a shifted pair from sampled measurements without file or UI dependencies. Spectral DMD and POD consume that matrix through [Spectral.hpp](../../native/include/dynsyslab/core/Spectral.hpp) and [PCA.hpp](../../native/include/dynsyslab/core/PCA.hpp). The workflow evaluates channels, supplies the acquisition clock, and publishes matrices and decompositions through the archive API. The workbench edits the same JSON contract.

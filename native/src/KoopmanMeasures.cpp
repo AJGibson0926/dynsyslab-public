@@ -1,6 +1,8 @@
 #include "KoopmanSpectralInternal.hpp"
 #include <dynsyslab/numerics/LeastSquares.hpp>
+#include <dynsyslab/numerics/Eigensystem.hpp>
 #include <dynsyslab/core/FileDigest.hpp>
+#include <dynsyslab/math/SpectralFilters.hpp>
 namespace dynsyslab::core {
 namespace {
 constexpr double pi=3.14159265358979323846;
@@ -45,12 +47,9 @@ void riggedSpectralMeasure(SpectralKROM& model,const std::vector<double>& g,
     double error=0,norm=0;
     for(std::size_t i=0;i<n;++i){error+=std::pow(projected[i]-g[i],2);norm+=g[i]*g[i];}
     if(error>1e-16*std::max(norm,1e-300))throw std::invalid_argument("Observable is outside retained dictionary subspace; project it explicitly first");
-    std::vector<Complex> poles(order),vandermonde(order*order),rhs(order),c(realC.begin(),realC.end());
-    for(std::size_t j=0;j<order;++j) {
-        poles[j]=Complex(2.*(j+1)/(order+1)-1,1);
-        for(std::size_t k=0;k<order;++k)vandermonde[k*order+j]=std::pow(poles[j],double(k));
-    }
-    rhs[0]=1;const auto residues=numerics::solveLeastSquares(vandermonde,order,order,rhs,1);
+    const math::RationalCircleKernel kernel(epsilon,order);
+    const auto& poles=kernel.poles();const auto& residues=kernel.residues();
+    std::vector<Complex> c(realC.begin(),realC.end());
     SpectralMeasure measure;measure.name=name;measure.method="rigged-resolvent";measure.grid=angles;
     measure.bandwidth=epsilon;measure.order=order;
     measure.assumptions="Regularized spectral measure of the finite unitary compression. Infinite-dimensional convergence additionally requires consistent invariant quadrature, dictionary limits, and smoothing limits. Higher-order kernels need not be positive.";
@@ -58,13 +57,27 @@ void riggedSpectralMeasure(SpectralKROM& model,const std::vector<double>& g,
     SpectralWavePackets packets;packets.observable=name;packets.grid=angles;packets.features=n;
     packets.dictionaryIdentity=sha256Text(json::dump(spectralDictionaryJson(model.dictionary)));
     packets.bandwidth=epsilon;packets.order=order;packets.assumptions=measure.assumptions;
+    // Reuse one Schur factorization for every pole/angle (no diagonal
+    // approximation). This preserves repeated eigenvalues and avoids a dense
+    // QR factorization for each resolvent. Colbrook/Drysdale/Horning (2024),
+    // https://arxiv.org/abs/2405.00782; standard unitary Schur similarity.
+    const auto schur=numerics::complexSchur(model.action,r);
+    const auto& u=schur.unitary;const auto& t=schur.triangular;
+    std::vector<Complex> cs(r),tc(r),bu(n*r);
+    for(std::size_t i=0;i<r;++i)for(std::size_t j=0;j<r;++j)cs[i]+=std::conj(u[j*r+i])*c[j];
+    for(std::size_t i=0;i<r;++i)for(std::size_t j=i;j<r;++j)tc[i]+=t[i*r+j]*cs[j];
+    for(std::size_t i=0;i<n;++i)for(std::size_t k=0;k<r;++k)for(std::size_t j=0;j<r;++j)
+        bu[i*r+j]+=model.basis[i*r+k]*u[k*r+j];
     const auto resolvent=[&](Complex z) {
-        std::vector<Complex> a(r*r),b(r);
-        for(std::size_t i=0;i<r;++i)for(std::size_t j=0;j<r;++j) {
-            a[i*r+j]=model.action[i*r+j]-(i==j?z:Complex{});
-            b[i]+=(model.action[i*r+j]+(i==j?z:Complex{}))*c[j];
+        std::vector<Complex> b(r);
+        for(std::size_t i=r;i-- >0;) {
+            b[i]=tc[i]+z*cs[i];
+            for(std::size_t j=i+1;j<r;++j)b[i]-=t[i*r+j]*b[j];
+            b[i]/=t[i*r+i]-z;
+            if(!std::isfinite(b[i].real())||!std::isfinite(b[i].imag()))
+                throw std::runtime_error("Singular/nonfinite spectral resolvent");
         }
-        return numerics::solveLeastSquares(a,r,r,b,1);
+        return b;
     };
     for(double theta:angles) {
         std::vector<Complex> packet(r);double density=0;
@@ -73,13 +86,13 @@ void riggedSpectralMeasure(SpectralKROM& model,const std::vector<double>& g,
             const auto minus=resolvent(std::exp(Complex(0,theta)-Complex(0,epsilon)*std::conj(poles[j])));
             Complex inner{};
             for(std::size_t k=0;k<r;++k) {
-                inner+=std::conj(c[k])*plus[k];
+                inner+=std::conj(cs[k])*plus[k];
                 packet[k]-=(residues[j]*plus[k]-std::conj(residues[j])*minus[k])/(4*pi);
             }
             density-=std::real(residues[j]*inner)/(2*pi);
         }
         measure.density.push_back(density);
-        for(std::size_t i=0;i<n;++i){Complex value{};for(std::size_t k=0;k<r;++k)value+=model.basis[i*r+k]*packet[k];packets.coefficients.push_back(value);}
+        for(std::size_t i=0;i<n;++i){Complex value{};for(std::size_t k=0;k<r;++k)value+=bu[i*r+k]*packet[k];packets.coefficients.push_back(value);}
     }
     model.spectral.measures.push_back(std::move(measure));model.spectral.wavePackets.push_back(std::move(packets));
 }

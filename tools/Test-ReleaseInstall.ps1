@@ -152,6 +152,16 @@ foreach ($file in Get-ChildItem -LiteralPath $examplesRoot -Recurse -Filter *.js
 }
 Write-Host "Fresh install: $planned compute jobs validated and planned; $ran examples run from an empty archive folder."
 if (Select-String -Quiet -LiteralPath (Join-Path $sandbox '.claude\settings.json') -SimpleMatch 'hub --hook') { throw 'agent-setup --remove left the hook.' }
+# Tracked data packs validate and plan under the release they pin (no pack is run here).
+$packRoot = Join-Path $sourceRoot 'data-packs'
+if (Test-Path -LiteralPath $packRoot) {
+    foreach ($pack in Get-ChildItem -LiteralPath $packRoot -Directory) {
+        foreach ($action in @('validate', 'plan')) {
+            & $cli datapack $action $pack.FullName | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Data pack $action failed: $($pack.Name)" }
+        }
+    }
+}
 $example = Join-Path $install 'resources\examples\duffing-free-solve.json'
 $resultText = & $cli run $example --archive-root (Join-Path $data 'archives')
 if ($LASTEXITCODE -ne 0) { throw 'Installed example solve failed.' }

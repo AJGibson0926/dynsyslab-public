@@ -145,3 +145,28 @@ unchanged.
 
 Legacy campaign bifurcation plots remain independent parameter-response
 sweeps. They are not silently relabeled as continuation branches.
+
+## Arbitrary forcing-section derivatives and periodic cocycles
+
+Method version 5 accepts `section_seeds` in periodic-forcing context as well as
+the existing autonomous context. The former calls `stroboscopicReturn` and
+returns the full fixed-time derivative without projecting away a flow direction.
+It can evaluate neighborhoods of a periodic orbit without shooting every seed
+back onto that orbit. See [the periodic contract](PERIODIC_PHASE_CONTEXT.md).
+
+The mathematics operations `cycle_cocycle` and `cycle_partition_geometry` consume
+these results without owning ODE integrations or archives. The thin client
+`dynsyslab_client.cyclic_dynamics.fit_cyclic_state_pair_models` can instead obtain
+local matrices from centered physical state-pair data through the existing
+native ResDMD fitter. Phase assignment and base-state centering are explicit
+caller inputs. The local models use a full-rank linear dictionary without a
+constant or normalization. Physical matrix columns are obtained through native
+coordinate rollouts, not by assuming a transpose or normalization for the
+internal Koopman matrix. Inadequate independent directions are rejected.
+These are local approximations; fitting only the points on a settled orbit
+does not identify transverse derivatives.
+
+`viewer.cocycle_analysis` presents supplied branch multipliers, perturbation
+rollouts, truncation diagnostics and finite residue-partition geometry. It
+contains no fitting or integration. Public examples and documentation contain
+generic contracts; private experiments and derived reports stay outside Git.

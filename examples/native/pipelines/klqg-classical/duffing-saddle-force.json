@@ -1,0 +1,246 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "pipeline",
+  "label": "klqg-duffing-saddle-force",
+  "description": "KLQG (KLQE -> KLQR) on the Duffing double well x'' = -0.2 x' + x - x^3 + u: stabilize the saddle x = 0 from the intrinsic force sensor alone. A random-pulse identification run -> EDMDc restricted to the saddle neighbourhood ('window') and exported as a K-ROM -> principal eigenfunctions of the target (mode rule 'principal') with state/sensor readouts anchored at the target (no intercept) -> constant B_psi regressed on the same window -> KLQE on the sensor, KLQR on the estimate. Try --param sensor=potential_energy (an even sensor: unobservable sign, fails) or --param degree=3.",
+  "reuse_identical_stages": true,
+  "parameters": {
+    "system": {
+      "name": "duffing",
+      "parameters": {
+        "delta": 0.2,
+        "alpha": 1.0,
+        "beta": 1.0,
+        "input_gain": 1.0
+      }
+    },
+    "sensor": "force",
+    "degree": 1,
+    "window": [
+      [
+        -0.75,
+        0.75
+      ],
+      [
+        -0.5,
+        0.5
+      ]
+    ],
+    "ic": [
+      [
+        0.4,
+        0.2
+      ],
+      [
+        -0.5,
+        0.1
+      ],
+      [
+        0.2,
+        -0.4
+      ],
+      [
+        -0.3,
+        -0.3
+      ]
+    ],
+    "modes": 2,
+    "Q": 1.0,
+    "B_psi": {
+      "representation": "constant",
+      "fit": "controlled_residual",
+      "state_window": "${params.window}"
+    },
+    "krom_rule": {
+      "rule": "principal",
+      "target_state": [
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "stages": [
+    {
+      "id": "forced",
+      "job": {
+        "kind": "solve",
+        "system": "${params.system}",
+        "time": {
+          "start": 0,
+          "stop": 60,
+          "output_step": 0.02,
+          "coordinate_system": "dimensionless"
+        },
+        "initial_conditions": {
+          "mode": "explicit",
+          "count": 1,
+          "clusters": 1,
+          "seed": 0,
+          "values": [
+            [
+              0.05,
+              0.0
+            ]
+          ],
+          "ranges": []
+        },
+        "controller": {
+          "kind": "random_pulse",
+          "settings": {
+            "model_amplitude": 0.5,
+            "model_pulse_duration": 0.3,
+            "seed": 7
+          }
+        },
+        "solver": {
+          "method": "RK45",
+          "rtol": 1e-10,
+          "atol": 1e-10,
+          "max_step": 0.005
+        },
+        "archive": {
+          "enabled": true,
+          "data_role": "control_identification"
+        }
+      }
+    },
+    {
+      "id": "edmdc",
+      "job": {
+        "kind": "postprocess",
+        "sources": [
+          "${forced.archive}"
+        ],
+        "methods": [
+          {
+            "name": "edmdc",
+            "settings": {
+              "polynomial_degree": "${params.degree}",
+              "include_constant": false,
+              "state_window": "${params.window}",
+              "export_krom": true,
+              "normalize": false
+            }
+          }
+        ],
+        "archive": {
+          "enabled": true
+        }
+      }
+    },
+    {
+      "id": "krom",
+      "job": {
+        "kind": "postprocess",
+        "sources": [
+          "${edmdc.archive}"
+        ],
+        "methods": [
+          {
+            "name": "krom_extract",
+            "settings": {
+              "mode_selection": "${params.krom_rule}",
+              "refit_reconstructions": {
+                "observables": [
+                  "state",
+                  "${params.sensor}"
+                ],
+                "intercept": false,
+                "ridge": 1e-10
+              }
+            }
+          }
+        ],
+        "archive": {
+          "enabled": true
+        }
+      }
+    },
+    {
+      "id": "input_map",
+      "job": {
+        "kind": "postprocess",
+        "sources": [
+          "${forced.archive}"
+        ],
+        "methods": [
+          {
+            "name": "input_map",
+            "settings": {
+              "krom": "${krom.archive}",
+              "map": "${params.B_psi}"
+            }
+          }
+        ],
+        "archive": {
+          "enabled": true
+        }
+      }
+    },
+    {
+      "id": "control",
+      "job": {
+        "kind": "solve",
+        "system": "${params.system}",
+        "time": {
+          "start": 0,
+          "stop": 15,
+          "output_step": 0.02,
+          "coordinate_system": "dimensionless"
+        },
+        "initial_conditions": {
+          "mode": "explicit",
+          "count": 4,
+          "clusters": 1,
+          "seed": 0,
+          "values": "${params.ic}",
+          "ranges": []
+        },
+        "controller": {
+          "kind": "klqr",
+          "settings": {
+            "krom": "${input_map.archive}",
+            "control_representation": "${params.B_psi.representation}",
+            "feedback": "estimate",
+            "Q": "${params.Q}",
+            "R": 0.1
+          },
+          "target": {
+            "kind": "constant",
+            "space": "state",
+            "state": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "estimator": {
+          "kind": "klqe",
+          "krom": "${input_map.archive}",
+          "measurement": "${params.sensor}",
+          "measurement_observables": [
+            "${params.sensor}"
+          ],
+          "output": "state",
+          "process_covariance": 0.001,
+          "measurement_covariance": 0.0001,
+          "initial_estimate": "zero",
+          "control_representation": "${params.B_psi.representation}",
+          "sample_time": 0.02
+        },
+        "solver": {
+          "method": "RK45",
+          "rtol": 1e-09,
+          "atol": 1e-09,
+          "max_step": 0.005,
+          "control_evaluation": "sampled",
+          "control_sample_time": 0.02
+        },
+        "archive": {
+          "enabled": true,
+          "data_role": "koopman_control_study"
+        }
+      }
+    }
+  ]
+}

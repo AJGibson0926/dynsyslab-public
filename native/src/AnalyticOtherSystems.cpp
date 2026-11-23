@@ -27,6 +27,7 @@ AnalyticTrajectory affine(std::vector<double> a, AnalyticState b, const Analytic
 std::vector<AnalyticSolutionFamily> otherAnalyticSolutions(const SystemDescriptor &d,
                                                            const SystemConfiguration &c) {
     if (d.identifier == "double_pendulum") return doublePendulumAnalyticSolutions(c);
+    if (d.identifier == "quadratic_triangular") return triangularAnalyticSolutions(c);
     std::vector<AnalyticSolutionFamily> result;
     if (d.identifier == "lorenz") {
         result.push_back(family(

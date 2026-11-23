@@ -32,8 +32,10 @@ FunctionalSystem::FunctionalSystem(SystemDescriptor descriptor, SystemConfigurat
     analyticSolutions_ = oscillatorAnalyticSolutions(configuration_);
     auto bubble = rpeAnalyticSolutions(configuration_);
     auto other = otherAnalyticSolutions(descriptor_, configuration_);
+    auto integrable = integrableAnalyticSolutions(configuration_);
     analyticSolutions_.insert(analyticSolutions_.end(), bubble.begin(), bubble.end());
     analyticSolutions_.insert(analyticSolutions_.end(), other.begin(), other.end());
+    analyticSolutions_.insert(analyticSolutions_.end(), integrable.begin(), integrable.end());
     for (auto& family : analyticSolutions_) {
         auto instantiate = family.instantiate;
         auto dimension = descriptor_.stateDimension;

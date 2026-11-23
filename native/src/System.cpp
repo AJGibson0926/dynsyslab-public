@@ -124,6 +124,22 @@ const std::vector<SystemDescriptor>& systemCatalog() {
          {"gibson_undamped_vdp_tracking_2022", "Undamped tracking benchmark"},
          {"gibson_damped_stabilization_2022", "Damped stabilization benchmark"},
          {"korda_mezic_optimal_2020", "Koopman MPC benchmark"}}},
+        {"triple_well_duffing", "Triple-well Duffing", 2, "dimensionless", {"position", "velocity"},
+         {"x_1", "x_2 = dx_1/dt"}, {{"conservative_chain", "Conservative three-well chain"},
+         {"left_libration", "Left well"}, {"right_libration", "Right well"},
+         {"exterior_orbit", "Exterior orbit"}, {"equal_depth_wells", "Equal-depth wells"}}},
+        {"three_leaf_hamiltonian_clover", "Three-leaf Hamiltonian clover", 2, "dimensionless",
+         {"x_1", "x_2"}, {"x_1", "x_2"}, {{"right_leaf", "Right leaf"},
+         {"upper_left_leaf", "Upper-left leaf"}, {"lower_left_leaf", "Lower-left leaf"},
+         {"exterior_orbit", "Exterior orbit"}, {"separatrix", "Homoclinic petal"}}},
+        {"morse_oscillator", "Morse oscillator", 2, "dimensionless", {"position","momentum"}, {"q","p"}, {{"regular_bounded","Bound Morse orbit"}}},
+        {"isotonic_oscillator", "Isotonic oscillator", 2, "dimensionless", {"position","momentum"}, {"q","p"}, {{"regular_bounded","Positive isochronous orbit"}}},
+        {"poschl_teller", "Attractive Poeschl-Teller oscillator", 2, "dimensionless", {"position","momentum"}, {"q","p"}, {{"regular_bounded","Bound hyperbolic potential orbit"}}},
+        {"cosh_oscillator", "Cosh oscillator (Toda relative coordinate)", 2, "dimensionless", {"position","momentum"}, {"q","p"}, {{"regular_bounded","Bound elliptic orbit"}}},
+        {"radial_twist", "Hamiltonian radial twist oscillator", 2, "dimensionless", {"position","momentum"}, {"q","p"}, {{"regular_bounded","Amplitude-dependent rotation"}}},
+        {"kepler_planar", "Planar Kepler problem", 4, "dimensionless", {"q_1","q_2","p_1","p_2"}, {"q_1","q_2","p_1","p_2"}, {{"regular_bounded","Bound noncollision ellipse"}}},
+        {"euler_top", "Free Euler top", 3, "dimensionless", {"M_1","M_2","M_3"}, {"M_1","M_2","M_3"}, {{"regular_bounded","Regular momentum orbit"}}},
+        {"coupled_duffing_hamiltonian", "Coupled Hamiltonian Duffing pair", 4, "dimensionless", {"q_1","q_2","p_1","p_2"}, {"q_1","q_2","p_1","p_2"}, {{"regular_bounded","Separable pair at zero coupling"}}},
         {"marmottant", "Marmottant", 2, "dimensionless", {"radius", "radial_velocity"},
          {"r", "dr/dtau"}, {{"matlab_cleanup_linear", "Cleanup-suite linear shell"},
          {"matlab_cleanup_long", "Cleanup-suite long response"}}},
@@ -165,6 +181,9 @@ const std::vector<SystemDescriptor>& systemCatalog() {
          {"tonic_firing_10", "Tonic firing at input 10"}}},
         {"fput", "FPUT", 32, "dimensional", {}, {}, {{"alpha_fput_32", "Alpha FPUT"},
          {"beta_fput_32", "Beta FPUT"}}},
+        {"toda_lattice", "Toda lattice", 6, "dimensionless",
+         {"q_1","q_2","q_3","p_1","p_2","p_3"}, {"q_1","q_2","q_3","p_1","p_2","p_3"},
+         {{"periodic","Periodic chain"},{"open","Open chain"}}},
         {"kuramoto", "Kuramoto", 16, "dimensional", {}, {}, {{"weak_coupling", "Weak coupling"},
          {"synchronizing", "Synchronizing coupling"}}},
         {"nonlinear_pendulum", "Nonlinear pendulum", 2, "dimensional", {"angle", "velocity"},
@@ -181,10 +200,21 @@ const std::vector<SystemDescriptor>& systemCatalog() {
          {{"symmetric_weak_coupling", "Symmetric weak coupling"},
          {"strong_nonlinear_coupling", "Strong nonlinear coupling"},
          {"detuned_energy_exchange", "Detuned energy exchange"}}},
+        {"quadratic_triangular", "Quadratic triangular Koopman benchmark", 2, "dimensionless",
+         {"x_1", "x_2"}, {"x_1", "x_2"},
+         {{"gradient_closed_reference", "Exact gradient closure: a=-1, b=-3, c=1"},
+          {"brunton_2016", "Brunton quadratic example: a=-0.05, b=-1, c=1"},
+          {"kaiser_2021", "Kaiser quadratic example: a=-0.1, b=-1, c=1"},
+          {"infinite_closure_saddle", "Nonlinear saddle with an infinite derivative extension"}}},
         };
         for (auto& descriptor : catalog) {
             auto& rates=descriptor.observableTimeDerivatives;
             const auto& id=descriptor.identifier;
+            if (id=="quadratic_triangular") {
+                rates["x_1"]={"x_1_dot",true};
+                rates["x_2"]={"x_2_dot",true};
+                rates["eta"]={"eta_dot",true};
+            }
             if (id=="harmonic_oscillator" || id=="duffing" || id=="van_der_pol")
                 rates["position"]={"velocity",false};
             if (id=="nonlinear_pendulum") rates["angle"]={"velocity",false};
@@ -193,6 +223,18 @@ const std::vector<SystemDescriptor>& systemCatalog() {
                 rates["state_2"]={"state_3",false};
             }
             if (id=="duffing") rates["velocity"]={"force",true};
+            if (id=="triple_well_duffing") {
+                rates["position"]={"velocity",false};
+                rates["velocity"]={"force",true};
+                rates["total_energy"]={"energy_dot",true};
+                rates["position_squared"]={"position_squared_dot",false};
+            }
+            if (id=="three_leaf_hamiltonian_clover") {
+                rates["x_1"]={"x_1_dot",false};
+                rates["x_2"]={"x_2_dot",true};
+                rates["total_energy"]={"energy_dot",true};
+                rates["radius_squared"]={"radius_squared_dot",true};
+            }
             if (id=="rpe" || id=="marmottant" || id=="reddy_szeri")
                 rates["radius"]={"radial_velocity",false};
             if (id=="rpe") {
@@ -252,7 +294,7 @@ std::unique_ptr<ODESystem> createSystem(const SystemConfiguration& configuration
     if (resolved.equationsVersion.empty())
         resolved.equationsVersion = "dynsyslab." + resolved.identifier + "/1";
     using Factory = std::unique_ptr<ODESystem> (*)(const SystemConfiguration&);
-    for (const Factory factory : {detail::makeBasicSystem, detail::makeMechanicalSystem,
+    for (const Factory factory : {detail::makeBasicSystem, detail::makeMultiwellSystem, detail::makeIntegrableSystem, detail::makeTodaSystem, detail::makeMechanicalSystem,
                                   detail::makeBiologicalSystem, detail::makeBubbleSystem}) {
         if (auto system = factory(resolved)) return system;
     }

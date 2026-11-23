@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(dynsyslab_workflow VERSION 0.7.0 LANGUAGES CXX)
+project(dynsyslab_workflow VERSION 0.8.0 LANGUAGES CXX)
 
 if(MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
@@ -20,7 +20,7 @@ add_library(dynsyslab_workflow SHARED
   src/Run.cpp src/Plan.cpp src/SystemResolution.cpp src/SolveDispatch.cpp src/SolveSet.cpp src/Solve.cpp src/InitialConditions.cpp src/ControlFactory.cpp src/ControlTargets.cpp src/PrescribedControl.cpp src/DelaySolve.cpp src/LatticeSolve.cpp src/PDESolve.cpp src/Hierarchy.cpp src/Campaign.cpp src/Pipeline.cpp src/Postprocess.cpp
   src/WorkflowSupport.cpp src/WorkflowExtensions.cpp src/PostprocessSupport.cpp
   src/SourceCoordinates.cpp src/ObservableQuery.cpp src/CoordinateClosureQuery.cpp
-  src/AnalyticQuery.cpp src/AnalyticArchive.cpp
+  src/AnalyticQuery.cpp src/AnalyticHistoryQuery.cpp src/TorusQuery.cpp src/PeriodicQuery.cpp src/PeriodicControlQuery.cpp src/PeriodicSnapshotQuery.cpp src/PeriodicSpectralQuery.cpp src/AnalyticArchive.cpp src/LieAlgebraQuery.cpp src/KromAuditQuery.cpp src/KromTrajectoryAudit.cpp
   src/PhaseSpaceQuery.cpp src/PhaseSpaceSerialization.cpp src/PhaseForcingConfiguration.cpp
   src/KnowledgeSerialization.cpp src/ResearchCatalogue.cpp
   src/LinearAnalysisPostprocess.cpp src/LinearSystemsPostprocess.cpp src/LinearSystemsClassical.cpp src/EmpiricalObservabilityPostprocess.cpp src/ReconstructionPostprocess.cpp src/HankelAnalysis.cpp src/HankelArchive.cpp src/HdmdPostprocess.cpp src/DmdPostprocess.cpp src/DmdControlPostprocess.cpp
@@ -31,15 +31,20 @@ add_library(dynsyslab_workflow SHARED
   src/CoordinateTransformPostprocess.cpp src/CoordinateChannels.cpp src/CoordinateChangeKinds.cpp src/CoordinateDiagnostics.cpp src/CoordinateInverse.cpp src/HankelShorthand.cpp src/SindyDynamicsPostprocess.cpp
   src/PcaPostprocess.cpp src/KromPostprocess.cpp src/KromEvidence.cpp
   src/KoopmanSpectralQuery.cpp src/KoopmanSpectralPostprocess.cpp)
-target_sources(dynsyslab_workflow PRIVATE src/KromValidationPostprocess.cpp
+target_sources(dynsyslab_workflow PRIVATE src/KromValidationPostprocess.cpp src/PeriodicIdentificationQuery.cpp src/PeriodicFeatureQuery.cpp src/PeriodicFeedback.cpp
   src/KoopmanFeedback.cpp src/EstimatedControl.cpp src/EstimatorFactory.cpp src/KlqeProcessCovariance.cpp
+  src/HeldInputRecords.cpp src/BilinearCertificatePostprocess.cpp src/BilinearCertificateBinding.cpp
   src/KromDatasetSupport.cpp src/KromValidationPlan.cpp
+  src/JobGroup.cpp src/JobGroupGraph.cpp src/ArchiveDigest.cpp src/PngCompare.cpp src/ViewerFigureJob.cpp
+  src/DataPack.cpp src/DataPackLineage.cpp
+  src/KromEditing.cpp src/ReferenceSignal.cpp src/ControlScore.cpp src/FigureDataset.cpp
   src/BoundaryPostprocess.cpp src/EigenvalueOptimizationPostprocess.cpp)
 target_include_directories(dynsyslab_workflow PUBLIC include)
 target_link_libraries(dynsyslab_workflow PUBLIC dynsyslab_core dynsyslab_delay
-  dynsyslab_lattice dynsyslab_pde PRIVATE dynsyslab_operations)
+  dynsyslab_lattice dynsyslab_pde PRIVATE dynsyslab_operations dynsyslab_lie dynsyslab_math)
 target_compile_features(dynsyslab_workflow PUBLIC cxx_std_17)
 if(WIN32)
+  target_link_libraries(dynsyslab_workflow PRIVATE windowscodecs ole32)
   set_target_properties(dynsyslab_workflow PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
   target_compile_definitions(dynsyslab_workflow PUBLIC WIN32_LEAN_AND_MEAN NOMINMAX)
 endif()
@@ -64,6 +69,11 @@ else()
 endif()
 
 if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
+  add_executable(dynsyslab_lie_query_tests tests/lie_query_tests.cpp)
+  target_link_libraries(dynsyslab_lie_query_tests PRIVATE dynsyslab_workflow dynsyslab_workflow_c_api)
+  get_filename_component(_dsl_lie_examples "${CMAKE_CURRENT_SOURCE_DIR}/../../examples/native/lie-algebra" ABSOLUTE)
+  target_compile_definitions(dynsyslab_lie_query_tests PRIVATE DYNSYSLAB_LIE_EXAMPLES="${_dsl_lie_examples}")
+  add_test(NAME dynsyslab_lie_query_tests COMMAND dynsyslab_lie_query_tests)
   add_executable(dynsyslab_sindy_dynamics_tests tests/sindy_dynamics_tests.cpp)
   target_link_libraries(dynsyslab_sindy_dynamics_tests PRIVATE dynsyslab_workflow dynsyslab_operations)
   add_test(NAME dynsyslab_sindy_dynamics_tests COMMAND dynsyslab_sindy_dynamics_tests)
@@ -82,6 +92,9 @@ if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
   add_executable(dynsyslab_research_catalogue_tests tests/research_catalogue_tests.cpp)
   target_link_libraries(dynsyslab_research_catalogue_tests PRIVATE dynsyslab_workflow)
   add_test(NAME dynsyslab_research_catalogue_tests COMMAND dynsyslab_research_catalogue_tests)
+  add_executable(dynsyslab_job_group_tests tests/job_group_tests.cpp)
+  target_link_libraries(dynsyslab_job_group_tests PRIVATE dynsyslab_workflow)
+  add_test(NAME dynsyslab_job_group_tests COMMAND dynsyslab_job_group_tests)
   add_executable(dynsyslab_hankel_observables_tests tests/hankel_observables_tests.cpp)
   target_link_libraries(dynsyslab_hankel_observables_tests PRIVATE dynsyslab_workflow)
   add_test(NAME dynsyslab_hankel_observables_tests COMMAND dynsyslab_hankel_observables_tests)
@@ -166,6 +179,11 @@ if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
     COMMAND dynsyslab_empirical_observability_postprocess_tests)
   set_tests_properties(dynsyslab_empirical_observability_postprocess_tests PROPERTIES
     LABELS "native;workflow;postprocess;linear-systems")
+  add_executable(dynsyslab_bilinear_certificate_tests tests/bilinear_certificate_tests.cpp)
+  target_link_libraries(dynsyslab_bilinear_certificate_tests PRIVATE dynsyslab_workflow dynsyslab_numerics)
+  add_test(NAME dynsyslab_bilinear_certificate_tests COMMAND dynsyslab_bilinear_certificate_tests)
+  set_tests_properties(dynsyslab_bilinear_certificate_tests PROPERTIES
+    LABELS "native;workflow;postprocess;krom;control")
   add_executable(dynsyslab_mode_selection_tests tests/mode_selection_tests.cpp)
   target_link_libraries(dynsyslab_mode_selection_tests PRIVATE dynsyslab_workflow)
   add_test(NAME dynsyslab_mode_selection_tests COMMAND dynsyslab_mode_selection_tests)
@@ -220,3 +238,9 @@ install(TARGETS dynsyslab_workflow dynsyslab_workflow_c_api dynsyslab_queue
   ARCHIVE DESTINATION lib LIBRARY DESTINATION bin
   RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
+
+if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
+  add_executable(dynsyslab_krom_audit_query_tests tests/krom_audit_query_tests.cpp)
+  target_link_libraries(dynsyslab_krom_audit_query_tests PRIVATE dynsyslab_workflow dynsyslab_workflow_c_api)
+  add_test(NAME dynsyslab_krom_audit_query_tests COMMAND dynsyslab_krom_audit_query_tests)
+endif()

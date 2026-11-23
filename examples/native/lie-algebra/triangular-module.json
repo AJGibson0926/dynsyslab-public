@@ -1,0 +1,88 @@
+{
+  "schema": "dynsyslab.lie-algebra-query/v1",
+  "dimension": 2,
+  "coordinate_names": [
+    "x_1",
+    "x_2"
+  ],
+  "action": "module",
+  "observables": [
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          0,
+          0
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          1,
+          0
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          2,
+          0
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          0,
+          1
+        ]
+      },
+      {
+        "coefficient": "-1",
+        "powers": [
+          2,
+          0
+        ]
+      }
+    ]
+  ],
+  "operators": [
+    [
+      [
+        {
+          "coefficient": "-1",
+          "powers": [
+            1,
+            0
+          ]
+        }
+      ],
+      [
+        {
+          "coefficient": "-3",
+          "powers": [
+            0,
+            1
+          ]
+        },
+        {
+          "coefficient": "1",
+          "powers": [
+            2,
+            0
+          ]
+        }
+      ]
+    ]
+  ],
+  "include_partials": true,
+  "provenance": {
+    "case": "triangular-module",
+    "source": "analytic equations; exact rational coefficients; no trajectory fit"
+  }
+}

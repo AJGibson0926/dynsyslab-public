@@ -10,12 +10,13 @@
 namespace dynsyslab::core {
 // A frozen dictionary is part of the fitted model, never rebuilt on evaluation data.
 struct SpectralDictionary {
-    std::string kind{"linear"}; // linear, polynomial, gaussian, partition
+    std::string kind{"linear"}; // see OBSERVABLE_DICTIONARIES.md for all families
     std::size_t dimension{};
     bool constant{true};
     std::vector<double> center, scale, nodes; // nodes: centers x dimension
     std::vector<std::size_t> exponents;       // features x dimension
     double bandwidth{1};
+    double smoothness{2}, amplitude{1}; // Matern nu; radial kernel amplitude
     void validate() const;
     std::size_t size() const;
     std::vector<double> evaluate(const std::vector<double>& points) const;

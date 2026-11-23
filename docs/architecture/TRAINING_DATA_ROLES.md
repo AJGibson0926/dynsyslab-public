@@ -92,6 +92,14 @@ data. Their eigenfunctions are those of the identified `A`. DynSysLab keeps
 them as their own model family (`koopman-dmdc`, `koopman-edmdc`); they do not
 replace the unforced eigenfunction bank.
 
+Both accept `time_window` and `state_window` (`[[low, high], ...]` per snapshot component): only
+pairs whose two snapshots lie inside both windows are fitted, which restricts the model to the
+neighbourhood of an operating point. `edmdc` with `export_krom: true` also publishes the eigenfunction
+bank as a standard K-ROM for `krom_extract` (including its `principal` mode rule: principal
+eigenfunctions as in Mauroy & Mezić, IEEE TAC 61(11), 2016, with a ResDMD-style consistency filter
+after Colbrook & Townsend, Comm. Pure Appl. Math. 77, 2024), `input_map`, KLQE and KLQR. Centering (`normalize: true`) without a constant term places the model's equilibrium at the
+data mean, so use `normalize: false` (or a constant) when the target is not the data mean.
+
 ### Input-map regression (forced data only)
 
 `input_map` (see `docs/architecture/INPUT_MAP_B_PSI.md`) keeps `psi` and

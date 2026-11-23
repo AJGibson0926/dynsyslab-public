@@ -58,6 +58,34 @@ void autonomousParity() {
         close(sample.output[0],batch.stateEstimate[k]);
     }
 }
+void measurementInputTiming() {
+    const auto model=scalar();
+    const auto design=c::designKoopmanLQEFromMeasurements(model,"y",{1},{1},"x");
+    const double L=design.solution.gain[0],h=.2,a=-1-L,D=3;
+    c::KoopmanLQEObserver observer(model,design,"fit",{.4});
+    observer.setMeasurementFeedthrough({D});
+    // y(t0) was sampled before the controller changed input from .2 to .8.
+    observer.observe(0,{.7+D*.2},{.2});
+    const auto next=observer.observe(h,{1.1+D*.8},{.8});
+    const double expected=std::exp(a*h)*.4+std::expm1(a*h)/a*(L*.7+2*.8);
+    close(next.lifted[0],expected);close(next.measurement[0],expected+D*.8);
+    close(next.innovation[0],1.1-expected);
+    c::KoopmanLQEObserver scaled(model,design,"fit",{.4},{10},{20});
+    scaled.setMeasurementFeedthrough({D},0);
+    double z=.4;
+    const double oldY=10+.7+D*.2*(20+3*.7),newY=10+1.1+D*.8*(20+3*1.1);
+    scaled.observe(0,{oldY},{.2});
+    const double scaledA=-1-L*(1+3*D*.2);
+    z=std::exp(scaledA*h)*z+std::expm1(scaledA*h)/scaledA*(L*(oldY-10-D*.2*20)+2*.8);
+    const auto first=scaled.observe(h,{newY},{.8});
+    close(first.lifted[0],z);close(first.measurement[0],10+z+D*.8*(20+3*z));
+    // Actuation is unchanged, but the input associated with the held sensor
+    // sample changed. Its observation matrix must invalidate the ZOH cache.
+    const double nextA=-1-L*(1+3*D*.8);
+    z=std::exp(nextA*h)*z+std::expm1(nextA*h)/nextA*(L*(newY-10-D*.8*20)+2*.8);
+    close(scaled.observe(2*h,{newY},{.8}).lifted[0],z);
+    rejects([&]{scaled.setMeasurementFeedthrough({D},-2);});
+}
 void bilinear() {
     auto model=scalar();
     model.setControlMap("bilinear",c::BilinearControlMap{{.5},{2.},{},1,1,"test"});
@@ -94,6 +122,6 @@ void bilinear() {
 }
 }
 int main(){try{
-    heldScalar();autonomousParity();bilinear();
+    heldScalar();autonomousParity();bilinear();measurementInputTiming();
     std::cout<<"Input-aware online KLQE tests passed\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

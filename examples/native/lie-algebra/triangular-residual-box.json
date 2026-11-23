@@ -1,0 +1,31 @@
+{
+  "schema": "dynsyslab.lie-algebra-query/v1",
+  "dimension": 2,
+  "coordinate_names": [
+    "x_1",
+    "x_2"
+  ],
+  "action": "box_bound",
+  "provenance": {
+    "case": "triangular-residual-box",
+    "source": "analytic equations; exact rational coefficients; no trajectory fit"
+  },
+  "radii": [
+    "2",
+    "3"
+  ],
+  "residuals": [
+    [],
+    [
+      {
+        "coefficient": "-1/100",
+        "powers": [
+          1,
+          0
+        ]
+      }
+    ],
+    [],
+    []
+  ]
+}

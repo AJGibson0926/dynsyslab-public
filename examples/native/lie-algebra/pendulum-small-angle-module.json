@@ -1,0 +1,74 @@
+{
+  "schema": "dynsyslab.lie-algebra-query/v1",
+  "dimension": 2,
+  "coordinate_names": [
+    "x_1",
+    "x_2"
+  ],
+  "action": "module",
+  "observables": [
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          0,
+          0
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          1,
+          0
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          0,
+          1
+        ]
+      }
+    ]
+  ],
+  "operators": [
+    [
+      [
+        {
+          "coefficient": "1",
+          "powers": [
+            0,
+            1
+          ]
+        }
+      ],
+      [
+        {
+          "coefficient": "-196133/20000",
+          "powers": [
+            1,
+            0
+          ]
+        },
+        {
+          "coefficient": "-1/50",
+          "powers": [
+            0,
+            1
+          ]
+        }
+      ]
+    ]
+  ],
+  "include_partials": true,
+  "extend": false,
+  "provenance": {
+    "case": "pendulum-small-angle-module",
+    "system": "small-angle approximation only; sin(x_1) replaced by x_1",
+    "source": "exact rational equations of the linear approximation, not the nonlinear pendulum"
+  }
+}

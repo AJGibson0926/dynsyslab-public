@@ -1,6 +1,9 @@
 #pragma once
 #include <dynsyslab/core/System.hpp>
 namespace dynsyslab::core::detail {
+std::vector<AnalyticSolutionFamily> integrableAnalyticSolutions(const SystemConfiguration &);
+std::vector<AnalyticSolutionFamily> todaAnalyticSolutions(const SystemConfiguration &);
+std::vector<AnalyticSolutionFamily> triangularAnalyticSolutions(const SystemConfiguration &);
 std::vector<AnalyticSolutionFamily> henonHeilesAnalyticSolutions(const SystemConfiguration &);
 std::vector<AnalyticSolutionFamily> kuramotoPairAnalyticSolutions(const SystemConfiguration &);
 std::vector<AnalyticSolutionFamily> neuralLimitAnalyticSolutions(const SystemConfiguration &);

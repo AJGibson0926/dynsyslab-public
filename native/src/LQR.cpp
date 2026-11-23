@@ -125,6 +125,7 @@ std::vector<double> channelError(const LiftedOutputChannel& c,const std::vector<
 }
 
 void KoopmanLQRController::setIntegralAction(KoopmanIntegralAction action) {
+    if(certified_)throw std::invalid_argument("KLQR integral action cannot be added to a certified gain");
     if(targetSpace_!=KoopmanTargetSpace::dynamicalState||!target_)
         throw std::invalid_argument("KLQR integral action needs a dynamical-state target");
     if(reduction_)throw std::invalid_argument("KLQR integral action and balanced_truncation cannot be combined");
@@ -138,6 +139,7 @@ void KoopmanLQRController::setIntegralAction(KoopmanIntegralAction action) {
 }
 
 void KoopmanLQRController::setPIDCorrection(KoopmanPIDCorrection c) {
+    if(certified_)throw std::invalid_argument("KLQR PID correction cannot be added to a certified gain");
     if(targetSpace_!=KoopmanTargetSpace::dynamicalState||!target_)
         throw std::invalid_argument("KLQR PID correction needs a dynamical-state target");
     const auto n=model_->splitDimension(),p=c.channel.targetComponents.size(),m=model_->inputDimension();
@@ -153,6 +155,18 @@ void KoopmanLQRController::setPIDCorrection(KoopmanPIDCorrection c) {
 std::vector<double> KoopmanLQRController::feedback(double time,const std::vector<double>& lifted,
     const std::vector<double>& inputMap) const {
     const auto reference=referenceValues(*model_,target_,targetSpace_,time);
+    if(certified_) {
+        // u = u* + K (z - z*). A target that moves away from z* leaves the certificate.
+        const auto& c=*certified_;
+        const auto n=lifted.size(),m=model_->inputDimension();
+        if(target_)for(std::size_t i=0;i<n;++i)
+            if(std::abs(reference[i]-c.targetLifted[i])>1e-9*std::max(1.0,std::abs(c.targetLifted[i])))
+                throw std::invalid_argument("KLQR target differs from the certified bilinear target");
+        auto result=c.targetInput;
+        for(std::size_t input=0;input<m;++input)for(std::size_t i=0;i<n;++i)
+            result[input]+=c.gain[input*n+i]*(lifted[i]-c.targetLifted[i]);
+        return result;
+    }
     const bool constant=representation_!="exact"&&representation_!="external"&&
         std::holds_alternative<ConstantControlMap>(model_->storedControlMap(representation_));
     // Compare B as well as its representation: a mutable alias to the model may
@@ -197,7 +211,22 @@ std::vector<double> KoopmanLQRController::feedback(double time,const std::vector
     return result;
 }
 
+void KoopmanLQRController::setCertifiedFeedback(CertifiedKoopmanFeedback feedback) {
+    const auto n=model_->splitDimension(),m=model_->inputDimension();
+    if(integral_||pid_||reduction_)
+        throw std::invalid_argument("A certified gain cannot be combined with integral action, PID or balanced_truncation");
+    if(feedback.gain.size()!=m*n||feedback.targetLifted.size()!=n||feedback.targetInput.size()!=m
+        ||!(feedback.sampleTime>0.0)||!std::isfinite(feedback.sampleTime))
+        throw std::invalid_argument("Certified KLQR feedback has inconsistent dimensions or sample time");
+    const auto finite=[](const std::vector<double>& v){
+        return std::all_of(v.begin(),v.end(),[](double x){return std::isfinite(x);});};
+    if(!finite(feedback.gain)||!finite(feedback.targetLifted)||!finite(feedback.targetInput))
+        throw std::invalid_argument("Certified KLQR feedback must be finite");
+    certified_=std::move(feedback);
+}
+
 void KoopmanLQRController::setBalancedReduction(BalancedReductionOptions options) {
+    if(certified_)throw std::invalid_argument("balanced_truncation cannot replace a certified gain");
     if(integral_)throw std::invalid_argument("KLQR integral action and balanced_truncation cannot be combined");
     reduction_=options;
     last_={};cachedInputMap_.clear();

@@ -2,6 +2,7 @@
 #include <dynsyslab/workflow/ControlFactory.hpp>
 #include <dynsyslab/workflow/Run.hpp>
 #include <dynsyslab/workflow/Plan.hpp>
+#include <dynsyslab/workflow/EstimatorFactory.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include "../src/KlqeProcessCovariance.hpp"
 
@@ -99,6 +100,33 @@ int main(int argc,char** argv) {
             const double finalError=std::hypot(truth[size-2]-estimate[e-2],truth[size-1]-estimate[e-1]);
             std::cout<<"Final state norm="<<finalState<<", estimation error="<<finalError<<'\n';
             check(finalState<1e-4&&finalError<1e-5,"Measured KLQR did not stabilize the exact unstable fixture");
+        }
+        {   // Raw input-aware sensors must use the PREVIOUS applied command.
+            auto driven=request;driven.at("time").at("output_step")=.005;
+            auto& sensor=driven.at("controller").at("settings").at("estimator");
+            sensor.at("sensor_feedthrough")=c::json::parse(R"({"coefficients":[0.7]})");
+            sensor.at("measurement_feedthrough")=c::json::parse("[0.7]");
+            const auto drivenResult=w::executeJob(driven,root/"input-aware");
+            for(const auto& path:drivenResult.archives){
+                const auto a=c::readNpz(path);const auto x=a.at("values").doubles();
+                const auto y=a.at("measurement_values").doubles(),u=a.at("previous_applied_input").doubles();
+                check(x.size()==y.size()*2,"Input-aware validation clocks differ");
+                double maxInput=0;for(std::size_t j=0;j<y.size();++j){
+                    check(std::abs(y[j]-x[2*j]-.7*u[j])<1e-10,"Sensor uses wrong applied input or applies feedthrough twice");
+                    maxInput=std::max(maxInput,std::abs(u[j]));}
+                check(maxInput>.01,"Sensor timing fixture did not apply a nonzero input");
+            }
+            // Separate estimator path: state-scaled simulated sensor; observer
+            // readout is configured independently, with no implicit inheritance.
+            auto standalone=sensor;standalone.at("krom")=modelPath.generic_u8string();
+            standalone.at("control_representation")="fit";
+            standalone.at("sensor_feedthrough")=c::json::parse(R"({"coefficients":[0.7],"scale_observable":"position"})");
+            standalone.at("measurement_feedthrough_scale_output")=0.0;
+            auto physical=c::createSystem(config);
+            auto estimator=w::buildEstimator(standalone,c::json::Value{},*physical,1,.01);
+            const double x[]{.4,-.1};(void)estimator.observe(0,0,x,.2);
+            c::NpzRecord trace;estimator.appendDiagnostics(0,trace);
+            check(std::abs(trace.at("measurement_values").doubles()[0]-(.4+.7*.2*.4))<1e-14,"Standalone sensor lacks input-dependent scale");
         }
         {   // KLQE process covariance shaped from the exact fixture's own prediction residual
             c::json::Value::Array records;

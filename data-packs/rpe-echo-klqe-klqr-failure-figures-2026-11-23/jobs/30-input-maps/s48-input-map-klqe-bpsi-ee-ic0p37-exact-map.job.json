@@ -1,0 +1,27 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "postprocess",
+ "label": "klqe-bpsi-ee-ic0p37-exact_map",
+ "sources": [
+  "${inputs.s12}",
+  "${inputs.s13}",
+  "${inputs.s14}"
+ ],
+ "methods": [
+  {
+   "name": "input_map",
+   "settings": {
+    "krom": "${inputs.s47}",
+    "representation": "constant",
+    "fit": "exact_map",
+    "ridge": 1e-08
+   }
+  }
+ ],
+ "archive": {
+  "enabled": true
+ },
+ "resources": {
+  "peak_bytes": 2052028
+ }
+}

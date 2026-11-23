@@ -1,0 +1,25 @@
+{
+ "archive": {
+  "enabled": true
+ },
+ "kind": "postprocess",
+ "label": "rpe-echo-jet-klqr-rediscovery-20kpa / input_map",
+ "methods": [
+  {
+   "name": "input_map",
+   "settings": {
+    "krom": "${inputs.s21}",
+    "map": {
+     "representation": "exact"
+    }
+   }
+  }
+ ],
+ "schema": "dynsyslab.compute-job/v1",
+ "sources": [
+  "${inputs.s15}"
+ ],
+ "resources": {
+  "peak_bytes": 16065198
+ }
+}

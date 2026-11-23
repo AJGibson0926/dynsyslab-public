@@ -32,6 +32,7 @@ double AnalyticExpression::evaluate(const double* x) const {
     if(op=="sin")return std::sin(a);
     if(op=="cos")return std::cos(a);
     if(op=="tanh")return std::tanh(a);
+    if(op=="sech") {const double e=std::exp(-std::abs(a));return 2*e/(1+e*e);}
     const double b=n.arguments[1].evaluate(x);
     if(op=="add")return a+b;
     if(op=="subtract")return a-b;
@@ -62,7 +63,7 @@ AnalyticExpression AnalyticExpression::power(double value) const {
     return AnalyticExpression(std::make_shared<Node>(Node{"power",stateDimension(),0,value,{*this}}));
 }
 AnalyticExpression AnalyticExpression::unary(const std::string& op) const {
-    if(op!="negative"&&op!="exp"&&op!="log"&&op!="sin"&&op!="cos"&&op!="tanh")
+    if(op!="negative"&&op!="exp"&&op!="log"&&op!="sin"&&op!="cos"&&op!="tanh"&&op!="sech")
         throw std::invalid_argument("unsupported unary expression operation");
     auto result=AnalyticExpression(std::make_shared<Node>(Node{op,stateDimension(),0,0,{*this}}));
     if(node_->operation=="constant")return constant(result.evaluate(nullptr),stateDimension());
@@ -81,6 +82,7 @@ AnalyticExpression AnalyticExpression::derivative(std::size_t axis) const {
     if(op=="sin")return a.unary("cos")*da;
     if(op=="cos")return -a.unary("sin")*da;
     if(op=="tanh")return (1-a.unary("tanh").power(2))*da;
+    if(op=="sech")return -a.unary("sech")*a.unary("tanh")*da;
     const auto& b=n.arguments[1]; const auto db=b.derivative(axis);
     if(op=="add")return da+db;
     if(op=="subtract")return da-db;

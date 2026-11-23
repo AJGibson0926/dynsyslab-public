@@ -93,8 +93,8 @@ file(READ "${TEST_ROOT}/cache/workbench-check.json" report)
 string(JSON tabs GET "${report}" workspace_tabs_checked)
 string(JSON figures GET "${report}" observable_figures)
 string(JSON visible GET "${report}" visible)
-# Eight Duffing scalar outputs, including intrinsic force, each have two tiles.
-if(NOT status EQUAL 0 OR NOT tabs OR NOT figures EQUAL 16 OR visible)
+# Fifteen Duffing scalar outputs (intrinsic force, energies and the phase-envelope catalog) each have two tiles.
+if(NOT status EQUAL 0 OR NOT tabs OR NOT figures EQUAL 30 OR visible)
   message(FATAL_ERROR "Main/Observables tab controls or state retention failed: ${report}")
 endif()
 execute_process(COMMAND "${VIEWER_CLI}" inspect --id trajectory --workspace observables
@@ -102,7 +102,7 @@ execute_process(COMMAND "${VIEWER_CLI}" inspect --id trajectory --workspace obse
   --catalog "${TEST_ROOT}/catalog.json" --focus "${TEST_ROOT}/focus.json"
   OUTPUT_VARIABLE inspection RESULT_VARIABLE status)
 string(JSON figures LENGTH "${inspection}" figures)
-if(NOT status EQUAL 0 OR NOT figures EQUAL 16)
+if(NOT status EQUAL 0 OR NOT figures EQUAL 30)
   message(FATAL_ERROR "CLI observable workspace differs from the desktop: ${inspection}")
 endif()
 message(STATUS "Hidden workspace tabs, retained Main, complete observables and CLI parity: PASS")

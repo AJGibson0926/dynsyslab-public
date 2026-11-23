@@ -127,7 +127,7 @@ struct PhaseKnowledgeCheck {
     double residual{};
 };
 struct PhaseSpaceResult {
-    std::string schema{"dynsyslab.phase-space/v1"}, methodVersion{"4"};
+    std::string schema{"dynsyslab.phase-space/v1"}, methodVersion{"5"};
     std::string equationsFingerprint, coordinateSystem;
     PhaseSpaceOptions options;
     std::vector<PhaseFixedPoint> fixedPoints;
@@ -153,6 +153,11 @@ PhaseSpaceResult analyzePhaseSpace(const ODESystem &system, const PhaseSpaceOpti
                                    const ExecutionContext *execution = nullptr);
 // First oriented positive return to the configured affine section. The seed must lie on it.
 PhasePoincareMap firstPoincareReturn(const ODESystem &system, const PhaseState &sectionSeed,
+                                     const PhaseSpaceOptions &options,
+                                     const ExecutionContext *execution = nullptr);
+// Fixed forcing phase, arbitrary seed (no shooting). Refined state and DP.
+// Eigenvalues of DP are Floquet multipliers only at a periodic point.
+PhasePoincareMap stroboscopicReturn(const ODESystem &system, const PhaseState &seed,
                                      const PhaseSpaceOptions &options,
                                      const ExecutionContext *execution = nullptr);
 // Pseudo-arclength continuation over a caller-supplied one-parameter system family.

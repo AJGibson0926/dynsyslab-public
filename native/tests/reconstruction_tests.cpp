@@ -23,6 +23,15 @@ int main() {
         for (std::size_t i=0;i<values.size();++i)
             if (std::abs(reconstructed[i]-values[i])>1e-12)
                 throw std::runtime_error("observable reconstruction");
+        auto affine=fit;affine.offset={3.,-.4};
+        const auto shifted=dynsyslab::core::reconstructObservable(affine,psi,3);
+        for(std::size_t i=0;i<values.size();++i)
+            if(std::abs(shifted[i]-values[i]-affine.offset[i%2])>1e-12)
+                throw std::runtime_error("batch reconstruction lost affine intercept");
+        affine.offset={1.};bool rejected=false;
+        try{(void)dynsyslab::core::reconstructObservable(affine,psi,3);}
+        catch(const std::invalid_argument&){rejected=true;}
+        if(!rejected)throw std::runtime_error("malformed intercept accepted");
         std::cout << "dynsyslab_reconstruction_tests: PASS\n"; return 0;
     } catch (const std::exception& error) {
         std::cerr << "dynsyslab_reconstruction_tests: FAIL: " << error.what() << '\n'; return 1;

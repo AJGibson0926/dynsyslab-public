@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace dynsyslab::core {
@@ -57,5 +58,8 @@ struct NpzIndex {
 void writeNpzAtomic(const std::filesystem::path& path, const NpzRecord& record);
 // Atomically create a completed archive; fail if the destination already exists.
 void writeNpzAtomicNew(const std::filesystem::path& path, const NpzRecord& record);
+// Writes a ZIP of text entries in the given order, with fixed timestamps (byte-reproducible).
+void writeTextZip(const std::filesystem::path& path,
+                  const std::vector<std::pair<std::string, std::string>>& entries);
 
 }  // namespace dynsyslab::core

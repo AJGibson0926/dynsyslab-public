@@ -2,6 +2,17 @@
 
 namespace dynsyslab::core::detail {
 std::vector<ResearchPaper> builtInResearchPapers(const std::string &identifier) {
+    if(identifier=="toda_lattice") {
+        ResearchPaper p;p.id="henrici-kappeler-toda-2008";
+        p.title="Global Birkhoff coordinates for the periodic Toda lattice";
+        p.authors={"Andreas Henrici","Thomas Kappeler"};p.year=2008;
+        p.doi="10.1088/0951-7715/21/12/001";p.urls={"https://arxiv.org/abs/0802.4252"};
+        p.findings="Global Birkhoff coordinates for periodic Toda on reduced symplectic leaves; the open chain has different scattering data.";
+        return {p};
+    }
+    if (identifier == "quadratic_triangular") return triangularResearchPapers();
+    if (auto oscillators = oscillatorResearchPapers(identifier); !oscillators.empty())
+        return oscillators;
     if (auto extra = additionalResearchPapers(identifier); !extra.empty())
         return extra;
     if (identifier != "rpe") {

@@ -245,8 +245,9 @@ namespace {
 // Methods that read all sources together (one archive per stage, not one per source).
 bool pooledMethod(const std::string& name) {
     return name == "echo_history_koopman" || name == "history_basis" || name == "history_control_regression"
-        || name == "input_map" || name == "control_target" || name == "derivative_benchmark"
-        || name == "mode_selection";
+        || name == "input_map" || name == "bilinear_certificate" || name == "control_target" || name == "derivative_benchmark"
+        || name == "mode_selection" || name == "krom_recenter" || name == "krom_readout"
+        || name == "reference_signal" || name == "control_score" || name == "figure_dataset";
 }
 // SINDy fits on the rows it is given. "sample_stride" and "time_window" select
 // those rows explicitly so the fit can use the same clock as the H-DMD stage
@@ -488,9 +489,15 @@ PostprocessResult executePostprocess(const json::Value& submitted,
         const auto output = name=="history_basis"?runHistoryBasis(sources,stage->at("settings"),archiveRoot,label):
             name=="history_control_regression"?runHistoryControlRegression(sources,stage->at("settings"),archiveRoot,label):
             name=="input_map"?runInputMap(sources,stage->at("settings"),archiveRoot,label):
+            name=="bilinear_certificate"?runBilinearCertificate(sources,stage->at("settings"),archiveRoot,label):
             name=="control_target"?runControlTarget(sources,stage->at("settings"),archiveRoot,label):
             name=="derivative_benchmark"?runDerivativeBenchmark(sources,stage->at("settings"),archiveRoot,label):
             name=="mode_selection"?runModeSelection(sources,stage->at("settings"),archiveRoot,label):
+            name=="krom_recenter"?runKromRecenter(sources,stage->at("settings"),archiveRoot,label):
+            name=="krom_readout"?runKromReadout(sources,stage->at("settings"),archiveRoot,label):
+            name=="reference_signal"?runReferenceSignal(sources,stage->at("settings"),archiveRoot,label):
+            name=="control_score"?runControlScore(sources,stage->at("settings"),archiveRoot,label):
+            name=="figure_dataset"?runFigureDataset(sources,stage->at("settings"),archiveRoot,label):
             runEchoHistoryKoopman(sources, stage->at("settings"), archiveRoot, label);
         result.archives.push_back(output);
         result.methods.push_back(name);

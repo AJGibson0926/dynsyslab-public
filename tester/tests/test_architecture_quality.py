@@ -37,6 +37,24 @@ class ArchitectureQualityTests(unittest.TestCase):
             self.assertEqual([row["target"] for row in result["broken_links"]],
                              ["../viewer_outputs/missing.png"])
 
+    def test_audit_skips_side_research(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "pyproject.toml").write_text('[project]\nname = "x"\n', encoding="utf-8")
+            (root / "docs").mkdir()
+            (root / "docs" / "README.md").write_text("# Docs\n", encoding="utf-8")
+            (root / "pkg").mkdir()
+            (root / "pkg" / "kept.py").write_text('"""Kept."""\n', encoding="utf-8")
+            (root / "research" / "study" / "_vendor").mkdir(parents=True)
+            (root / "research" / "study" / "_vendor" / "huge.py").write_text(
+                '"""Vendored."""\n' + "x = 1\n" * 1200, encoding="utf-8")
+            python = audit_project(root)["python"]
+            self.assertFalse(python["over_1000_lines"])
+        from project_paths import is_side_research, source_files
+        self.assertTrue(is_side_research(PROJECT_ROOT / "research" / "anything.py"))
+        self.assertFalse(is_side_research(PROJECT_ROOT / "quality" / "architecture.py"))
+        self.assertFalse(any(is_side_research(path) for path in source_files()))
+
     def test_audit_is_versioned_and_covers_python_native_and_docs(self):
         result = audit_project(PROJECT_ROOT)
         self.assertEqual(result["schema"], "dynsyslab.architecture-audit/v1")
@@ -171,6 +189,10 @@ class ArchitectureQualityTests(unittest.TestCase):
             "native/src/HankelOperator.cpp",
             # Private Eigen helpers of the linear-systems kernels in dynsyslab_numerics.
             "native/src/EigenNumericsLinearSystems.hpp",
+            # Dense conic solver and bilinear K-ROM units; their public headers are Eigen-free.
+            "native/src/DenseSdp.cpp",
+            "native/src/BilinearKrom.cpp",
+            "native/src/CertifiedDesign.cpp",
         }
         allowed.update(
             path.relative_to(PROJECT_ROOT).as_posix()
@@ -188,7 +210,8 @@ class ArchitectureQualityTests(unittest.TestCase):
         self.assertNotRegex(cmake,
             r"target_link_libraries\([^)]*PUBLIC[^)]*Eigen3::Eigen")
         self.assertEqual(set(re.findall(r"dynsyslab_eigen_module\((\w+)\)", cmake)), {
-            "dynsyslab_numerics", "dynsyslab_observation", "dynsyslab_history_koopman"})
+            "dynsyslab_numerics", "dynsyslab_observation", "dynsyslab_history_koopman",
+            "dynsyslab_control_certificates"})
         self.assertIn("set(DYNSYSLAB_EIGEN_COMPILE_JOBS 3 CACHE STRING", cmake)
 
     def test_native_sources_use_narrow_numerical_interfaces(self):

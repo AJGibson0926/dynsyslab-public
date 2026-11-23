@@ -47,6 +47,7 @@ AnalyticComparison compareAnalyticSolution(const std::vector<AnalyticSolutionFam
     }
     if (!trajectory)
         return result;
+    result.period=trajectory.period;
     result.values.assign(numerical.size(), std::numeric_limits<double>::quiet_NaN());
     result.valid.assign(time.size(), 0);
     result.maximumAbsoluteError.assign(d, 0);

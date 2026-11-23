@@ -1,0 +1,82 @@
+{
+  "schema": "dynsyslab.lie-algebra-query/v1",
+  "dimension": 2,
+  "coordinate_names": [
+    "x_1",
+    "x_2"
+  ],
+  "action": "algebra",
+  "generators": [
+    [
+      [
+        {
+          "coefficient": "1",
+          "powers": [
+            0,
+            1
+          ]
+        },
+        {
+          "coefficient": "-1",
+          "powers": [
+            2,
+            0
+          ]
+        }
+      ],
+      [
+        {
+          "coefficient": "-1",
+          "powers": [
+            1,
+            0
+          ]
+        },
+        {
+          "coefficient": "2",
+          "powers": [
+            1,
+            1
+          ]
+        },
+        {
+          "coefficient": "-2",
+          "powers": [
+            3,
+            0
+          ]
+        }
+      ]
+    ],
+    [
+      [],
+      [
+        {
+          "coefficient": "1",
+          "powers": [
+            0,
+            0
+          ]
+        }
+      ]
+    ]
+  ],
+  "points": [
+    [
+      "0",
+      "0"
+    ],
+    [
+      "1",
+      "0"
+    ],
+    [
+      "-2",
+      "3"
+    ]
+  ],
+  "provenance": {
+    "case": "sheared-oscillator-force-algebra",
+    "source": "analytic equations; exact rational coefficients; no trajectory fit"
+  }
+}

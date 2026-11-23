@@ -31,6 +31,10 @@ class QuarticOrbit {
   private:
     std::array<double, 5> coefficients_;
     double x_, v_, f1_, f2_, f3_, f4_, g2_, g3_, period_;
+    // Stable Jacobi chart for even confining quartics crossing zero. Avoids
+    // cancellation of the general Weierstrass quotient near opposite turns.
+    bool evenJacobi_{};
+    double amplitude_{},frequency_{},parameter_{},phase_{};
 };
 // Evaluation of the matrix exponential, not a numerical ODE solve.
 std::vector<double> affineExponential(const std::vector<double> &matrix,

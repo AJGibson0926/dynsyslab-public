@@ -34,7 +34,7 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("ui", help="launch Solver/Post-processor")
     commands.add_parser("viewer", help="launch Viewer")
     commands.add_parser("docs", help="print the installed start document")
-    for name in ("systems", "validate", "plan", "run", "archive", "queue", "koopman-spectral"):
+    for name in ("systems", "validate", "plan", "run", "archive", "queue", "koopman-spectral", "lie-algebra", "krom-audit", "mathematics"):
         command = commands.add_parser(name, help=f"delegate {name} to the compiled CLI")
         command.add_argument("arguments", nargs=argparse.REMAINDER)
     return result

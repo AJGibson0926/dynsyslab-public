@@ -84,7 +84,7 @@ json::Value evaluatePhaseSpaceQuery(const json::Value &request,
                                 {"frequency_hz", resolved.driver.frequencyHz}, {"phase_radians", resolved.driver.phaseRadians}}}};
     const auto systemKey = sha256Text(json::dump(definition));
     json::Value key = json::Value::Object{{"schema", "dynsyslab.phase-cache-key/v1"},
-                                          {"method_version", "4"},
+                                          {"method_version", "5"},
                                           {"system", definition},
                                           {"knowledge", guideIdentity},
                                           {"options", phaseSpaceOptionsJson(options)}};

@@ -14,6 +14,10 @@ struct SpectralDictionaryOptions {
     std::size_t degree{2},centers{32},maximumFeatures{4096};
     bool constant{true},normalize{};
     double bandwidth{1};
+    std::string indexSet{"total_degree"}, centerSelection{"farthest"};
+    std::size_t angularOrder{4}, hermiteOrder{4}, centerIterations{100};
+    double smoothness{2}, amplitude{1};
+    std::vector<double> center, scale; // explicit frozen affine coordinates
 };
 SpectralDictionary buildSpectralDictionary(const std::vector<double>& trainingPoints,
     std::size_t dimension,const SpectralDictionaryOptions& = {});
@@ -42,6 +46,10 @@ void fitSpectralReconstruction(SpectralKROM&,const std::string& name,
 // Operator rollout works even for defective matrices; it uses no future measurements.
 std::vector<double> rolloutSpectralKrom(const SpectralKROM&,const std::string& reconstruction,
     const std::vector<double>& initialPoint,std::size_t steps);
+// Independent initial points, sample-major input; output is
+// trajectory x (steps+1) x reconstruction output. Factor the readout only once.
+std::vector<double> rolloutSpectralKromBatch(const SpectralKROM&,const std::string& reconstruction,
+    const std::vector<double>& initialPoints,std::size_t steps);
 SpectralMeasure correlationSpectralMeasure(const std::vector<std::complex<double>>& signal,
     std::size_t lags,const std::vector<double>& angles,bool acknowledgeStationarity);
 void riggedSpectralMeasure(SpectralKROM&,const std::vector<double>& observableCoefficients,

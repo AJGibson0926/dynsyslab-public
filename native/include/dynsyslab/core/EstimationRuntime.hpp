@@ -26,7 +26,10 @@ public:
     // At the first call only initialize the clock and measurement hold.
     // Later calls advance [previousTime,time) using the PREVIOUS measurement
     // and the input ACTUALLY APPLIED over that interval. Current y is then
-    // latched for the next interval. This is not a discrete Kalman update.
+    // latched for the next interval. y is sampled before any new command: its
+    // direct input is previousAppliedInput. That association is latched too;
+    // a later input change must not alter the old sample's feedthrough term.
+    // This is not a discrete Kalman update.
     KoopmanEstimate observe(double time, const std::vector<double>& measurement,
         const std::vector<double>& previousAppliedInput);
     const KoopmanModel& model() const noexcept { return *model_; }
@@ -40,6 +43,7 @@ private:
     std::shared_ptr<const KoopmanModel> model_; // immutable deployment snapshot
     KoopmanLQEDesign design_;
     std::vector<double> offsetY_, offsetX_, previousMeasurement_, feedthrough_;
+    std::vector<double> previousMeasurementInput_,heldMeasurementInput_;
     int feedthroughScale_{-1};
     std::vector<double> baseGenerator_, offsetInput_, inputOperators_;
     std::vector<double> heldResponse_, heldTransition_, heldInput_;

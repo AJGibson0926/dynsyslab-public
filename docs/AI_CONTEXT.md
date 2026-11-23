@@ -13,6 +13,8 @@ compact orientation packet for a new developer or AI assistant.
 
 ## Spectral Koopman analysis
 
+The [Lie algebra service](architecture/LIE_ALGEBRA.md) owns exact polynomial geometric analysis in the independent `dynsyslab_lie` library. Preserve finite/infinite proofs versus search exhaustion, and physical-image versus ambient stability. The private study record `KOOPMAN_LIE_REPRESENTATION_RESEARCH.md` formalizes the central research question and Worthmann/Strasser connection.
+
 The [Spectral KROM contract](architecture/SPECTRAL_KROM.md) adds native ResDMD,
 mpEDMD, Hermitian/TLS/MultDMD, stochastic residuals, Rigged measures and RKHS
 adjoint diagnostics. Scientific algorithms belong to dynsyslab_spectral;
@@ -27,6 +29,14 @@ exact linear Duffing benchmark (private development record `KOOPMAN_LINEAR_DUFFI
 (reference ID: `koopman-linear-duffing-exact`). Preserve this baseline and its
 local asset pointers for future analysis. Its eigenfunctions and Bpsi are
 analytic ground truth, not a learned-model success. Keep new variants separate.
+
+Also preserve the user-designated **critically important gradient-closure
+benchmark**, `koopman-triangular-gradient-closed` (private record
+`KOOPMAN_GRADIENT_CLOSED_TRIANGULAR_REFERENCE.md`), and the **important arctangent
+counterexample**, `koopman-arctangent-infinite-gradient` (private record
+`KOOPMAN_ARCTANGENT_GRADIENT_REFERENCE.md`). These have exact proofs distinguishing
+autonomous eigenfunction closure, closure under original-state partial derivatives,
+and finite bilinear input models. Do not treat these properties as interchangeable.
 
 1. `dynsyslib` defines equations, presets, Jacobians, state dimensions, and
    drivers. It does not solve, schedule, archive, or visualize.

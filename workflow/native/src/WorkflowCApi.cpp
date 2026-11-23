@@ -7,6 +7,8 @@
 #include <dynsyslab/workflow/ObservableQuery.hpp>
 #include <dynsyslab/workflow/KoopmanSpectralQuery.hpp>
 #include <dynsyslab/workflow/AnalyticQuery.hpp>
+#include <dynsyslab/workflow/LieAlgebraQuery.hpp>
+#include <dynsyslab/workflow/KromAuditQuery.hpp>
 #include <dynsyslab/workflow/PhaseSpaceQuery.hpp>
 #include <dynsyslab/workflow/SystemKnowledge.hpp>
 #include <dynsyslab/workflow/Run.hpp>
@@ -100,6 +102,38 @@ dsl_status dsl_workflow_observable_json(const char* query_json,
     } catch (...) {
         return failed(DSL_STATUS_RUNTIME_ERROR, "unknown observable query exception");
     }
+}
+
+dsl_status dsl_workflow_krom_audit_json(const char* query_json,
+                                      dsl_workflow_result_handle** output) {
+    if (!output) return failed(DSL_STATUS_INVALID_ARGUMENT, "KROM audit output is null");
+    *output = nullptr;
+    if (!query_json) return failed(DSL_STATUS_INVALID_ARGUMENT, "KROM audit query is null");
+    try {
+        *output = resultHandle(dynsyslab::workflow::evaluateKromAuditQuery(
+            dynsyslab::core::json::parse(query_json)));
+        lastError.clear(); return DSL_STATUS_OK;
+    } catch (const std::invalid_argument& e) {
+        return failed(DSL_STATUS_INVALID_ARGUMENT, e.what());
+    } catch (const std::exception& e) {
+        return failed(DSL_STATUS_RUNTIME_ERROR, e.what());
+    } catch (...) { return failed(DSL_STATUS_RUNTIME_ERROR, "Unknown KROM audit exception"); }
+}
+
+dsl_status dsl_workflow_lie_algebra_json(const char* query_json,
+                                      dsl_workflow_result_handle** output) {
+    if (!output) return failed(DSL_STATUS_INVALID_ARGUMENT, "Lie algebra output is null");
+    *output = nullptr;
+    if (!query_json) return failed(DSL_STATUS_INVALID_ARGUMENT, "Lie algebra query is null");
+    try {
+        *output = resultHandle(dynsyslab::workflow::evaluateLieAlgebraQuery(
+            dynsyslab::core::json::parse(query_json)));
+        lastError.clear(); return DSL_STATUS_OK;
+    } catch (const std::invalid_argument& e) {
+        return failed(DSL_STATUS_INVALID_ARGUMENT, e.what());
+    } catch (const std::exception& e) {
+        return failed(DSL_STATUS_RUNTIME_ERROR, e.what());
+    } catch (...) { return failed(DSL_STATUS_RUNTIME_ERROR, "Unknown Lie algebra exception"); }
 }
 
 dsl_status dsl_workflow_analytic_json(const char* query_json,

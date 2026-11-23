@@ -1,4 +1,5 @@
 #include <dynsyslab/core/HankelOperator.hpp>
+#include <dynsyslab/core/PortableNormal.hpp>
 #include "HistoryCorrelation.hpp"
 
 #include <Eigen/Dense>
@@ -136,10 +137,9 @@ HankelLeftBasis fitHankelLeftBasis(const HankelOperator& hankel, const HankelBas
     if (subspace < options.rank) throw std::invalid_argument("Hankel basis rank exceeds the row dimension");
     if (!(hankel.energy() > 0.)) throw std::invalid_argument("Hankel matrix has zero energy");
     std::mt19937_64 generator(options.seed);
-    std::normal_distribution<double> normal;
     Matrix q(static_cast<Eigen::Index>(rows), static_cast<Eigen::Index>(subspace));
     for (Eigen::Index row = 0; row < q.rows(); ++row)
-        for (Eigen::Index column = 0; column < q.cols(); ++column) q(row, column) = normal(generator);
+        for (Eigen::Index column = 0; column < q.cols(); ++column) q(row, column) = portableNormal(generator);
     q = orthonormalize(q);
     // X X^T q, accumulated segment by segment (X_s X_s^T q summed in order).
     auto gram = [&](const Matrix& values) {

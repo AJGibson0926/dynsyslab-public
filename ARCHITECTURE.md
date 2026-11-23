@@ -35,6 +35,8 @@ source-change events, that would otherwise force a producer to import a UI.
 
 ## Package ownership
 
+The independent **dynsyslab_lie** library owns exact polynomial geometric analysis and invariant-module certificates. It depends only on foundation, not on solvers, control, archives or UI; workflow exposes read-only queries.
+
 The native [pipeline boundary guide](docs/architecture/PIPELINE_BOUNDARY_REFACTOR_2026-10-31.md)
 specifies scientific binding, frozen measurement transforms, runtime/fitting
 targets and coordinate-driven control/estimation. The implementation preserves

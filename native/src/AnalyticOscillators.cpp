@@ -94,7 +94,7 @@ AnalyticTrajectory pendulumTrajectory(double w2, const AnalyticState &x, double 
                     return AnalyticState{offset + 2 * std::asin(std::clamp(k * j.sn, -1., 1.)),
                                          2 * k * w * j.cn};
                 },
-                {}};
+                {},4*special::ellipticK(m)/w};
     }
     const double sign = x[1] < 0 ? -1. : 1.;
     if (std::abs(m - 1) <= 4 * std::numeric_limits<double>::epsilon()) {
@@ -132,7 +132,8 @@ std::vector<AnalyticSolutionFamily> oscillatorAnalyticSolutions(const SystemConf
                  return AnalyticTrajectory{linearOscillator(p(c, "damping_kg_s") / p(c, "mass_kg"),
                                                             p(c, "stiffness_n_m") / p(c, "mass_kg"),
                                                             x, t0, c.driver, 1 / p(c, "mass_kg")),
-                                           {}};
+                                           {},p(c,"damping_kg_s")==0&&free(c)&&p(c,"stiffness_n_m")>0
+                                              &&(x[0]!=0||x[1]!=0)?2*pi*std::sqrt(p(c,"mass_kg")/p(c,"stiffness_n_m")):0};
              }});
     } else if (c.identifier == "duffing") {
         result.push_back({descriptor("duffing-elliptic", "Analytic Duffing",
@@ -160,7 +161,7 @@ std::vector<AnalyticSolutionFamily> oscillatorAnalyticSolutions(const SystemConf
                                                             const auto q = orbit->evaluate(t - t0);
                                                             return AnalyticState{q[0], q[1]};
                                                         },
-                                                        {}};
+                                                        {},std::isfinite(orbit->realPeriod())?orbit->realPeriod():0};
                           }});
         result.push_back({descriptor("duffing-linear", "Analytic linear Duffing limit",
                                      R"(x''+\delta x'-\alpha x=g u(t))",

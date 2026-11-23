@@ -13,7 +13,7 @@ except ModuleNotFoundError:  # Historical reference lane supports Python 3.10.
     import tomli as tomllib
 from typing import Iterable, Sequence
 
-from project_paths import PROJECT_ROOT, source_files
+from project_paths import PROJECT_ROOT, SIDE_RESEARCH_DIRECTORIES, source_files
 
 
 PACKAGES = frozenset({
@@ -245,6 +245,7 @@ def audit_project(root: str | Path = PROJECT_ROOT) -> dict:
             ".git", ".test-deps", "__pycache__", "build", "dist", "tmp",
             "viewer_compute_archive", "viewer_outputs",
         } for part in path.relative_to(root).parts)
+        and path.relative_to(root).parts[0] not in SIDE_RESEARCH_DIRECTORIES
     ]
     python = _python_metrics(paths, root)
     project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))

@@ -8,6 +8,19 @@ dynsyslab::core::json::Value evaluateKoopmanSpectralQuery(const dynsyslab::core:
     if(request.at("schema").string("dynsyslab.koopman-spectral-query/v1")!="dynsyslab.koopman-spectral-query/v1")
         throw std::invalid_argument("Unknown Koopman spectral query schema");
     const auto action=request.at("action").string("fit");
+    if(action=="dictionary") {
+        c::SpectralDictionary d;std::vector<double> points;
+        if(!request.at("dictionary").isNull()) {
+            d=c::spectralDictionaryFromJson(request.at("dictionary"));points=numbers(request.at("points"));
+        } else {
+            const auto data=pairs(request.at("data"));d=dictionary(request.at("settings"),data);
+            points=request.at("points").isNull()?data.x:numbers(request.at("points"));
+        }
+        const auto values=d.evaluate(points);
+        return J::Object{{"schema","dynsyslab.spectral-dictionary-result/v1"},
+            {"dictionary",c::spectralDictionaryJson(d)},{"values",array(values)},
+            {"samples",double(points.size()/d.dimension)},{"features",double(d.size())}};
+    }
     if(action=="specrkhs") {
         const auto data=pairs(request.at("data"));const auto& settings=request.at("settings");
         c::SpectralData result;result.rkhsAdjoints.push_back(c::rkhsAdjointSpectrum(data,settings.at("bandwidth").number(1),
@@ -50,6 +63,18 @@ dynsyslab::core::json::Value evaluateKoopmanSpectralQuery(const dynsyslab::core:
         if(action=="reconstruct")return J::Object{{"values",array(model.reconstruct(request.at("reconstruction").string("coordinates"),numbers(request.at("points"))))}};
         if(action=="rollout")return J::Object{{"values",array(c::rolloutSpectralKrom(model,request.at("reconstruction").string("coordinates"),
             numbers(request.at("initial")),count(request.at("steps"))))},{"sample_interval",model.sampleInterval}};
+        if(action=="rollout_batch"){
+            const auto points=numbers(request.at("initial_points"));const auto steps=count(request.at("steps"));
+            const auto name=request.at("reconstruction").string("coordinates");
+            const auto outputs=model.reconstructions.at(name).outputs,dimension=model.dictionary.dimension;
+            if(points.empty()||points.size()%dimension||steps>=10000000||
+               points.size()/dimension>10000000/outputs/(steps+1))
+                throw std::invalid_argument("Batch rollout requires complete points and at most ten million output values");
+            return J::Object{{"values",array(c::rolloutSpectralKromBatch(model,name,points,steps))},
+                {"sample_interval",model.sampleInterval},{"trajectories",double(points.size()/dimension)},
+                {"samples",double(steps+1)},{"outputs",double(outputs)},
+                {"layout","trajectory/time/output"}};
+        }
         if(action=="residuals") {
             c::SpectralData d;d.residuals=c::koopmanResiduals(model,pairs(request.at("data")),
                 complexes(request.at("residual_grid")));return c::spectralDataJson(d);

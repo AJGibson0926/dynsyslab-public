@@ -10,9 +10,12 @@
 //   representation "bilinear"       B_psi(psi) = b0 + sum_i b_i psi_i, regressed from FORCED records
 //
 // Regression ("fit"):
-//   "held_input"           causal-history KROMs, measurement only: psi_k from the frozen history
-//                          transform, q_k = psi_{k+1} - mu psi_k = [a(psi_k)] + D(psi_k) u_k per mode,
-//                          ZOH-inverted to continuous time, B = D lambda / (mu - 1).
+//   "held_input"           any KROM: psi_k from the state, measured coordinates or frozen history
+//                          transform, q_k = psi_{k+1} - mu psi_k = [a(psi_k)] + D(psi_k) u_k per mode.
+//                          The eigenvalues stay frozen. ZOH inversion, first order in u: an offset
+//                          divides by phi(lambda_j, 0), an operator on psi_i by phi(lambda_j, lambda_i),
+//                          phi(a, b) = int_0^dt exp(a (dt - s)) exp(b s) ds (Van Loan, IEEE TAC 23
+//                          (1978) 395-404). "conjugate_complete" adds conj(psi_i) regressors.
 //                          "drift": "affine" fits a nuisance a(psi) = a0 + sum a_i psi_i jointly
 //                          (it absorbs zero-input closure error; it is not used by the controller).
 //   "controlled_residual"  state/observable KROMs: existing native controlled-residual regression.
@@ -29,6 +32,7 @@
 #include "PostprocessInternal.hpp"
 #include "KromDatasetSupport.hpp"
 #include "DerivativeSettings.hpp"
+#include "HeldInputRecords.hpp"
 
 #include <dynsyslab/core/HistoryObservation.hpp>
 #include <dynsyslab/core/HistoryObservationArchive.hpp>
@@ -38,6 +42,7 @@
 #include <dynsyslab/core/System.hpp>
 #include <dynsyslab/core/Text.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <optional>
@@ -80,63 +85,51 @@ std::vector<Complex> leastSquares(const std::vector<Complex>& X, const std::vect
     return x;
 }
 
-struct Pair { std::vector<Complex> psi, next; double u; };
-
-// psi_k along each forced record, from the measured observable through the frozen history transform.
-std::vector<Pair> historyPairs(const c::KoopmanModel& model, const c::FrozenHistoryTransform& transform,
-                               const std::vector<std::filesystem::path>& sources, const json::Value& settings) {
-    const double dt = transform.sampleInterval(), fitStart = settings.at("fit_start").number(0.0);
-    std::vector<Pair> rows;
-    for (const auto& path : sources) {
-        const auto source = loadSource(path);
-        if (source.inputs.empty() || source.inputDimension != 1 || datasetDynamics(source) != "forced")
-            throw std::invalid_argument("input_map regression needs forced records with a scalar control history: "
-                                        + path.generic_u8string());
-        if (std::abs(uniformDeltaTime(source) - dt) > 1e-8 * dt)
-            throw std::invalid_argument("forced record must be sampled on the history transform clock");
-        const auto system = c::createSystem(systemConfiguration(source));
-        const auto name = settings.at("measurement_observable").string(transform.measurement());
-        const auto measurement = system->observableCatalog().at(name);
-        c::CausalHistoryProjector projector(transform);
-        std::optional<std::vector<Complex>> previous; double previousInput = 0.0; bool previousKept = false;
-        const std::size_t inputRows = source.inputs.size() / source.inputDimension;
-        for (std::size_t k = 0; k < source.samples; ++k) {
-            const auto y = measurement.evaluateReal(source.values.data() + k * source.dimension).front();
-            const auto q = projector.push(source.time[k], y);
-            if (!q) continue;
-            auto psi = model.evaluateCoordinates(q->data());
-            if (previous && previousKept) rows.push_back({*previous, psi, previousInput});
-            previous = std::move(psi);
-            previousInput = k < inputRows ? source.inputs[k] : 0.0;
-            previousKept = source.time[k] >= fitStart;
-        }
-    }
-    return rows;
+// phi(a, b) = int_0^h exp(a (h - s)) exp(b s) ds, the held-input weight of a term that
+// evolves at rate b inside a mode that evolves at rate a.
+Complex heldKernel(Complex a, Complex b, double h) {
+    const Complex d = a - b;
+    if (std::abs(d) * h < 1e-6) return h * std::exp(b * h) * (1.0 + d * h / 2.0 + d * d * h * h / 6.0);
+    return (std::exp(a * h) - std::exp(b * h)) / d;
 }
 
-json::Value::Object historyRegression(c::KoopmanModel& model, const c::FrozenHistoryTransform& transform,
-                                      const std::vector<std::filesystem::path>& sources, const json::Value& settings,
-                                      const std::string& representation, const std::string& mapName) {
-    const auto rows = historyPairs(model, transform, sources, settings);
+Complex inverseKernel(Complex a, Complex b, double h) {
+    const Complex phi = heldKernel(a, b, h);
+    if (!(std::abs(phi) > 1e-12 * h))
+        throw std::invalid_argument("input_map held-input conversion is aliased at this sample time");
+    return 1.0 / phi;
+}
+
+json::Value::Object heldInputRegression(c::KoopmanModel& model, const HeldInputRecords& records,
+                                        const json::Value& settings, const std::string& representation,
+                                        const std::string& mapName) {
+    const auto& rows = records.rows;
     if (rows.size() < 8) throw std::invalid_argument("input_map has too few forced regression pairs");
-    const double dt = transform.sampleInterval(), ridge = settings.at("ridge").number(0.0);
+    const double dt = records.sampleTime, ridge = settings.at("ridge").number(0.0);
     const auto drift = settings.at("drift").string("none");
     if (drift != "none" && drift != "affine") throw std::invalid_argument("input_map drift must be none or affine");
     const auto& rates = model.spectrum().continuousRates();
     const std::size_t m = model.liftedDimension();
     const bool bilinear = representation == "bilinear";
-    const std::size_t nb = bilinear ? m + 1 : 1, nd = drift == "affine" ? m + 1 : 0, n = nb + nd;
+    const bool conjugate = bilinear && settings.at("conjugate_complete").boolean(false);
+    // conj(psi_i) duplicates psi_i for a real mode, so only complex modes get a column.
+    std::vector<std::size_t> conjugateModes;
+    if (conjugate) for (std::size_t i = 0; i < m; ++i) if (std::abs(rates[i].imag()) > 1e-12) conjugateModes.push_back(i);
+    const std::size_t nc = conjugateModes.size();
+    const std::size_t nb = bilinear ? 1 + m + nc : 1, nd = drift == "affine" ? m + 1 : 0, n = nb + nd;
     std::vector<Complex> X(rows.size() * n);
     for (std::size_t r = 0; r < rows.size(); ++r) {
         auto* x = X.data() + r * n;
         x[0] = rows[r].u;
         if (bilinear) for (std::size_t i = 0; i < m; ++i) x[1 + i] = rows[r].u * rows[r].psi[i];
+        for (std::size_t c = 0; c < nc; ++c) x[1 + m + c] = rows[r].u * std::conj(rows[r].psi[conjugateModes[c]]);
         if (nd) { x[nb] = 1.0; for (std::size_t i = 0; i < m; ++i) x[nb + 1 + i] = rows[r].psi[i]; }
     }
     c::ConstantControlMap constant; c::BilinearControlMap bil;
     constant.modes = bil.modes = m; constant.inputs = bil.inputs = 1;
     constant.matrix.resize(m); constant.discreteMatrix.resize(m); constant.sampleTime = dt;
     bil.offsets.resize(m); bil.operators.assign(m * m, 0.0);
+    if (conjugate) bil.conjugateOperators.assign(m * m, 0.0);
     double residual = 0, energy = 0, inputEnergy = 0;
     for (const auto& row : rows) inputEnergy += row.u * row.u;
     if (!(inputEnergy > 0)) throw std::invalid_argument("input_map forced records carry no input");
@@ -152,21 +145,28 @@ json::Value::Object historyRegression(c::KoopmanModel& model, const c::FrozenHis
             res += std::norm(q[r] - fit); en += std::norm(q[r]);
         }
         residual += res; energy += en;
-        const Complex z = rates[j] * dt;
-        const Complex toContinuous = std::abs(z) < 1e-12 ? Complex(1.0 / dt) : rates[j] / (mu - 1.0);
+        const Complex toContinuous = inverseKernel(rates[j], 0.0, dt);
         if (bilinear) {
             bil.offsets[j] = beta[0] * toContinuous;
-            for (std::size_t i = 0; i < m; ++i) bil.operators[j * m + i] = beta[1 + i] * toContinuous;
+            for (std::size_t i = 0; i < m; ++i)
+                bil.operators[j * m + i] = beta[1 + i] * inverseKernel(rates[j], rates[i], dt);
+            for (std::size_t c = 0; c < nc; ++c) {
+                const auto i = conjugateModes[c];
+                bil.conjugateOperators[j * m + i] = beta[1 + m + c] * inverseKernel(rates[j], std::conj(rates[i]), dt);
+            }
         } else { constant.discreteMatrix[j] = beta[0]; constant.matrix[j] = beta[0] * toContinuous; }
         perMode.emplace_back(en > 0 ? std::sqrt(res / en) : 0.0);
     }
     const std::string provenance = std::string("input_map held_input ") + representation
-        + (nd ? " with affine drift nuisance" : "") + " (measurement only, forced records), ZOH-inverted";
+        + (conjugate ? " conjugate-complete" : "") + (nd ? " with affine drift nuisance" : "")
+        + " (forced records, frozen eigenvalues), ZOH-inverted to first order in u";
     if (bilinear) { bil.provenance = provenance; model.setControlMap(mapName, bil); }
     else { constant.provenance = provenance; model.setControlMap(mapName, constant); }
     return {{"regression_pairs", json::Value(double(rows.size()))}, {"ridge", json::Value(ridge)},
             {"drift", json::Value(drift)}, {"relative_residual", json::Value(energy > 0 ? std::sqrt(residual / energy) : 0.0)},
             {"relative_residual_by_mode", json::Value(std::move(perMode))}, {"delta_t", json::Value(dt)},
+            {"conjugate_complete", json::Value(conjugate)},
+            {"pairs_dropped_at_input_change", json::Value(double(records.droppedAtInputChange))},
             {"input_rms", json::Value(std::sqrt(inputEnergy / double(rows.size())))}};
 }
 
@@ -174,7 +174,7 @@ json::Value::Object coordinateRegression(c::KoopmanModel& model, const std::vect
                                          const json::Value& settings, const std::string& representation,
                                          const std::string& fit, const std::string& mapName) {
     if (representation != "constant" || fit != "controlled_residual")
-        throw std::invalid_argument("measured-coordinate KROMs support representation constant with fit controlled_residual");
+        throw std::invalid_argument("measured-coordinate KROMs support constant with controlled_residual, or constant/bilinear with held_input");
     const auto derivative = parseDerivativeSpec(settings.at("derivative"));
     const double ridge = settings.at("ridge").number(0.0);
     const auto rates = model.continuousEigenvalues();
@@ -233,7 +233,46 @@ json::Value::Object stateRegression(c::KoopmanModel& model, const std::vector<st
         states.insert(states.end(), source.values.begin(), source.values.end());
         loaded.push_back(std::move(source));
     }
-    for (const auto& s : loaded) data.push_back({s.time, s.values, s.inputs, s.samples, s.dimension, s.inputDimension});
+    const auto& window = settings.at("state_window");
+    const double fitStart = settings.at("fit_start").number(0.0);
+    const bool wholeRecords = window.isNull() && std::all_of(loaded.begin(), loaded.end(),
+        [&](const SourceData& s) { return s.time.front() >= fitStart; });
+    if (wholeRecords) {
+        for (const auto& s : loaded) data.push_back({s.time, s.values, s.inputs, s.samples, s.dimension, s.inputDimension});
+    } else {
+        // Restrict the regression to samples at or after fit_start and inside a state box ([[lo, hi], ...]
+        // per state component): each maximal run of inside samples is its own record, so no pair spans a gap.
+        states.clear();
+        for (const auto& s : loaded) {
+            if (!window.isNull() && window.array().size() != s.dimension)
+                throw std::invalid_argument("input_map state_window needs one [low, high] pair per state component");
+            const bool intervals = s.inputs.size() == (s.samples - 1) * s.inputDimension;
+            auto inside = [&](std::size_t k) {
+                if (s.time[k] < fitStart) return false;
+                if (window.isNull()) return true;
+                for (std::size_t j = 0; j < s.dimension; ++j) {
+                    const auto& b = window.array().at(j).array(); const double v = s.values[k * s.dimension + j];
+                    if (v < b.at(0).number() || v > b.at(1).number()) return false;
+                }
+                return true;
+            };
+            for (std::size_t k = 0; k < s.samples;) {
+                if (!inside(k)) { ++k; continue; }
+                std::size_t e = k; while (e + 1 < s.samples && inside(e + 1)) ++e;
+                if (e > k) {
+                    c::ControlledData d; d.samples = e - k + 1; d.stateDimension = s.dimension; d.inputDimension = s.inputDimension;
+                    d.time.assign(s.time.begin() + k, s.time.begin() + e + 1);
+                    d.states.assign(s.values.begin() + k * s.dimension, s.values.begin() + (e + 1) * s.dimension);
+                    if (!s.inputs.empty()) d.inputs.assign(s.inputs.begin() + k * s.inputDimension,
+                                    s.inputs.begin() + (intervals ? e : e + 1) * s.inputDimension);
+                    states.insert(states.end(), d.states.begin(), d.states.end());
+                    data.push_back(std::move(d));
+                }
+                k = e + 1;
+            }
+        }
+        if (data.empty()) throw std::invalid_argument("input_map fit_start/state_window keeps no forced samples");
+    }
     const double ridge = settings.at("ridge").number(0.0);
     const std::size_t dimension = loaded.front().dimension, count = states.size() / dimension;
     double relative = 0;
@@ -285,6 +324,8 @@ std::filesystem::path runInputMap(const std::vector<std::filesystem::path>& sour
     std::string transformPath;
     if (!analytic) {
         if (sources.empty()) throw std::invalid_argument("a regressed input_map needs forced training records");
+        // History regression historically used every pair; strict_hold opts in to the same check as other KROMs.
+        const bool strictHold = settings.at("strict_hold").boolean(!history);
         if (history) {
             if (fit != "held_input") throw std::invalid_argument("causal-history input_map regression uses fit held_input");
             transformPath = settings.at("history_transform").string(model.coordinates().providerArtifact.empty()
@@ -292,7 +333,11 @@ std::filesystem::path runInputMap(const std::vector<std::filesystem::path>& sour
             const auto transform = c::loadFrozenHistoryTransform(std::filesystem::u8path(transformPath));
             if (transform.identity() != model.coordinates().providerIdentity)
                 throw std::invalid_argument("History transform differs from KROM training coordinates");
-            diagnostics = historyRegression(model, transform, sources, settings, representation, mapName);
+            diagnostics = heldInputRegression(model, heldInputRecords(model, &transform, sources, settings, strictHold),
+                                              settings, representation, mapName);
+        } else if (fit == "held_input") {
+            diagnostics = heldInputRegression(model, heldInputRecords(model, nullptr, sources, settings, strictHold),
+                                              settings, representation, mapName);
         } else if (model.requiresExternalCoordinates()) {
             diagnostics = coordinateRegression(model, sources, settings, representation, fit, mapName);
         } else diagnostics = stateRegression(model, sources, settings, representation, fit, mapName);

@@ -15,10 +15,13 @@ read together and one KROM archive is written to
 |---|---|
 | `krom` | The KROM whose `psi` is used (required). |
 | `representation` | `exact` (analytic `grad psi . g(x)`, state/observable KROMs), `history_exact` (analytic `grad_xi psi` · newest-sample weight · `L_g y`; causal-history KROMs; the controller reads the simulator state), `constant`, or `bilinear` (`B(psi) = b0 + sum_i b_i psi_i`). |
-| `fit` | For regressed maps. `held_input` (causal-history KROMs, measurement only), `controlled_residual`, `multistep_output` (constant only), or `exact_map` (state/observable KROMs). |
+| `fit` | For regressed maps. `held_input` (every KROM kind; the only fit for causal-history KROMs and for bilinear maps on measured coordinates), `controlled_residual`, `multistep_output` (constant only), or `exact_map` (state/observable KROMs). |
+| `conjugate_complete` | Bilinear only. Adds `conj(psi_i)` regressors, so a complex mode can have a general real-linear dependence on its own real and imaginary parts. Default `false`. |
+| `strict_hold` | `held_input` only. Keep only pairs whose input was really held (below). Default `true`, except `false` for causal-history KROMs, which keeps their earlier behaviour. |
 | `drift` | `held_input` only. `none`, or `affine`, which jointly fits a nuisance term `a(psi) = a0 + sum a_i psi_i` that absorbs zero-input closure error. The controller does not use `a`. |
 | `ridge` | Tikhonov weight relative to the largest normal-equation diagonal. |
-| `fit_start` | Skip forced samples before this time (start-up transients). |
+| `fit_start` | Skip forced samples before this time (start-up transients). Honoured by every regressed fit on state/observable KROMs and by `held_input`. |
+| `state_window` | `[[low, high], ...]` per state component: regress only on forced samples inside this box (each run of consecutive inside samples is its own record). Use the window the eigenfunctions were fitted on, so `B_psi` describes the same operating region. |
 | `map_name` | Name of the stored map (default: the representation). |
 | `measurement_observable` | History measurement (default: the frozen transform's). |
 | `map` | An object whose fields are merged into the settings. A pipeline passes its whole `B_psi` parameter here. |
@@ -29,15 +32,42 @@ them. The archive's `metadata_json.input_map` records the representation,
 fit, forced sources and regression diagnostics: pairs, relative residual
 (overall and by mode), and input RMS.
 
-### `held_input` regression (causal-history KROMs)
+### `held_input` regression
 
-For each forced record, the measured observable is pushed through the KROM's
-frozen history transform to `xi_k` and lifted to `psi_k`. Per mode `j`:
+`psi_k` comes from the state (state/observable KROMs), the measured coordinates,
+or the measured observable pushed through the frozen history transform
+(causal-history KROMs). The eigenvalues stay frozen. Per mode `j`:
 
     q_k = psi_{k+1,j} - mu_j psi_{k,j} = [a_j(psi_k)] + D_j(psi_k) u_k,   mu_j = exp(lambda_j dt)
 
 This is solved by complex least squares. The stored continuous map is the
-zero-order-hold inverse `B_j = D_j lambda_j / (mu_j - 1)`.
+zero-order-hold inverse, exact to first order in `u` (Van Loan, *IEEE Trans.
+Automat. Control* 23 (1978) 395-404). With
+
+    phi(a, b) = int_0^dt exp(a (dt - s)) exp(b s) ds
+
+the offset is `b0_j = D0_j / phi(lambda_j, 0)`, the operator on `psi_i` is
+`N_ji = D_ji / phi(lambda_j, lambda_i)`, and the operator on `conj(psi_i)` uses
+`phi(lambda_j, conj(lambda_i))`. Before 2026-11-23 every operator used
+`phi(lambda_j, 0)`, which is wrong at order `dt` when `i != j`, so bilinear maps
+refitted now can differ slightly from older archives. Constant maps are unchanged.
+
+A pair is valid only if `u` was constant across it. Interval-aligned
+`control_interval_values` and sampled control on a clock that is a whole multiple
+of the record step qualify. For other sample-aligned records, strict mode keeps
+only pairs with `u_{k+1} == u_k`, and a sampled clock that is not a whole multiple
+of the step is refused. `diagnostics.pairs_dropped_at_input_change` reports the count.
+
+### How the map reaches the estimator and controller
+
+- **KLQE** propagates `z' = (G - L C + sum_a u_a N_a) z + L y + b0 u` by exact
+  zero-order hold for each held input. `N_a` and `b0` are the exact real-split form
+  of the stored map, conjugate operators included.
+- **KLQR** without a certificate re-solves the Riccati equation on `(G, B(z))` at
+  each evaluation. This is a state-dependent factorization (SDRE). It does not add
+  `u N` to `G`, has no feedforward for a nonzero target, and carries no guarantee.
+- **Certified KLQR** (`bilinear_certificate`) replaces that gain with a checked
+  fixed gain. See `CERTIFIED_BILINEAR_CONTROL_TOOLS.md`.
 
 ## Selecting B_psi in a pipeline
 

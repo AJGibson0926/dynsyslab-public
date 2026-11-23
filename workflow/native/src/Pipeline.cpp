@@ -447,6 +447,15 @@ void setJobInputPath(json::Value& root, const std::string& path, json::Value val
 json::Value applyJobInputs(json::Value job, const std::vector<std::pair<std::string, std::string>>& params,
                            const std::vector<std::pair<std::string, std::string>>& sets) {
     if (params.empty() && sets.empty()) return job;
+    if (job.at("kind").string() == "job_group") {
+        for (const auto& [name, text] : params) job.at("parameters").at(name) = inputValue(text);
+        for (const auto& [path, text] : sets) {
+            if (path == "__fresh") job.at("fresh") = json::Value(true);
+            else if (path.rfind("__", 0) == 0) throw std::invalid_argument("--until and --refresh apply to pipeline jobs");
+            else setJobInputPath(job, path, inputValue(text));
+        }
+        return job;
+    }
     json::Value::Object record, paramRecord, setRecord;
     std::string until;  // "__until" carries --until STAGE
     for (const auto& [name, text] : params) paramRecord[name] = inputValue(text);

@@ -1,0 +1,60 @@
+{
+  "schema": "dynsyslab.lie-algebra-query/v1",
+  "dimension": 1,
+  "coordinate_names": [
+    "x_1"
+  ],
+  "action": "module",
+  "observables": [
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          0
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          1
+        ]
+      }
+    ],
+    [
+      {
+        "coefficient": "1",
+        "powers": [
+          2
+        ]
+      }
+    ]
+  ],
+  "operators": [
+    [
+      [
+        {
+          "coefficient": "1",
+          "powers": [
+            1
+          ]
+        }
+      ]
+    ],
+    [
+      [
+        {
+          "coefficient": "1",
+          "powers": [
+            0
+          ]
+        }
+      ]
+    ]
+  ],
+  "provenance": {
+    "case": "scalar-redundant-module",
+    "source": "exact x_dot=x+u; physical image z2=z1^2"
+  }
+}

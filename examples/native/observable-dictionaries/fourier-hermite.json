@@ -1,0 +1,24 @@
+{
+  "schema": "dynsyslab.koopman-spectral-query/v1",
+  "action": "dictionary",
+  "data": {
+    "dimension": 2,
+    "x": [
+      0,
+      0,
+      1,
+      -1,
+      2,
+      0.5,
+      -1,
+      0.4
+    ]
+  },
+  "settings": {
+    "dictionary": {
+      "kind": "fourier_hermite",
+      "angular_order": 4,
+      "hermite_order": 4
+    }
+  }
+}

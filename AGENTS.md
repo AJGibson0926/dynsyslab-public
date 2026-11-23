@@ -39,3 +39,5 @@ feature guide. Run `python -m dynsyslab doctor` to verify the checkout and
 - Reuse the canonical archive, hierarchy, system, control, post-processing, Viewer catalog, and shared native UI components instead of creating parallel stores or frameworks.
 - Preserve scientific provenance, coordinate-system metadata, archive immutability, and the Batch > System > Cluster > Trajectory hierarchy.
 - Add focused tests and concise architecture/user documentation for new public behavior.
+- Cite the papers behind every algorithm, in its code comments and its documentation. Reports cite the work they build on.
+- Downloaded papers, reading notes, literature reviews, and analyses or comparisons of published work are side research, not part of the suite. Keep them in the git-ignored `research/literature/<topic>/` folder, not in `docs/` or source.

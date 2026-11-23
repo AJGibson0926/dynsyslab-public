@@ -1,0 +1,28 @@
+{
+  "schema": "dynsyslab.koopman-spectral-query/v1",
+  "action": "dictionary",
+  "data": {
+    "dimension": 2,
+    "x": [
+      0,
+      0,
+      1,
+      -1,
+      2,
+      0.5,
+      -1,
+      0.4
+    ]
+  },
+  "settings": {
+    "dictionary": {
+      "kind": "chebyshev",
+      "degree": 9,
+      "index_set": "tensor_product",
+      "scale": [
+        2.5,
+        2.5
+      ]
+    }
+  }
+}

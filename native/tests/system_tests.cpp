@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -27,7 +28,15 @@ std::unique_ptr<dynsyslab::core::ODESystem> system(const char* identifier,
 }
 
 void testCatalogAndBasicSystems() {
-    require(dynsyslab::core::systemCatalog().size() == 20, "unexpected system catalog size");
+    std::set<std::string> identifiers;
+    for(const auto& descriptor:dynsyslab::core::systemCatalog()) {
+        require(!descriptor.identifier.empty()&&descriptor.stateDimension>0,"invalid catalog descriptor");
+        require(identifiers.insert(descriptor.identifier).second,"duplicate catalog identifier");
+    }
+    for(const auto* required:{"rpe","duffing","nonlinear_pendulum","van_der_pol","kuramoto",
+        "morse_oscillator","isotonic_oscillator","poschl_teller","cosh_oscillator","radial_twist",
+        "kepler_planar","euler_top","coupled_duffing_hamiltonian","toda_lattice"})
+        require(identifiers.count(required)==1,"required system missing from catalog");
     auto duffing = system("duffing", "double_well_reference");
     const double state[]{0.5, -0.25}; double derivative[2]{};
     duffing->rhsWithInput(0.0, state, 0.2, derivative);
@@ -137,6 +146,17 @@ void testBubbleSystems() {
     require(rpeObservables.contains("far_field_acoustic_echo"),"RPE echo observable");
     require(std::isfinite(rpeObservables.at("far_field_acoustic_echo")
         .evaluateReal(equilibrium)[0]),"finite RPE echo observable");
+    for(double kappa:{1.,4./3.,1.5})for(double mu:{0.,.001}) {
+        dynsyslab::core::SystemConfiguration c;c.identifier="rpe";c.parameters={{"kappa",kappa},{"mu_pa_s",mu}};
+        const auto bubble=dynsyslab::core::createSystem(c);const auto cat=bubble->observableCatalog();
+        close(cat.at("mechanical_energy").evaluateReal(equilibrium)[0],0,1e-12,"RPE equilibrium energy origin");
+        for(double r:{.3,1.,2.4})for(double v:{-3.,.2})for(double u:{-.1,.05}){
+            const double state[]{r,v};double f[2];bubble->rhsWithInput(0,state,u,f);
+            const auto gradient=cat.at("mechanical_energy").jacobian(state);
+            const double rate=cat.at("energy_dissipation").evaluateReal(state)[0]+u*cat.at("control_power_coefficient").evaluateReal(state)[0];
+            close((gradient[0]*f[0]+gradient[1]*f[1]).real(),rate,1e-10,"RPE exact energy balance");
+        }
+    }
     auto marmottant = system("marmottant", "matlab_cleanup_linear");
     marmottant->rhs(0.0, equilibrium, derivative);
     require(std::isfinite(derivative[1]), "Marmottant derivative");

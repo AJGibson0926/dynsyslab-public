@@ -51,6 +51,14 @@ jobs:
           [IO.File]::WriteAllText('build/native-suite-fast/SHA256SUMS.txt', $line + "`n", [Text.UTF8Encoding]::new($false))
           ./tools/Test-ReleaseContents.ps1 -PackagePath $zip[0].FullName
           ./tools/Test-ReleaseInstall.ps1 -PackagePath $zip[0].FullName -ChecksumPath build/native-suite-fast/SHA256SUMS.txt
+      - name: Check tracked data packs
+        shell: pwsh
+        run: |
+          $cli = (Resolve-Path build/native-suite-fast/bin/dynsyslab-cli.exe).Path
+          foreach ($pack in Get-ChildItem data-packs -Directory) {
+            & $cli datapack validate $pack.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Data pack failed validation: $($pack.Name)" }
+          }
       - name: Build the Python client wheel
         run: |
           python -m pip wheel . --no-deps -w build/native-suite-fast/wheel

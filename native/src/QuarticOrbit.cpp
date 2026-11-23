@@ -22,6 +22,18 @@ QuarticOrbit::QuarticOrbit(std::array<double, 5> c, double x, double v)
     const double a = c[4], b = c[3] / 4, d = c[2] / 6, e = c[1] / 4, h = c[0];
     g2_ = a * h - 4 * b * e + 3 * d * d;
     g3_ = a * d * h + 2 * b * d * e - d * d * d - a * e * e - b * b * h;
+    if(c[1]==0&&c[3]==0&&c[0]>0&&c[4]<0){
+        // x=A cn(nu*t+u0 | m), from (cn')^2=(1-cn^2)(1-m+m cn^2).
+        // DLMF 22.13. The state and its derivative share one stable chart.
+        const double quartic=-c[4],disc=std::sqrt(c[2]*c[2]+4*quartic*c[0]);
+        if(!std::isfinite(disc))throw std::overflow_error("Even quartic scaling overflow");
+        amplitude_=std::sqrt(c[2]>0?(disc+c[2])/(2*quartic):2*c[0]/(disc-c[2]));frequency_=std::sqrt(disc);
+        parameter_=quartic*amplitude_*amplitude_/disc;
+        const double cn=std::clamp(x/amplitude_,-1.,1.),dn=std::sqrt(1-parameter_+parameter_*cn*cn);
+        const double sn=-v/(amplitude_*frequency_*dn);
+        phase_=ellipticF(std::atan2(sn,cn),parameter_);period_=4*ellipticK(parameter_)/frequency_;
+        evenJacobi_=true;return;
+    }
     const double scale =
         std::max({1., std::pow(std::abs(g2_), .25), std::pow(std::abs(g3_), 1. / 6.)});
     period_ = weierstrass(.137 / scale, g2_, g3_).realPeriod;
@@ -30,6 +42,8 @@ double QuarticOrbit::realPeriod() const { return period_; }
 std::array<double, 2> QuarticOrbit::evaluate(double elapsed) const {
     if (!std::isfinite(elapsed))
         throw std::invalid_argument("Nonfinite analytic time");
+    if(evenJacobi_){const double t=std::remainder(elapsed,period_);const auto j=jacobi(phase_+frequency_*t,parameter_);
+        return {amplitude_*j.cn,-amplitude_*frequency_*j.sn*j.dn};}
     if (v_ == 0 && f1_ == 0)
         return {x_, v_};
     double t = std::isfinite(period_) ? std::remainder(elapsed, period_) : elapsed;

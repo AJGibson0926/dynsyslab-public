@@ -29,6 +29,28 @@ json::Value evaluateObservableQuery(const json::Value& request) {
         }
         return json::Value::Object{{"schema","dynsyslab.observable-catalog/v1"},{"observables",entries}};
     }
+    if(request.at("operation").string()=="evaluate_batch") {
+        if(request.at("flow_order").number()!=0||!request.at("partial_axes").array().empty())
+            throw std::invalid_argument("Batch readout evaluates values only; use a derived observable for derivatives");
+        if(!std::holds_alternative<json::Value::Array>(request.at("states").storage())||request.at("states").array().size()>10000000)
+            throw std::invalid_argument("Bounded flat states array required");
+        std::vector<double> states;
+        for(const auto& v:request.at("states").array()){
+            if(!std::holds_alternative<double>(v.storage())||!std::isfinite(v.number()))throw std::invalid_argument("Finite batch states required");states.push_back(v.number());}
+        const auto dimension=system->descriptor().stateDimension;
+        if(states.empty()||states.size()%dimension)throw std::invalid_argument("Batch state dimensions differ");
+        std::vector<core::Observable> observables;
+        for(const auto& n:request.at("observables").array())observables.push_back(catalog.at(n.string()));
+        if(observables.empty())throw std::invalid_argument("Batch readout requires named observables");
+        const auto combined=core::Observable::stack("batch","Batch readout",observables);
+        const auto samples=states.size()/dimension;
+        if(combined.outputDimension()>10000000/samples)throw std::invalid_argument("Batch readout output resource limit");
+        json::Value::Array values;for(double v:combined.evaluateRealBatch(states,samples)){
+            if(!std::isfinite(v))throw std::domain_error("Nonfinite batch readout");values.emplace_back(v);}
+        return json::Value::Object{{"schema","dynsyslab.observable-result/v1"},{"values",values},
+            {"samples",double(samples)},{"output_dimension",double(combined.outputDimension())},
+            {"state_dimension",double(dimension)},{"value_type","real"},{"layout","sample-major"}};
+    }
     std::vector<double> x;
     for(const auto& item:request.at("state").array())x.push_back(item.number());
     if(x.size()!=system->descriptor().stateDimension)
@@ -65,12 +87,19 @@ json::Value evaluateObservableQuery(const json::Value& request) {
         } else observable=observable.flowDerivative(field,std::size_t(order));
     }
     json::Value::Array values,jacobian;
-    for(const auto value:observable.evaluateReal(x.data()))values.emplace_back(value);
-    for(const auto value:observable.jacobian(x.data()))jacobian.emplace_back(value.real());
+    const bool complex=observable.descriptor().complexValued;
+    auto append=[&](json::Value::Array& output,std::complex<double> value) {
+        if(complex)output.emplace_back(json::Value::Array{value.real(),value.imag()});
+        else output.emplace_back(value.real());
+    };
+    if(complex)for(const auto value:observable.evaluate(x.data()))append(values,value);
+    else for(const auto value:observable.evaluateReal(x.data()))values.emplace_back(value);
+    for(const auto value:observable.jacobian(x.data()))append(jacobian,value);
     json::Value::Object result{{"schema","dynsyslab.observable-result/v1"},
         {"observable",observable.descriptor().name},{"values",std::move(values)},
         {"jacobian",std::move(jacobian)},{"state_dimension",double(x.size())},
         {"output_dimension",double(observable.outputDimension())},
+        {"value_type",complex?"complex":"real"},
         {"gradient_backend",observable.hasAnalyticJacobian()?"analytic":"finite-difference"},
         {"flow_field",includeInputs&&order?"supplied-input":"autonomous-zero-input"},
         {"input_terms_included",includeInputs&&order!=0},

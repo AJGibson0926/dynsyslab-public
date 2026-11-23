@@ -25,7 +25,8 @@ source and binary distributions:
 - MultDMD indicator objective (`construct_basis.m`):
   [MIT notice](colbrook/NBoulle--MultDMD--85277b046a9a-LICENSE.txt).
   Native file: `KoopmanSpectralFit.cpp`; deterministic farthest-point centers
-  replace the example's k-means dependency.
+  are the default. `KoopmanDictionaryFit.cpp` now also offers independently
+  implemented Lloyd k-means with deterministic initialization.
 - SpecRKHS Gram/residual construction (`generate_matrices.m`, `verified_eigenvalues.m`):
   [MIT notice](colbrook/GustavConradie1--SpecRKHS--8b888786c3e7-LICENSE.txt).
   Native file: `KoopmanRkhs.cpp`; real Gaussian kernels currently supported.
@@ -41,3 +42,14 @@ workflows from the cited repositories have been ported.
 
 The [architecture record](../architecture/SPECTRAL_KROM.md) lists implemented
 calculations, assumptions, tests, and remaining extensions explicitly.
+
+The November 21 [observable/dictionary extension](../architecture/OSCILLATOR_OBSERVABLES_DICTIONARIES.md)
+records pinned example-level attribution for the phase/sech, fifth-harmonic,
+Gaussian-velocity and Gaussian-sum observables; Chebyshev, Laguerre and
+Fourier-Hermite trial spaces; and Laplacian, Lorentzian and Matern kernel
+sections. Standard formulas and recurrences were implemented independently in
+`OscillatorObservables.cpp`, `BasisFunctions.cpp`, `SpectralDictionary.cpp`
+and `KoopmanDictionaryFit.cpp`. TrustKoopman's unlicensed source was consulted
+only to identify the stated Chebyshev basis; no source was copied. The new
+Matern sections are available to EDMD/ResDMD; they do not expand the separate
+Gaussian-only SpecRKHS adjoint implementation.

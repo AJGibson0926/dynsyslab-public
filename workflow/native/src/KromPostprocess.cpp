@@ -1,9 +1,11 @@
 #include "PostprocessInternal.hpp"
+#include <dynsyslab/core/LongPath.hpp>
 #include "KromEvidence.hpp"
 
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/core/System.hpp>
 #include <dynsyslab/core/Text.hpp>
+#include <dynsyslab/math/Query.hpp>
 #include <dynsyslab/workflow/KromValidationPlan.hpp>
 
 #include <algorithm>
@@ -242,6 +244,97 @@ json::Value::Array refitReconstructions(dynsyslab::core::KoopmanModel& reduced, 
     return report;
 }
 
+// {"rule":"principal","target_state":[...]}: the principal eigenfunctions of an operating point
+// (Mauroy & Mezić, IEEE TAC 61(11), 2016; Kvalheim & Revzen, Physica D 425, 2021).
+// Modes are chosen greedily by the part of their gradient at the target state (normalized by the mode's
+// training rms) that is independent of the modes already chosen, until the gradients span the state.
+// Products and harmonics of chosen eigenfunctions (eigenvalues k*lambda) have zero gradient at the
+// target and are never chosen; at an unstable target they would be unstable lifted modes that a constant
+// input map cannot reach, which makes the lifted (A, B) unstabilizable for KLQR. Conjugates are completed.
+std::vector<std::size_t> principalIndices(const json::Value& rule, const std::filesystem::path& source,
+                                          const dynsyslab::core::NpzRecord& parent) {
+    using Complex = std::complex<double>;
+    const auto model = dynsyslab::core::loadKoopmanModel(source);
+    const auto dimension = model.physicalStateDimension();
+    if (!dimension) throw std::invalid_argument("mode_selection principal needs a physical-state KROM");
+    const auto& targetValue = rule.at("target_state");
+    if (targetValue.isNull() || targetValue.array().size() != *dimension)
+        throw std::invalid_argument("mode_selection principal needs target_state with one value per state component");
+    std::vector<double> target; for (const auto& v : targetValue.array()) target.push_back(v.number());
+    const std::size_t n = *dimension, modes = model.liftedDimension();
+    std::vector<double> rms(modes, 1.0);
+    if (parent.contains("eigenfunction_values") && parent.at("eigenfunction_values").shape.size() == 2
+        && parent.at("eigenfunction_values").shape[1] == modes) {
+        const auto values = parent.at("eigenfunction_values").complexDoubles();
+        const std::size_t samples = parent.at("eigenfunction_values").shape[0];
+        for (std::size_t j = 0; j < modes; ++j) {
+            double sum = 0; for (std::size_t i = 0; i < samples; ++i) sum += std::norm(values[i * modes + j]);
+            rms[j] = samples ? std::sqrt(sum / double(samples)) : 1.0; if (!(rms[j] > 0)) rms[j] = 1.0;
+        }
+    }
+    std::vector<std::vector<Complex>> gradient(modes, std::vector<Complex>(n));
+    for (std::size_t i = 0; i < n; ++i) {
+        const double h = 1e-6 * std::max(1.0, std::abs(target[i]));
+        auto plus = target, minus = target; plus[i] += h; minus[i] -= h;
+        const auto a = model.evaluateFromState(plus.data()), b = model.evaluateFromState(minus.data());
+        for (std::size_t j = 0; j < modes; ++j) gradient[j][i] = (a[j] - b[j]) / (2 * h * rms[j]);
+    }
+    const auto spectrum = model.continuousEigenvalues();
+    // Optional consistency filter (ResDMD-style residual stored by the EDMDc export): skip modes whose
+    // relative one-step residual exceeds max_residual (default 0.3), but always keep the 2n+1 best.
+    std::vector<bool> allowed(modes, true);
+    if (parent.contains("mode_consistency") && parent.at("mode_consistency").shape.at(0) == modes) {
+        const auto residuals = parent.at("mode_consistency").doubles();
+        auto sorted = residuals; std::sort(sorted.begin(), sorted.end());
+        const double floor = sorted[std::min(modes - 1, 2 * n)], limit = std::max(rule.at("max_residual").number(0.3), floor);
+        for (std::size_t j = 0; j < modes; ++j) allowed[j] = residuals[j] <= limit;
+    }
+    std::vector<std::vector<double>> basis; std::vector<std::size_t> result;
+    auto residual = [&](std::vector<double> v) {
+        for (const auto& q : basis) { double d = 0; for (std::size_t i = 0; i < n; ++i) d += q[i] * v[i];
+            for (std::size_t i = 0; i < n; ++i) v[i] -= d * q[i]; }
+        return v; };
+    auto norm = [&](const std::vector<double>& v) { double s = 0; for (double x : v) s += x * x; return std::sqrt(s); };
+    std::vector<double> consistency(modes, 0.0);
+    if (parent.contains("mode_consistency") && parent.at("mode_consistency").shape.at(0) == modes)
+        consistency = parent.at("mode_consistency").doubles();
+    auto independent = [&](std::size_t j) {   // gradient part independent of the chosen modes, per real dimension
+        std::vector<double> re(n), im(n); for (std::size_t i = 0; i < n; ++i) re[i] = gradient[j][i].real(), im[i] = gradient[j][i].imag();
+        const bool pair = std::abs(spectrum[j].imag()) > 1e-9;
+        return std::hypot(norm(residual(re)), norm(residual(im))) / (pair ? std::sqrt(2.0) : 1.0); };
+    while (basis.size() < n) {
+        double largest = 0;
+        for (std::size_t j = 0; j < modes; ++j)
+            if (allowed[j] && std::find(result.begin(), result.end(), j) == result.end()) largest = std::max(largest, independent(j));
+        if (largest < 1e-12) break;
+        // The target's instability must be represented: the first pick is the most consistent growing mode
+        // whose gradient is non-negligible (if any); later picks take the largest independent gradient.
+        std::size_t pick = modes; double best = INFINITY;
+        for (std::size_t j = 0; j < modes; ++j)
+            if (result.empty() && allowed[j] && spectrum[j].real() > 0 && std::find(result.begin(), result.end(), j) == result.end()
+                && independent(j) > 0.1 * largest && consistency[j] < best) best = consistency[j], pick = j;
+        if (pick == modes) {
+            best = 0;
+            for (std::size_t j = 0; j < modes; ++j)
+                if (allowed[j] && std::find(result.begin(), result.end(), j) == result.end() && independent(j) > best)
+                    best = independent(j), pick = j;
+        }
+        result.push_back(pick);
+        for (int part = 0; part < 2; ++part) {
+            std::vector<double> v(n); for (std::size_t i = 0; i < n; ++i) v[i] = part ? gradient[pick][i].imag() : gradient[pick][i].real();
+            v = residual(v); const double length = norm(v);
+            if (length > 1e-9 && basis.size() < n) { for (double& x : v) x /= length; basis.push_back(v); }
+        }
+        if (std::abs(spectrum[pick].imag()) > 1e-9)
+            for (std::size_t other = 0; other < modes; ++other)
+                if (other != pick && std::abs(spectrum[other] - std::conj(spectrum[pick])) <= 1e-9 + 1e-7 * std::abs(spectrum[pick])
+                    && std::find(result.begin(), result.end(), other) == result.end()) { result.push_back(other); break; }
+    }
+    if (result.empty()) throw std::invalid_argument("mode_selection principal found no mode with a gradient at target_state");
+    std::sort(result.begin(), result.end());
+    return result;
+}
+
 std::vector<std::size_t> modeIndices(const json::Value& settings,
                                      const dynsyslab::core::NpzRecord& parent) {
     if (!settings.at("mode_selection").isNull()) {
@@ -297,13 +390,34 @@ json::Value extractionMetadata(const std::filesystem::path& source,
 
 }  // namespace
 
+// Report-only eigenvalue-lattice candidates for the extracted modes (Mezic 2005; Budisic, Mohr & Mezic 2012).
+// Never changes the mode selection, and failure of the diagnostic never fails an extraction.
+json::Value latticeCandidates(const dynsyslab::core::NpzRecord& parent,const std::vector<std::size_t>& indices) {
+    const bool continuous=parent.contains("continuous_eigenvalues");
+    const char* key=continuous?"continuous_eigenvalues":"eigenvalues";
+    if(!parent.contains(key))return json::Value{};
+    try {
+        const auto spectrum=parent.at(key).complexDoubles();
+        json::Value::Array values;
+        for(const auto index:indices)if(index<spectrum.size())
+            values.emplace_back(json::Value::Array{spectrum[index].real(),spectrum[index].imag()});
+        const json::Value request=json::Value::Object{{"operation","eigenvalue_lattice"},{"eigenvalues",values},
+            {"clock",continuous?"continuous":"discrete"}};
+        return dynsyslab::math::evaluateQuery(request).at("result");
+    } catch(const std::exception& error) {
+        return json::Value::Object{{"error",std::string(error.what())}};
+    }
+}
+
 std::filesystem::path runKromExtraction(
     const std::filesystem::path& source,const json::Value& settings,
     const std::filesystem::path& root,const std::string& label) {
-    if (!std::filesystem::is_regular_file(source))
+    if (!std::filesystem::is_regular_file(dynsyslab::core::extendedLengthPath(source)))
         throw std::invalid_argument("KROM extraction source does not exist");
     const auto parentArchive=dynsyslab::core::readNpz(source);
-    const auto indices=modeIndices(settings,parentArchive);
+    const auto& selection=settings.at("mode_selection");
+    const auto indices=!selection.isNull()&&selection.at("rule").string()=="principal"
+        ? principalIndices(selection,source,parentArchive) : modeIndices(settings,parentArchive);
     const auto parentMetadata=parentArchive.metadataJson().empty()
         ? json::Value{}:json::parse(parentArchive.metadataJson());
     const auto parent=dynsyslab::core::loadKoopmanModel(source);
@@ -323,6 +437,7 @@ std::filesystem::path runKromExtraction(
     auto meta=extractionMetadata(source,label,indices,reduced,parentMetadata);
     const auto origin=parentMetadata.at("extraction_algorithm").string(parentMetadata.at("method").string());
     meta.object()["extraction_algorithm"]=origin;
+    meta.object()["eigenvalue_lattice"]=latticeCandidates(parentArchive,indices);
     if(!refitReport.empty())meta.object()["refit_reconstructions"]=json::Value(refitReport);
     if(origin=="edmdc") {
         const auto plan=planAutonomousKoopmanValidation(reduced,path,root);

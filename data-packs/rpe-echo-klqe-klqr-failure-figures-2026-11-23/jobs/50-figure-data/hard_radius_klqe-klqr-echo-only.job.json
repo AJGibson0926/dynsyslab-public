@@ -1,0 +1,44 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "postprocess",
+ "label": "hard_radius_klqe-klqr-echo-only",
+ "sources": [
+  "${inputs.std}"
+ ],
+ "methods": [
+  {
+   "name": "figure_dataset",
+   "settings": {
+    "inputs": {
+     "std": "${inputs.std}"
+    },
+    "arrays": [
+     {
+      "name": "time",
+      "from": "std",
+      "array": "time",
+      "column": 0
+     },
+     {
+      "name": "radius",
+      "from": "std",
+      "array": "values",
+      "column": 0
+     },
+     {
+      "name": "target",
+      "from": "std",
+      "array": "control_target_values",
+      "column": 0
+     }
+    ]
+   }
+  }
+ ],
+ "archive": {
+  "enabled": true
+ },
+ "resources": {
+  "peak_bytes": 30000000
+ }
+}

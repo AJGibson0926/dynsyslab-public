@@ -39,6 +39,8 @@ class PolynomialLift {
         }
         if (op=="sin" || op=="cos") {
             add("sin",args.at(0)); add("cos",args.at(0));
+        } else if (op=="sech") {
+            add("tanh",args.at(0)); add("sech",args.at(0));
         } else if (op=="log" || op=="exp" || op=="tanh") {
             if (op=="log") add("inverse",args.at(0));
             add(op,args.at(0));
@@ -55,7 +57,7 @@ class PolynomialLift {
             Polynomial p; addTerm(p,Powers(dimension()),Rational(node.at("scalar").number())); return p;
         }
         const auto& args=node.at("arguments").array();
-        if (op=="sin" || op=="cos" || op=="tanh" || op=="log" || op=="exp")
+        if (op=="sin" || op=="cos" || op=="tanh" || op=="sech" || op=="log" || op=="exp")
             return value(op,args.at(0));
         auto a=expression(args.at(0));
         if (op=="negative") {for (auto& term:a) term.second=-term.second; return a;}
@@ -125,6 +127,13 @@ public:
                 if (op=="tanh") {
                     addTerm(factor,Powers(dimension()),1);
                     addScaled(factor,multiply(z,z),-1);
+                }
+                if (op=="sech") {
+                    const auto tangent=value("tanh",arg);
+                    addScaled(factor,multiply(z,tangent),-1);
+                    auto circle=multiply(z,z);addScaled(circle,multiply(tangent,tangent),1);
+                    addTerm(circle,Powers(dimension()),-1);graph.push_back(std::move(circle));
+                    positiveAxes.push_back(source_+j);
                 }
             }
             field.push_back(multiply(factor,chain));

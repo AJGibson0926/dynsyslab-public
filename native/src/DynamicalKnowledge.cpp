@@ -8,6 +8,11 @@ double p(const SystemConfiguration &c, const char *key) { return c.parameters.at
 } // namespace
 DynamicalKnowledge builtInDynamicalKnowledge(const SystemDescriptor &d,
                                              const SystemConfiguration &c) {
+    if (d.identifier == "quadratic_triangular") {
+        auto result = triangularKnowledge(c);
+        result.papers = d.research.papers;
+        return result;
+    }
     if (d.identifier == "hodgkin_huxley" || d.identifier == "kuramoto" ||
         d.identifier == "spring_coupled_pendulums" || d.identifier == "marmottant" ||
         d.identifier == "reddy_szeri") {

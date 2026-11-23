@@ -1,0 +1,47 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "postprocess",
+ "label": "reference-strong",
+ "sources": [
+  "${inputs.run}"
+ ],
+ "methods": [
+  {
+   "name": "reference_signal",
+   "settings": {
+    "target": {
+     "kind": "waveform",
+     "offset": [
+      1.5,
+      0.0
+     ],
+     "amplitudes": [
+      0.4
+     ],
+     "angular_frequencies": [
+      1.8927362514
+     ],
+     "phases_rad": [
+      0.0
+     ],
+     "ramp": {
+      "duration": 10,
+      "from": [
+       1.0,
+       0.0
+      ]
+     }
+    },
+    "clock": {
+     "array": "time"
+    }
+   }
+  }
+ ],
+ "archive": {
+  "enabled": true
+ },
+ "resources": {
+  "peak_bytes": 30000000
+ }
+}

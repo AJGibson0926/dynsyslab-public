@@ -80,7 +80,11 @@ SystemDescriptor descriptorFor(const std::string& identifier,
                                std::size_t dimensionOverride = 0);
 
 std::unique_ptr<ODESystem> makeHarmonicSystem(SystemConfiguration configuration);
+std::unique_ptr<ODESystem> makeTriangularSystem(SystemConfiguration configuration);
 std::unique_ptr<ODESystem> makeBasicSystem(const SystemConfiguration& configuration);
+std::unique_ptr<ODESystem> makeMultiwellSystem(const SystemConfiguration& configuration);
+std::unique_ptr<ODESystem> makeIntegrableSystem(const SystemConfiguration& configuration);
+std::unique_ptr<ODESystem> makeTodaSystem(const SystemConfiguration& configuration);
 std::unique_ptr<ODESystem> makeMechanicalSystem(const SystemConfiguration& configuration);
 std::unique_ptr<ODESystem> makeBiologicalSystem(const SystemConfiguration& configuration);
 std::unique_ptr<ODESystem> makeBubbleSystem(const SystemConfiguration& configuration);

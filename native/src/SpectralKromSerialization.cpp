@@ -14,15 +14,20 @@ V residualJson(const SpectralResiduals& r){return O{{"scope",r.scope},{"definiti
 }
 json::Value spectralDictionaryJson(const SpectralDictionary& d) {
     A exponents;for(auto v:d.exponents)exponents.emplace_back(double(v));
-    return O{{"kind",d.kind},{"dimension",double(d.dimension)},{"constant",d.constant},
+    O result{{"kind",d.kind},{"dimension",double(d.dimension)},{"constant",d.constant},
         {"center",numbers(d.center)},{"scale",numbers(d.scale)},{"nodes",numbers(d.nodes)},
         {"exponents",exponents},{"bandwidth",d.bandwidth}};
+    // Preserve byte-for-byte identities of existing v1 dictionaries.
+    if(d.kind=="matern")result["smoothness"]=d.smoothness;
+    if(d.amplitude!=1)result["amplitude"]=d.amplitude;
+    return result;
 }
 SpectralDictionary spectralDictionaryFromJson(const V& v) {
     SpectralDictionary d;d.kind=v.at("kind").string("linear");d.dimension=size(v.at("dimension"));
     d.constant=v.at("constant").boolean(true);d.center=numbers(v.at("center"));d.scale=numbers(v.at("scale"));
     d.nodes=numbers(v.at("nodes"));for(const auto& e:v.at("exponents").array())d.exponents.push_back(size(e));
-    d.bandwidth=v.at("bandwidth").number(1);d.validate();return d;
+    d.bandwidth=v.at("bandwidth").number(1);d.smoothness=v.at("smoothness").number(2);
+    d.amplitude=v.at("amplitude").number(1);d.validate();return d;
 }
 json::Value spectralDataJson(const SpectralData& s) {
     A measures,packets,rkhs;

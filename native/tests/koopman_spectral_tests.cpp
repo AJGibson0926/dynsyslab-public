@@ -1,6 +1,9 @@
 #include <dynsyslab/core/KoopmanSpectralAnalysis.hpp>
 #include <dynsyslab/core/SpectralKromArchive.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
+#include <dynsyslab/math/SpectralFilters.hpp>
+#include <dynsyslab/numerics/Eigensystem.hpp>
+#include <dynsyslab/core/PeriodicSpectralComparison.hpp>
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -46,6 +49,15 @@ void rotationAndRollout() {
     }
 }
 void measures() {
+    // Nonnormal repeated-root Schur factorization: reconstruct the original
+    // matrix, so discarding triangular couplings cannot pass this test.
+    const std::vector<double> nonnormal{1,2,-.3,0,1,4,0,0,.5};
+    const auto schur=dynsyslab::numerics::complexSchur(nonnormal,3);
+    for(std::size_t i=0;i<3;++i)for(std::size_t j=0;j<3;++j){std::complex<double> a{},identity{};
+        for(std::size_t k=0;k<3;++k){identity+=schur.unitary[i*3+k]*std::conj(schur.unitary[j*3+k]);
+            for(std::size_t l=0;l<3;++l)a+=schur.unitary[i*3+k]*schur.triangular[k*3+l]*std::conj(schur.unitary[j*3+l]);}
+        require(std::abs(a-nonnormal[i*3+j])<1e-12,"Full Schur reconstruction");
+        require(std::abs(identity-double(i==j))<1e-12,"Unitary Schur basis");}
     c::KoopmanSpectralOptions options;options.method="mpedmd";options.acknowledgeMeasurePreserving=true;
     auto model=c::fitKoopmanSpectral(rotation(),linear(),options);
     std::vector<double> angles;for(std::size_t i=0;i<2048;++i)angles.push_back(-pi+2*pi*i/2048);
@@ -59,10 +71,43 @@ void measures() {
     c::riggedSpectralMeasure(model,{1,0},"cos-high",angles,.05,4);
     mass=0;for(auto p:model.spectral.measures.back().density)mass+=p*2*pi/angles.size();
     require(std::abs(mass-.5)<1e-8,"Higher-order resolvent mass");
+    const dynsyslab::math::RationalCircleKernel kernel(.05,4);
+    for(std::size_t j=0;j<angles.size();j+=47){
+        require(std::abs(model.spectral.measures.back().density[j]-.25*(kernel(angles[j]-.31)+kernel(angles[j]+.31)))<2e-9,"Analytic two-atom density");
+        const auto& coeff=model.spectral.wavePackets.back().coefficients;
+        const double phase=.72;const auto value=std::cos(phase)*coeff[2*j]+std::sin(phase)*coeff[2*j+1];
+        const auto exact=.5*(std::exp(std::complex<double>(0,phase))*kernel(angles[j]-.31)+std::exp(std::complex<double>(0,-phase))*kernel(angles[j]+.31));
+        require(std::abs(value-exact)<2e-9,"Analytic rotation packet");
+    }
+    auto fixed=rotation();fixed.y=fixed.x;auto repeated=c::fitKoopmanSpectral(fixed,linear(),options);
+    c::riggedSpectralMeasure(repeated,{1,0},"invariant",{0.,.2},.05,4);
+    require(std::abs(repeated.spectral.measures.back().density[0]-.5*kernel(0))<2e-9,"Repeated invariant eigenvalue");
     std::vector<std::complex<double>> signal;for(std::size_t i=0;i<400;++i)signal.push_back(std::exp(std::complex<double>(0,.4*i)));
     auto correlation=c::correlationSpectralMeasure(signal,100,angles,true);mass=0;
     for(auto p:correlation.density){require(p>-1e-10,"Fejer positivity");mass+=p*2*pi/angles.size();}
     require(std::abs(mass-1)<1e-10,"Fejer mass");rejects([&]{c::correlationSpectralMeasure(signal,10,angles,false);});
+}
+void periodicComparison() {
+    namespace m=dynsyslab::math;
+    m::FourierSeries cosine{1,{{-1,.5},{1,.5}}},sine{1,{{-1,{0,.5}},{1,{0,-.5}}}};
+    std::vector<m::PeriodicSnapshotOrbit> training{{{cosine,sine},2}},validation=training;
+    for(auto&channel:validation[0].channels)for(auto&[n,a]:channel.coefficients)a*=2;
+    c::KoopmanSpectralOptions o;o.method="mpedmd";o.acknowledgeMeasurePreserving=true;o.sampleInterval=.2;
+    const std::vector<double> offsets{-.2,0,.2};const std::vector<std::size_t> channels{1,0};
+    auto model=c::fitPeriodicDelaySpectrum(training,channels,offsets,32,o);
+    std::vector<double> angles;for(unsigned j=0;j<128;++j)angles.push_back(-pi+2*pi*j/128);
+    const auto reference=c::periodicSpectralReference(training,validation,0,.2,angles,{.2,.5},.08,4);
+    const auto result=c::comparePeriodicDelaySpectrum(model,channels,offsets,validation,reference);
+    require(result.rank==2&&result.features==6,"Redundant delay dictionary rank");
+    require(result.densityErrorNorm<1e-9,"Exact invariant periodic density");
+    for(auto error:result.complexErrorNorm)require(error<1e-9,"Held-amplitude complex packet error");
+    const m::FourierSeries fast{1,{{-19,.5},{19,.5}}};
+    const std::vector<m::PeriodicSnapshotOrbit> aliased{{{fast},1}};
+    const auto audit=m::auditPeriodicQuadrature(aliased,{19,40});
+    require(audit.aliasFreePhaseCount==39&&std::abs(audit.exactMass[0]-.5)<1e-12,"Finite polynomial resolution rule");
+    require(std::abs(audit.sampledMass[0]-1)<1e-12&&std::abs(audit.sampledMass[1]-.5)<1e-12,"Quadrature aliasing detected");
+    rejects([&]{c::fitPeriodicDelaySpectrum(aliased,{0},offsets,32,o);});
+    rejects([&]{c::comparePeriodicDelaySpectrum(model,channels,{-1,-.2,.2},validation,reference);});
 }
 void existingModelAttachments() {
     c::PolynomialDictionary dictionary;dictionary.coordinateDimension=1;dictionary.exponents={1};
@@ -125,5 +170,5 @@ void dictionariesAndStructure() {
     require(std::abs(page[0]-1/1.8)<1e-10,"Personalized PageRank orientation");
 }
 }
-int main(){try{rotationAndRollout();measures();existingModelAttachments();stochasticAndRkhs();dictionariesAndStructure();std::cout<<"spectral Koopman tests passed\n";return 0;}
+int main(){try{rotationAndRollout();measures();periodicComparison();existingModelAttachments();stochasticAndRkhs();dictionariesAndStructure();std::cout<<"spectral Koopman tests passed\n";return 0;}
 catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

@@ -1,5 +1,6 @@
 #include <dynsyslab/core/FileDigest.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <fstream>
@@ -54,8 +55,27 @@ std::string sha256Text(const std::string& text) {
 
 std::string sha256File(const std::filesystem::path& path) {
     std::ifstream stream(path,std::ios::binary);if(!stream)throw std::runtime_error("unable to open file for SHA-256: "+path.u8string());
-    const std::string text((std::istreambuf_iterator<char>(stream)),{});
-    return sha256Text(text);
+    Sha256Stream digest;std::vector<char> buffer(1u<<20);
+    while(stream){stream.read(buffer.data(),static_cast<std::streamsize>(buffer.size()));
+        if(stream.gcount()>0)digest.update(buffer.data(),static_cast<std::size_t>(stream.gcount()));}
+    return digest.finish();
+}
+
+void Sha256Stream::update(const void* data,std::size_t size) {
+    auto* bytes=static_cast<const std::uint8_t*>(data);total_+=size;
+    if(filled_){const auto take=std::min(size,block_.size()-filled_);std::copy_n(bytes,take,block_.data()+filled_);
+        filled_+=take;bytes+=take;size-=take;if(filled_<block_.size())return;transform(hash_,block_.data());filled_=0;}
+    for(;size>=block_.size();bytes+=block_.size(),size-=block_.size())transform(hash_,bytes);
+    if(size){std::copy_n(bytes,size,block_.data());filled_=size;}
+}
+
+std::string Sha256Stream::finish() {
+    const std::uint64_t bits=total_*8;block_[filled_++]=0x80;
+    if(filled_>56){std::fill(block_.begin()+static_cast<std::ptrdiff_t>(filled_),block_.end(),std::uint8_t{0});transform(hash_,block_.data());filled_=0;}
+    std::fill(block_.begin()+static_cast<std::ptrdiff_t>(filled_),block_.begin()+56,std::uint8_t{0});
+    for(int k=0;k<8;++k)block_[56+k]=static_cast<std::uint8_t>(bits>>(56-8*k));
+    transform(hash_,block_.data());
+    std::ostringstream out;out<<std::hex<<std::setfill('0');for(auto value:hash_)out<<std::setw(8)<<value;return out.str();
 }
 
 }  // namespace dynsyslab::core

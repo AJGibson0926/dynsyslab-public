@@ -7,9 +7,12 @@
 #include <dynsyslab/workflow/Postprocess.hpp>
 
 #include <dynsyslab/core/ArchiveIndex.hpp>
+#include <dynsyslab/core/BuildInfo.hpp>
+#include <dynsyslab/workflow/JobGroup.hpp>
 
 #include "SolveDispatch.hpp"
 #include "SolveSet.hpp"
+#include "ViewerFigureJob.hpp"
 
 #include <stdexcept>
 #include <utility>
@@ -33,9 +36,10 @@ void validateJob(const json::Value& job) {
         throw std::invalid_argument("job must use dynsyslab.compute-job/v1");
     const std::string kind = job.at("kind").string();
     if (kind != "solve" && kind != "solve_set" && kind != "postprocess"
-        && kind != "krom_control_search" && kind != "pipeline")
+        && kind != "krom_control_search" && kind != "pipeline"
+        && kind != "job_group" && kind != "viewer_figure")
         throw std::invalid_argument(
-            "job kind must be solve, solve_set, postprocess, krom_control_search, or pipeline");
+            "job kind must be solve, solve_set, postprocess, krom_control_search, pipeline, job_group, or viewer_figure");
 }
 
 RunResult executeJob(const json::Value& job,
@@ -47,7 +51,15 @@ RunResult executeJob(const json::Value& job,
     const auto archiveRoot=std::filesystem::absolute(requestedArchiveRoot).lexically_normal();
     if(job.at("kind").string()=="pipeline")  // stages index their own outputs
         return executePipeline(job,archiveRoot,progressPath,execution);
+    if(job.at("kind").string()=="job_group")  // its leaf jobs index and record themselves
+        return executeJobGroup(job,archiveRoot,progressPath,execution);
     (void)planJob(job);
+    // Every archive this job publishes records the resolved job and the build that ran it.
+    const dynsyslab::core::ScopedRunProvenance provenance(json::dump(json::Value(json::Value::Object{
+        {"schema",json::Value("dynsyslab.run-provenance/v1")},
+        {"build",json::parse(dynsyslab::core::buildIdentityJson())},{"resolved_job",job}})));
+    if(job.at("kind").string()=="viewer_figure")
+        return detail::executeViewerFigure(job,archiveRoot);
     if(job.at("kind").string()=="solve_set")
         return indexed(detail::executeSolveSet(job,archiveRoot,progressPath,execution),
                        archiveRoot);

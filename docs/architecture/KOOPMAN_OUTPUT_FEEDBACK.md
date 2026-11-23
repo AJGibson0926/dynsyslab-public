@@ -243,5 +243,68 @@ links. These checks establish software behavior, not robustness of an RPE fit.
 The current runtime uses continuous A, L and B. Discrete spectra may provide
 explicitly associated continuous rates, as in the existing framework, but a
 discrete input map is never silently converted to B. Actuator dynamics,
-measurement feedthrough Du, missing measurements and arbitrary within-interval
-input changes are not modeled by this held-input adapter.
+missing measurements and arbitrary within-interval input changes are not modeled
+by this held-input adapter. Optional measurement feedthrough is supported with
+the timestamp convention below.
+
+## Direct input in sampled measurements
+
+`setMeasurementFeedthrough(D, scaleOutput)` declares
+\(y=y_0+C_yz+Du\), or \(y=y_0+C_yz+(Du)(x_{0,s}+C_{x,s}z)\) when a decoded
+output component scales the input term. Each `observe(t,y,previousAppliedInput)`
+call receives the input held over the preceding interval. The sensor sample is
+taken before a new control command, so this is also the input associated with
+that current sample. The observer latches that association with the measurement.
+
+On the following interval, actuation may change. The plant-input term uses the
+newly applied input; the held sensor sample retains its original input. For a
+state-scaled direct term, the zero-order-hold observer generator includes
+\(-L(Du_{\rm sensor})C_{x,s}\), and its constant forcing subtracts
+\(L(Du_{\rm sensor})x_{0,s}\). The transition cache therefore depends on the
+latched sensor input as well as any bilinear actuation input. The reported
+measurement estimate uses the newly propagated state and current sensor input.
+
+Exact scalar tests verify input changes between samples, nonzero offsets,
+state-scaled direct terms, cache invalidation and unchanged zero-feedthrough
+behavior. This corrects the former use of a new command to compensate an old
+measurement. Configuring observer feedthrough does not add that term to a
+state-only simulated observable: the actual measurement source must include it.
+In particular, the registered unforced RPE echo observable and a forced physical
+pressure measurement are distinct observation models.
+
+### Explicit input-aware simulated sensors
+
+The optional `sensor_feedthrough` block defines the actual raw sensor, separately
+from `measurement_feedthrough`, which defines the observer's approximation:
+
+```json
+"sensor_feedthrough": {
+  "coefficients": [0.7],
+  "scale_observable": "position",
+  "scale_component": 0
+}
+```
+
+It evaluates \(y_{\rm raw}=h(x)+d\,u\,s(x)\), with one coefficient per raw
+sensor channel. The scale is 1 when `scale_observable` is omitted; otherwise
+`scale_component` selects a component of that registered observable (default 0).
+This follows the standard input/output state-space model; no new control method
+is implied (Åström and Murray, *Feedback Systems*, 2008).
+
+`core/InputAffineSensor.hpp` owns this reusable measurement operation. Workflow
+binds observables, samples using the preceding applied input, then adds the
+configured sensor noise, computes causal measured derivatives, and applies any
+requested nonlinear measurement transform. Both standalone KLQE and composed
+KLQE/KLQR use this same order. Model evidence records the sensor specification
+and timing. Omission preserves state-only sensors.
+
+Sensor and observer specifications are deliberately independent: a mismatched
+observer is a valid experiment, so one is never silently copied into the other.
+A nonlinear sensor transform generally changes the input dependence as well;
+the user must supply an appropriate transformed observer model. Adding a raw
+feedthrough term does not make a fitted measurement reconstruction exact.
+
+Validation covers default, constant and observable-scaled sensors, both workflow
+paths, and a complete sampled feedback solve. The latter checks at every sample
+that the archived measurement equals the actual state readout plus the direct
+term formed with `previous_applied_input`, including gated and limited commands.

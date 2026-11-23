@@ -1,5 +1,16 @@
 # DynSysLab documentation map
 
+- [Mathematics toolkit](architecture/MATHEMATICS_TOOLKIT.md) - exact arithmetic, p-adic finite computations, graphs, Fourier calculus, resonances and distribution pairings.
+- [Multiwell systems](MULTIWELL_SYSTEMS.md) - native triple-well chain and three-leaf Hamiltonian clover, observables and presets.
+
+- [Nonlinear pendulum derivative-closure proof](case-studies/PENDULUM_DERIVATIVE_CLOSURE.md) - exact harmonic obstruction, native certificates and comparison with Duffing/Van der Pol.
+
+- [Oscillator observables and spectral dictionaries](architecture/OSCILLATOR_OBSERVABLES_DICTIONARIES.md) - formulas, Colbrook sources, CLI/API and ownership.
+
+- [KROM closure and physical-control audits](architecture/KROM_AUDIT.md) - differential defects, causal replay and learned versus physical local margins.
+
+- [Lie algebra and Koopman representation analysis](architecture/LIE_ALGEBRA.md) - central research question, exact algorithms, public APIs and control-paper links.
+
 - [Spectral KROM and native Koopman analysis](architecture/SPECTRAL_KROM.md) - methods, typed measures, observable references, Post-Processor and API.
 - [Colbrook native adaptation provenance](provenance/COLBROOK_NATIVE_ADAPTATION.md) - pinned references and redistribution notices.
 
@@ -16,6 +27,7 @@ dated evidence. Case studies are reproducibility records, not default policy.
 
 - [Overview](OVERVIEW.md) — the suite at a glance: modules, pipelines and diagrams.
 - [Install DynSysLab](INSTALL.md) — verified prebuilt Windows release, Codex setup, and first solve.
+- [Data packs](DATA_PACKS.md) - version-pinned job files that regenerate published data and figures offline.
 - [Start here](START_HERE.md) — five-minute human and AI-agent entry point.
 - [Native build and SDK](BUILD_NATIVE.md) — compiled installation, release
   gates, incremental builds, and extension development.
@@ -85,6 +97,17 @@ dated evidence. Case studies are reproducibility records, not default policy.
 studies and are intentionally not listed as narrative documents.
 
 - [Analytic trajectories and phase-space context](ANALYTIC_SOLUTIONS_AND_PHASE_CONTEXT.md)
+- [Periodic spectral analysis and estimation](architecture/PERIODIC_SPECTRAL_ANALYSIS.md)
+- [Repeatable periodic observable spectral comparisons](architecture/PERIODIC_SPECTRAL_COMPARISON.md)
+- [Causal packet features and nonlinear periodic identification](architecture/PERIODIC_FEATURE_IDENTIFICATION.md)
+- [Analytic tori and Hamiltonian perturbation tools](architecture/ANALYTIC_TORI_AND_PERTURBATIONS.md)
+- [Orbit-family, damped-orbit, Melnikov and Gramian tools](architecture/ORBIT_FAMILY_TOOLS.md)
+- [Koopman resolvent tools](architecture/KOOPMAN_RESOLVENT_TOOLS.md) - Laplace and inverse transforms, pole/residue models with Jordan blocks, GLA, pseudospectra, harmonic and Volterra response, orbit-shell boundary values, frequency-domain Gramians, Prony identification, continuation and contraction checks.
+- [Spectral diagnostics tools](architecture/SPECTRAL_DIAGNOSTICS_TOOLS.md) - eigenvalue-lattice candidates, rational-kernel shell packets, and Reeb graphs of sampled scalar functions.
+- [Certified bilinear control tools](architecture/CERTIFIED_BILINEAR_CONTROL_TOOLS.md) - dense LMI/SDP solver with an independent verifier, bilinear K-ROM fit, residual sector, and robust state-feedback design.
+- [Toda lattice and Lax API](architecture/TODA_LATTICE.md)
+- [Inverse-scattering building blocks](architecture/INVERSE_SCATTERING.md)
+- [Mathematics toolkit](architecture/MATHEMATICS_TOOLKIT.md)
 - [System-owned research metadata and bibliographies](SYSTEM_RESEARCH_METADATA.md)
 
 - [Gravity-free double-pendulum analytic reference](GRAVITY_FREE_DOUBLE_PENDULUM.md)

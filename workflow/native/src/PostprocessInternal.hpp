@@ -89,6 +89,11 @@ std::filesystem::path runHistoryControlRegression(
 std::filesystem::path runInputMap(
     const std::vector<std::filesystem::path>& sources, const json::Value& settings,
     const std::filesystem::path& root, const std::string& label);
+// Frozen-A certified bilinear design from a K-ROM map and held-input records. Writes a new
+// derived/koopman-bilinear-certificate archive; the K-ROM is never modified.
+std::filesystem::path runBilinearCertificate(
+    const std::vector<std::filesystem::path>& sources, const json::Value& settings,
+    const std::filesystem::path& root, const std::string& label);
 // Numerical-differentiation benchmark of a measured channel under measurement noise.
 std::filesystem::path runDerivativeBenchmark(
     const std::vector<std::filesystem::path>& sources, const json::Value& settings,
@@ -105,6 +110,16 @@ std::filesystem::path runModeSelection(
 std::filesystem::path runControlTarget(
     const std::vector<std::filesystem::path>& sources, const json::Value& settings,
     const std::filesystem::path& root, const std::string& label);
+// Generic archive-derivation methods (KromEditing, ReferenceSignal, ControlScore, FigureDataset).
+#define DYNSYSLAB_POOLED_METHOD(name) std::filesystem::path name( \
+    const std::vector<std::filesystem::path>& sources, const json::Value& settings, \
+    const std::filesystem::path& root, const std::string& label)
+DYNSYSLAB_POOLED_METHOD(runKromRecenter);
+DYNSYSLAB_POOLED_METHOD(runKromReadout);
+DYNSYSLAB_POOLED_METHOD(runReferenceSignal);
+DYNSYSLAB_POOLED_METHOD(runControlScore);
+DYNSYSLAB_POOLED_METHOD(runFigureDataset);
+#undef DYNSYSLAB_POOLED_METHOD
 std::filesystem::path runKromExtraction(
     const std::filesystem::path& source, const json::Value& settings,
     const std::filesystem::path& root, const std::string& label);

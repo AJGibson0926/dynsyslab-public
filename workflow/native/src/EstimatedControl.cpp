@@ -2,6 +2,7 @@
 #include "EstimatedControl.hpp"
 #include "ModelBindingOptions.hpp"
 #include "BalancedTruncationSettings.hpp"
+#include "BilinearCertificateBinding.hpp"
 #include <dynsyslab/workflow/KoopmanFeedback.hpp>
 #include <dynsyslab/workflow/EstimatorFactory.hpp>
 #include <dynsyslab/workflow/ControlTargets.hpp>
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 
 namespace dynsyslab::workflow::detail {
@@ -104,7 +106,7 @@ ControllerSetup buildEstimatedController(const json::Value& source,
     const auto& outputName=bound.output;
     const auto n=model.splitDimension(),p=model.reconstruction(measurementName).outputs;
     const auto design=bound.design;
-    auto sensors=std::move(bound.sensors);
+    auto sensor=std::move(bound.sensor);
     const auto initial=bound.initial;
     const auto offsetY=bound.measurementOffset;
     const auto offsetX=bound.outputOffset;
@@ -148,6 +150,11 @@ ControllerSetup buildEstimatedController(const json::Value& source,
         }
     }
     const auto controllerReduction=parseBalancedTruncation(settings.at("balanced_truncation"));
+    std::optional<BoundBilinearCertificate> certificate;
+    if(!settings.at("bilinear_certificate").isNull()) {
+        certificate=bindBilinearCertificate(settings,model,representation);
+        requireCertifiedActuation(settings,true,dt);
+    }
     auto streams=std::make_shared<std::vector<Stream>>(count);
     for(auto& stream:*streams) {
         stream.feedback=std::make_unique<KoopmanFeedback>(
@@ -156,18 +163,16 @@ ControllerSetup buildEstimatedController(const json::Value& source,
         if(controllerReduction)stream.feedback->setBalancedReduction(*controllerReduction);
         // Integral action / PID on a KROM readout of the estimate z_hat (e.g. r_hat).
         applyKlqrAugmentations(stream.feedback->controller(),model,settings);
+        if(certificate)stream.feedback->controller().setCertifiedFeedback(certificate->feedback);
         stream.derivative=SensorDifferentiator(bound,std::size_t(&stream-&streams->front()));
     }
     const bool shadow=static_cast<bool>(appliedOverride);
-    result.policy.value=[streams,sensors=std::move(sensors),lowLimit,highLimit,window,lift,liftModel,
+    result.policy.value=[streams,sensor=std::move(sensor),lowLimit,highLimit,window,lift,liftModel,
         appliedOverride=std::move(appliedOverride)](
         std::size_t trajectory,double time,const double* state) {
         auto& stream=streams->at(trajectory);
-        std::vector<double> y;
         // This is the only truth-state access: it simulates the sensor.
-        for(const auto& sensor:sensors) {
-            const auto values=sensor.evaluateReal(state);y.insert(y.end(),values.begin(),values.end());
-        }
+        auto y=sensor->evaluate(state,stream.applied);
         stream.derivative.append(y,time);  // numerically differentiated sensor outputs
         if(lift)y=liftModel->evaluateCoordinatesSplit(y.data());  // psi of the sensor values
         const auto sample=stream.feedback->sample(time,y,{stream.applied});
@@ -205,7 +210,17 @@ ControllerSetup buildEstimatedController(const json::Value& source,
     evidence["control_map_provenance"]=std::visit(
         [](const auto& map){return map.provenance;},model.storedControlMap(representation));
     evidence["estimator_clock"]="estimator_time";
+    evidence["sensor_feedthrough"]=estimator.at("sensor_feedthrough");
+    evidence["sensor_input_timing"]="previous-applied-input-before-new-command";
     if(klqrIsStateful(settings))evidence["klqr_augmentations"]=klqrAugmentationEvidence(settings);
+    if(certificate) {
+        auto certified=certificate->evidence;
+        certified.object()["output_feedback"]="not certified: the design assumes z is known, and here u uses the KLQE estimate";
+        certified.object()["klqe_prediction"]=certified.at("operators").string()=="fit"
+            ?"KLQE propagates the stored continuous bilinear map; the gain was designed on B0 and B_i refitted from held-input records, so the two input models differ"
+            :"KLQE propagates the same frozen generator and stored bilinear map, exact ZOH for each held input";
+        evidence["bilinear_certificate"]=std::move(certified);
+    }
     if(!bound.reduction.isNull())evidence["estimator_balanced_truncation"]=bound.reduction;
     if(!bound.processCovariance.isNull())evidence["estimator_process_covariance"]=bound.processCovariance;
     if(controllerReduction)evidence["controller_balanced_truncation"]=balancedTruncationRequest(*controllerReduction);

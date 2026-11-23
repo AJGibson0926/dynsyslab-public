@@ -30,6 +30,10 @@ JacobiValues jacobi(double u, double m) {
     }
     JacobiValues j{};
     j.sn = boost::math::jacobi_elliptic(std::sqrt(m), u, &j.cn, &j.dn);
+    // The installed Boost evaluator can lose dn at exact odd quarter periods
+    // (returning 1 instead of sqrt(1-m)). For real 0<=m<=1 dn is positive;
+    // DLMF 22.6.1 gives this cancellation-free expression even near m=1.
+    j.dn = std::hypot(std::sqrt(1-m),std::sqrt(m)*j.cn);
     return j;
 }
 double ellipticK(double m) {

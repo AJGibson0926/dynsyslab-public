@@ -1,12 +1,14 @@
 #pragma once
 
 #include <dynsyslab/core/EstimationRuntime.hpp>
+#include <dynsyslab/core/InputAffineSensor.hpp>
 #include <dynsyslab/core/NumericalDifferentiation.hpp>
 #include <dynsyslab/core/System.hpp>
 #include <dynsyslab/workflow/ControlFactory.hpp>
 #include <dynsyslab/workflow/Json.hpp>
 
 #include <functional>
+#include <memory>
 #include <string>
 
 namespace dynsyslab::workflow {
@@ -21,6 +23,9 @@ namespace dynsyslab::workflow {
 //     "selected_modes": [...],               // optional subset of that KROM
 //     "measurement": "<reconstruction name>",// C_y (e.g. far_field_acoustic_echo)
 //     "measurement_observables": [...],      // simulated sensors (default: the measurement name)
+//     "sensor_feedthrough": {"coefficients": [...], "scale_observable": "position"},
+//                                            // optional raw sensor input term, BEFORE noise/derivatives
+//     "measurement_feedthrough": [...],      // separately specified observer D
 //     "measurement_noise": {noise spec, "scale": [rms per sensor output]},   // optional sensor noise
 //     "measurement_derivatives": [k, ...],   // optional: append d/dt of sensor output k, computed
 //                                            // online from the (noisy) samples by a causal differentiator
@@ -68,6 +73,7 @@ struct EstimatorSetup {
 struct KlqeBinding {
     core::KoopmanLQEDesign design;
     std::vector<core::Observable> sensors;
+    std::shared_ptr<const core::InputAffineSensor> sensor; // actual raw sensor, before noise/derivatives
     std::vector<double> initial, measurementOffset, outputOffset;
     std::vector<double> measurementFeedthrough;  // optional D (p x m): y = y0 + C_y z + D u
     int feedthroughScaleOutput = -1;             // optional: scale D by decoded output component

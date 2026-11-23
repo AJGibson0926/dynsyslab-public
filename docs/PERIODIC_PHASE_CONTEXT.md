@@ -10,6 +10,7 @@ Use dynsyslab.phase-space-query/v1 with options.dynamics = periodic-forcing. sys
 - forcing_section_time: absolute model time of the section, default zero. Return integrations start exactly at this time and end after whole forcing periods; times are not selected from arbitrary solver-output samples.
 - forcing_periods: positive integer, default one, to search for a subharmonic response. Proper divisors are checked before reporting a minimal response period within this requested clock count.
 - periodic_seeds: states on this forcing section. The legacy period field may be omitted/zero; it does not override the forcing clock. Without seeds, at most 32 domain-spanning guesses are used.
+- section_seeds: arbitrary states on this fixed forcing phase, with no periodicity requirement. With poincare_map enabled, return each state after forcing_periods clocks and its full variational derivative. This does not run periodic shooting.
 - manifold_iterations, maximum_manifold_points, manifold_tolerance: finite continuation, point and domain-scaled interpolation limits. The regular integration tolerances, bounds and cancellation apply as well.
 
 The query supplies period-scaled defaults for maximum_step, output_step and horizon when omitted. Explicit maximum_step must resolve the forcing period with at least eight steps. The result retains normalized options and a forcing_clock record with the section time/phase, units, physical conversion and full driver definition. The reference clock is theta=2*pi*t/T with time/phase origin zero; the driver has its separately recorded phase offset. Curve times remain absolute and unwrapped.
@@ -26,7 +27,18 @@ Viewer draws periodic responses and accepted section curves only on state phase 
 
 ## Archive ownership and Viewer adapter
 
-Opening a plot performs lookup only. Phase context computes missing results explicitly, in the background through the native workflow C ABI. Cache identity includes equations, parameters, forcing definition, section time, numerical options, guide metadata and method version 4. Bibliography edits do not invalidate this numerical cache. The .dslphase cache is system metadata and stays outside the solution data tree. Existing solve archives are never modified. Method version 4 also carries state-defined first returns, projected section stability and pseudo-arclength branch records described in [Poincare sections and bifurcation sidecar](POINCARE_AND_BIFURCATION_SIDECAR.md).
+Opening a plot performs lookup only. Phase context computes missing results explicitly, in the background through the native workflow C ABI. Cache identity includes equations, parameters, forcing definition, section time, numerical options, guide metadata and method version 5. Bibliography edits do not invalidate this numerical cache. The .dslphase cache is system metadata and stays outside the solution data tree. Existing solve archives are never modified. Version 5 adds arbitrary fixed-phase state returns and their derivatives; it retains the first-return and continuation records introduced in version 4, described in [Poincare sections and bifurcation sidecar](POINCARE_AND_BIFURCATION_SIDECAR.md).
+
+The C++ API is `stroboscopicReturn` in `core/PhaseSpace.hpp`. The thin Python
+adapter `dynsyslab_client.phase_space.query(request, archive_root)` invokes the
+existing compiled phase-space CLI and canonical cache. It does not integrate in
+Python. For these fixed-time maps `return_derivative` and `reduced_derivative`
+both contain the full row-major state derivative, and `tangent_basis` is the
+identity. State-section transversality fields are null because there is no
+state-defined crossing condition. Eigenvalues at an arbitrary seed are local
+Jacobian eigenvalues; they are Floquet multipliers only at a verified periodic
+point of the requested return map. Endpoint and derivative refinement failures
+are explicit; these checks are numerical, not interval enclosures.
 
 Compute's continuous single-tone waveform controller can be reconstructed directly from controller_configuration. The adapter validates the production controller settings, converts sine phase to the cosine driver, and respects separate physical/model amplitudes and frequencies. Sampled controllers, active windows, nonzero offsets and multiple tones are currently rejected instead of being silently reduced to an incorrect waveform. Feedback-control paths retain their existing explicitly labeled zero-input context.
 

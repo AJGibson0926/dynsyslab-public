@@ -1,0 +1,95 @@
+{
+  "schema": "dynsyslab.lie-algebra-query/v1",
+  "dimension": 3,
+  "coordinate_names": [
+    "r",
+    "v",
+    "w=1/r"
+  ],
+  "action": "algebra",
+  "generators": [
+    [
+      [
+        {
+          "coefficient": "1",
+          "powers": [
+            0,
+            1,
+            0
+          ]
+        }
+      ],
+      [
+        {
+          "coefficient": "10",
+          "powers": [
+            0,
+            0,
+            5
+          ]
+        },
+        {
+          "coefficient": "-9",
+          "powers": [
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "coefficient": "-1",
+          "powers": [
+            0,
+            0,
+            2
+          ]
+        },
+        {
+          "coefficient": "-1/10",
+          "powers": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "coefficient": "-3/2",
+          "powers": [
+            0,
+            2,
+            1
+          ]
+        }
+      ],
+      [
+        {
+          "coefficient": "-1",
+          "powers": [
+            0,
+            1,
+            2
+          ]
+        }
+      ]
+    ],
+    [
+      [],
+      [
+        {
+          "coefficient": "-9",
+          "powers": [
+            0,
+            0,
+            1
+          ]
+        }
+      ],
+      []
+    ]
+  ],
+  "provenance": {
+    "case": "RPE pressure input, rational representative; theorem independent of restoring/damping coefficients",
+    "domain": "r>0, w=1/r",
+    "source": "docs/reports/rpe-lie-control-review-2026-11-21/STRUCTURAL_PROOF.md"
+  }
+}

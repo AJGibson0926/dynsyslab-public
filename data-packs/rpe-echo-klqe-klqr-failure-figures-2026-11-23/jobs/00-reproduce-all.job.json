@@ -1,0 +1,770 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "job_group",
+ "label": "rpe-echo-klqe-klqr-failure-figures-2026-11-23",
+ "data_pack": "../pack.json",
+ "description": "RPE echo-only KLQE to KLQR failure figures",
+ "cleanup": {
+  "enabled": true,
+  "min_free_gb": 6
+ },
+ "parameters": {
+  "style": {
+   "font_scale": 1.8,
+   "line_width_scale": 1.8,
+   "default_line_width": 3.6
+  }
+ },
+ "jobs": [
+  {
+   "id": "s01",
+   "job": "10-solves/s01-rpe-viscous-echo-long-training-five-ics-trajectory-0.job.json"
+  },
+  {
+   "id": "s02",
+   "job": "10-solves/s02-rpe-viscous-echo-long-validation-five-ics-trajectory-0.job.json"
+  },
+  {
+   "id": "s03",
+   "job": "20-koopman/s03-coordinate-transform-rpe-echo-jet-klqr-rediscovery-20k.job.json",
+   "inputs": {
+    "s01": "${s01.archive}"
+   }
+  },
+  {
+   "id": "s04",
+   "job": "20-koopman/s04-hdmd-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s03": "${s03.archive}"
+   }
+  },
+  {
+   "id": "s05",
+   "job": "20-koopman/s05-sindy-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s03": "${s03.archive}",
+    "s04": "${s04.archive}"
+   }
+  },
+  {
+   "id": "s06",
+   "job": "20-koopman/s06-krom-extract-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s05": "${s05.archive}"
+   }
+  },
+  {
+   "id": "s09",
+   "job": "20-koopman/s09-coordinate-transform-rpe-echo-jet-klqr-rediscovery-20k.job.json",
+   "inputs": {
+    "s01": "${s01.archive}"
+   }
+  },
+  {
+   "id": "s10",
+   "job": "20-koopman/s10-sindy-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s06": "${s06.archive}",
+    "s09": "${s09.archive}"
+   }
+  },
+  {
+   "id": "s11",
+   "job": "20-koopman/s11-krom-extract-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s10": "${s10.archive}"
+   }
+  },
+  {
+   "id": "s12",
+   "job": "10-solves/s12-rpe-forced-bpsi-a005p05.job.json"
+  },
+  {
+   "id": "s13",
+   "job": "10-solves/s13-rpe-forced-bpsi-a02p05.job.json"
+  },
+  {
+   "id": "s14",
+   "job": "10-solves/s14-rpe-forced-bpsi-a02p2.job.json"
+  },
+  {
+   "id": "s15",
+   "job": "10-solves/s15-rpe-echo-jet-klqr-rediscovery-20kpa---forced-training.job.json"
+  },
+  {
+   "id": "s16",
+   "job": "30-input-maps/s16-input-map-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s11": "${s11.archive}",
+    "s15": "${s15.archive}"
+   }
+  },
+  {
+   "id": "a17",
+   "job": "20-koopman/a17-coordinate-transform-rpe-echo-jet-klqr-rediscovery-20k.job.json",
+   "inputs": {
+    "s01": "${s01.archive}"
+   }
+  },
+  {
+   "id": "s17",
+   "job": "20-koopman/s17-sindy-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "a17": "${a17.archive}",
+    "s06": "${s06.archive}"
+   }
+  },
+  {
+   "id": "s18",
+   "job": "20-koopman/s18-krom-extract-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s17": "${s17.archive}"
+   }
+  },
+  {
+   "id": "s19",
+   "job": "30-input-maps/s19-input-map-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s15": "${s15.archive}",
+    "s18": "${s18.archive}"
+   }
+  },
+  {
+   "id": "s20",
+   "job": "20-koopman/s20-sindy-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s03": "${s03.archive}",
+    "s06": "${s06.archive}"
+   }
+  },
+  {
+   "id": "s21",
+   "job": "20-koopman/s21-krom-extract-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s20": "${s20.archive}"
+   }
+  },
+  {
+   "id": "s22",
+   "job": "30-input-maps/s22-input-map-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s15": "${s15.archive}",
+    "s21": "${s21.archive}"
+   }
+  },
+  {
+   "id": "s23",
+   "job": "10-solves/s23-rpe-echo-jet-klqr-rediscovery-20kpa---train.job.json"
+  },
+  {
+   "id": "s24",
+   "job": "20-koopman/s24-coordinate-transform-rpe-echo-jet-klqr-rediscovery-20k.job.json",
+   "inputs": {
+    "s23": "${s23.archive}"
+   }
+  },
+  {
+   "id": "s25",
+   "job": "20-koopman/s25-hdmd-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s24": "${s24.archive}"
+   }
+  },
+  {
+   "id": "s26",
+   "job": "20-koopman/s26-sindy-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s24": "${s24.archive}",
+    "s25": "${s25.archive}"
+   }
+  },
+  {
+   "id": "s27",
+   "job": "20-koopman/s27-krom-extract-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s26": "${s26.archive}"
+   }
+  },
+  {
+   "id": "s28",
+   "job": "20-koopman/s28-sindy-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s24": "${s24.archive}",
+    "s27": "${s27.archive}"
+   }
+  },
+  {
+   "id": "s29",
+   "job": "20-koopman/s29-krom-extract-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s28": "${s28.archive}"
+   }
+  },
+  {
+   "id": "s30",
+   "job": "30-input-maps/s30-input-map-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s15": "${s15.archive}",
+    "s29": "${s29.archive}"
+   }
+  },
+  {
+   "id": "a31",
+   "job": "20-koopman/a31-coordinate-transform-rpe-echo-jet-klqr-rediscovery-20k.job.json",
+   "inputs": {
+    "s23": "${s23.archive}"
+   }
+  },
+  {
+   "id": "s31",
+   "job": "20-koopman/s31-sindy-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "a31": "${a31.archive}",
+    "s27": "${s27.archive}"
+   }
+  },
+  {
+   "id": "s32",
+   "job": "20-koopman/s32-krom-extract-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s31": "${s31.archive}"
+   }
+  },
+  {
+   "id": "s33",
+   "job": "30-input-maps/s33-input-map-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s15": "${s15.archive}",
+    "s32": "${s32.archive}"
+   }
+  },
+  {
+   "id": "s34",
+   "job": "40-control/s34-rpe-echo-jet-klqr-rediscovery-20kpa---control.job.json",
+   "inputs": {
+    "s22": "${s22.archive}"
+   }
+  },
+  {
+   "id": "s35",
+   "job": "40-control/s35-rpe-echo-jet-klqr-rediscovery-20kpa---control.job.json",
+   "inputs": {
+    "s19": "${s19.archive}"
+   }
+  },
+  {
+   "id": "s36",
+   "job": "40-control/s36-rpe-echo-jet-klqr-rediscovery-20kpa---control.job.json",
+   "inputs": {
+    "s16": "${s16.archive}"
+   }
+  },
+  {
+   "id": "s37",
+   "job": "40-control/s37-rpe-echo-jet-klqr-rediscovery-20kpa---control.job.json",
+   "inputs": {
+    "s30": "${s30.archive}"
+   }
+  },
+  {
+   "id": "s38",
+   "job": "40-control/s38-rpe-echo-jet-klqr-rediscovery-20kpa---control.job.json",
+   "inputs": {
+    "s33": "${s33.archive}"
+   }
+  },
+  {
+   "id": "s39",
+   "job": "40-control/s39-rpe-echo-jet-klqr-rediscovery-20kpa---control.job.json",
+   "inputs": {
+    "s16": "${s16.archive}"
+   }
+  },
+  {
+   "id": "s40",
+   "job": "40-control/s40-rpe-echo-jet-klqr-rediscovery-20kpa---control.job.json",
+   "inputs": {
+    "s30": "${s30.archive}"
+   }
+  },
+  {
+   "id": "s41",
+   "job": "40-control/s41-rpe-echo-jet-klqr-rediscovery-20kpa---control.job.json",
+   "inputs": {
+    "s33": "${s33.archive}"
+   }
+  },
+  {
+   "id": "s42",
+   "job": "40-control/s42-rpe-echo-jet-klqr-rediscovery-20kpa---control.job.json",
+   "inputs": {
+    "s16": "${s16.archive}"
+   }
+  },
+  {
+   "id": "s47",
+   "job": "20-koopman/s47-krom-readout-krom-ee-split.job.json",
+   "inputs": {
+    "s32": "${s32.archive}"
+   }
+  },
+  {
+   "id": "s48",
+   "job": "30-input-maps/s48-input-map-klqe-bpsi-ee-ic0p37-exact-map.job.json",
+   "inputs": {
+    "s12": "${s12.archive}",
+    "s13": "${s13.archive}",
+    "s14": "${s14.archive}",
+    "s47": "${s47.archive}"
+   }
+  },
+  {
+   "id": "s49",
+   "job": "40-control/s49-klqe-klqr-ee-ic37-mild-full-r0-01-ramp0.job.json",
+   "inputs": {
+    "s48": "${s48.archive}"
+   }
+  },
+  {
+   "id": "s50",
+   "job": "40-control/s50-klqe-klqr-final-mild-ee-klqe.job.json",
+   "inputs": {
+    "s48": "${s48.archive}"
+   }
+  },
+  {
+   "id": "s51",
+   "job": "40-control/s51-klqe-klqr-final-strong-ee-klqe.job.json",
+   "inputs": {
+    "s48": "${s48.archive}"
+   }
+  },
+  {
+   "id": "s52",
+   "job": "40-control/s52-klqe-klqr-final-hard-ee-klqe.job.json",
+   "inputs": {
+    "s48": "${s48.archive}"
+   }
+  },
+  {
+   "id": "s53",
+   "job": "10-solves/s53-rpe-forced-target-orbit-mild.job.json"
+  },
+  {
+   "id": "s55",
+   "job": "20-koopman/s55-hdmd-rpe-echo-mode-selection-range.job.json",
+   "inputs": {
+    "s02": "${s02.archive}"
+   }
+  },
+  {
+   "id": "s56",
+   "job": "20-koopman/s56-krom-extract-rpe-echo-mode-selection-range.job.json",
+   "inputs": {
+    "s55": "${s55.archive}"
+   }
+  },
+  {
+   "id": "s58",
+   "job": "20-koopman/s58-mode-selection-rpe-echo-mode-selection-range.job.json",
+   "inputs": {
+    "s02": "${s02.archive}",
+    "s12": "${s12.archive}",
+    "s14": "${s14.archive}",
+    "s49": "${s49.archive}",
+    "s53": "${s53.archive}",
+    "s56": "${s56.archive}"
+   }
+  },
+  {
+   "id": "s59",
+   "job": "40-control/s59-standard-klqe-klqr-hard.job.json",
+   "inputs": {
+    "s58": "${s58.outputs.selected_krom}"
+   }
+  },
+  {
+   "id": "s60",
+   "job": "40-control/s60-standard-klqe-klqr-strong.job.json",
+   "inputs": {
+    "s58": "${s58.outputs.selected_krom}"
+   }
+  },
+  {
+   "id": "s61",
+   "job": "40-control/s61-standard-klqe-klqr-mild.job.json",
+   "inputs": {
+    "s58": "${s58.outputs.selected_krom}"
+   }
+  },
+  {
+   "id": "ref-mild",
+   "job": "50-figure-data/ref-mild.job.json",
+   "inputs": {
+    "run": "${s34.archive}"
+   }
+  },
+  {
+   "id": "table-mild-radius-psi-r-rdot-exact-B",
+   "job": "50-figure-data/mild_radius_psi-r-rdot-exact-B.job.json",
+   "inputs": {
+    "base": "${s34.archive}",
+    "ref": "${ref-mild.archive}",
+    "run": "${s34.archive}"
+   }
+  },
+  {
+   "id": "table-mild-phase-psi-r-rdot-exact-B",
+   "job": "50-figure-data/mild_phase_psi-r-rdot-exact-B.job.json",
+   "inputs": {
+    "base": "${s34.archive}",
+    "ref": "${ref-mild.archive}",
+    "run": "${s34.archive}"
+   }
+  },
+  {
+   "id": "table-mild-radius-psi-e-edot-exact-B",
+   "job": "50-figure-data/mild_radius_psi-e-edot-exact-B.job.json",
+   "inputs": {
+    "base": "${s34.archive}",
+    "ref": "${ref-mild.archive}",
+    "run": "${s35.archive}"
+   }
+  },
+  {
+   "id": "table-mild-phase-psi-e-edot-exact-B",
+   "job": "50-figure-data/mild_phase_psi-e-edot-exact-B.job.json",
+   "inputs": {
+    "base": "${s34.archive}",
+    "ref": "${ref-mild.archive}",
+    "run": "${s35.archive}"
+   }
+  },
+  {
+   "id": "table-mild-radius-psi-xi-regressed-B",
+   "job": "50-figure-data/mild_radius_psi-xi-regressed-B.job.json",
+   "inputs": {
+    "base": "${s34.archive}",
+    "ref": "${ref-mild.archive}",
+    "run": "${s36.archive}"
+   }
+  },
+  {
+   "id": "table-mild-phase-psi-xi-regressed-B",
+   "job": "50-figure-data/mild_phase_psi-xi-regressed-B.job.json",
+   "inputs": {
+    "base": "${s34.archive}",
+    "ref": "${ref-mild.archive}",
+    "run": "${s36.archive}"
+   }
+  },
+  {
+   "id": "table-mild-radius-klqe-klqr-echo-only",
+   "job": "50-figure-data/mild_radius_klqe-klqr-echo-only.job.json",
+   "inputs": {
+    "std": "${s61.archive}"
+   }
+  },
+  {
+   "id": "table-mild-phase-klqe-klqr-echo-only",
+   "job": "50-figure-data/mild_phase_klqe-klqr-echo-only.job.json",
+   "inputs": {
+    "std": "${s61.archive}"
+   }
+  },
+  {
+   "id": "table-mild-original-klqe-radius",
+   "job": "50-figure-data/mild_original-klqe_radius.job.json",
+   "inputs": {
+    "base": "${s34.archive}",
+    "ref": "${ref-mild.archive}",
+    "klqe": "${s50.archive}"
+   }
+  },
+  {
+   "id": "table-mild-original-klqe-phase",
+   "job": "50-figure-data/mild_original-klqe_phase.job.json",
+   "inputs": {
+    "base": "${s34.archive}",
+    "ref": "${ref-mild.archive}",
+    "klqe": "${s50.archive}"
+   }
+  },
+  {
+   "id": "table-mild-drive",
+   "job": "50-figure-data/mild_drive.job.json",
+   "inputs": {
+    "base": "${s34.archive}",
+    "ref": "${ref-mild.archive}",
+    "u1": "${s35.archive}",
+    "u2": "${s36.archive}",
+    "u3": "${s50.archive}",
+    "std": "${s61.archive}"
+   }
+  },
+  {
+   "id": "figures-mild",
+   "job": "60-figures/mild.job.json",
+   "inputs": {
+    "mild_radius_psi_r_rdot_exact_B": "${table-mild-radius-psi-r-rdot-exact-B.archive}",
+    "mild_phase_psi_r_rdot_exact_B": "${table-mild-phase-psi-r-rdot-exact-B.archive}",
+    "mild_radius_psi_e_edot_exact_B": "${table-mild-radius-psi-e-edot-exact-B.archive}",
+    "mild_phase_psi_e_edot_exact_B": "${table-mild-phase-psi-e-edot-exact-B.archive}",
+    "mild_radius_psi_xi_regressed_B": "${table-mild-radius-psi-xi-regressed-B.archive}",
+    "mild_phase_psi_xi_regressed_B": "${table-mild-phase-psi-xi-regressed-B.archive}",
+    "mild_radius_klqe_klqr_echo_only": "${table-mild-radius-klqe-klqr-echo-only.archive}",
+    "mild_phase_klqe_klqr_echo_only": "${table-mild-phase-klqe-klqr-echo-only.archive}",
+    "mild_drive": "${table-mild-drive.archive}",
+    "ref_radius": "${table-mild-original-klqe-radius.archive}",
+    "ref_phase": "${table-mild-original-klqe-phase.archive}",
+    "ref_drive": "${table-mild-drive.archive}"
+   }
+  },
+  {
+   "id": "ref-strong",
+   "job": "50-figure-data/ref-strong.job.json",
+   "inputs": {
+    "run": "${s37.archive}"
+   }
+  },
+  {
+   "id": "table-strong-radius-psi-r-rdot-exact-B",
+   "job": "50-figure-data/strong_radius_psi-r-rdot-exact-B.job.json",
+   "inputs": {
+    "base": "${s37.archive}",
+    "ref": "${ref-strong.archive}",
+    "run": "${s37.archive}"
+   }
+  },
+  {
+   "id": "table-strong-phase-psi-r-rdot-exact-B",
+   "job": "50-figure-data/strong_phase_psi-r-rdot-exact-B.job.json",
+   "inputs": {
+    "base": "${s37.archive}",
+    "ref": "${ref-strong.archive}",
+    "run": "${s37.archive}"
+   }
+  },
+  {
+   "id": "table-strong-radius-psi-e-edot-exact-B",
+   "job": "50-figure-data/strong_radius_psi-e-edot-exact-B.job.json",
+   "inputs": {
+    "base": "${s37.archive}",
+    "ref": "${ref-strong.archive}",
+    "run": "${s38.archive}"
+   }
+  },
+  {
+   "id": "table-strong-phase-psi-e-edot-exact-B",
+   "job": "50-figure-data/strong_phase_psi-e-edot-exact-B.job.json",
+   "inputs": {
+    "base": "${s37.archive}",
+    "ref": "${ref-strong.archive}",
+    "run": "${s38.archive}"
+   }
+  },
+  {
+   "id": "table-strong-radius-psi-xi-regressed-B",
+   "job": "50-figure-data/strong_radius_psi-xi-regressed-B.job.json",
+   "inputs": {
+    "base": "${s37.archive}",
+    "ref": "${ref-strong.archive}",
+    "run": "${s39.archive}"
+   }
+  },
+  {
+   "id": "table-strong-phase-psi-xi-regressed-B",
+   "job": "50-figure-data/strong_phase_psi-xi-regressed-B.job.json",
+   "inputs": {
+    "base": "${s37.archive}",
+    "ref": "${ref-strong.archive}",
+    "run": "${s39.archive}"
+   }
+  },
+  {
+   "id": "table-strong-radius-klqe-klqr-echo-only",
+   "job": "50-figure-data/strong_radius_klqe-klqr-echo-only.job.json",
+   "inputs": {
+    "std": "${s60.archive}"
+   }
+  },
+  {
+   "id": "table-strong-phase-klqe-klqr-echo-only",
+   "job": "50-figure-data/strong_phase_klqe-klqr-echo-only.job.json",
+   "inputs": {
+    "std": "${s60.archive}"
+   }
+  },
+  {
+   "id": "table-strong-original-klqe-radius",
+   "job": "50-figure-data/strong_original-klqe_radius.job.json",
+   "inputs": {
+    "base": "${s37.archive}",
+    "ref": "${ref-strong.archive}",
+    "klqe": "${s51.archive}"
+   }
+  },
+  {
+   "id": "table-strong-original-klqe-phase",
+   "job": "50-figure-data/strong_original-klqe_phase.job.json",
+   "inputs": {
+    "base": "${s37.archive}",
+    "ref": "${ref-strong.archive}",
+    "klqe": "${s51.archive}"
+   }
+  },
+  {
+   "id": "table-strong-drive",
+   "job": "50-figure-data/strong_drive.job.json",
+   "inputs": {
+    "base": "${s37.archive}",
+    "ref": "${ref-strong.archive}",
+    "u1": "${s38.archive}",
+    "u2": "${s39.archive}",
+    "u3": "${s51.archive}",
+    "std": "${s60.archive}"
+   }
+  },
+  {
+   "id": "figures-strong",
+   "job": "60-figures/strong.job.json",
+   "inputs": {
+    "strong_radius_psi_r_rdot_exact_B": "${table-strong-radius-psi-r-rdot-exact-B.archive}",
+    "strong_phase_psi_r_rdot_exact_B": "${table-strong-phase-psi-r-rdot-exact-B.archive}",
+    "strong_radius_psi_e_edot_exact_B": "${table-strong-radius-psi-e-edot-exact-B.archive}",
+    "strong_phase_psi_e_edot_exact_B": "${table-strong-phase-psi-e-edot-exact-B.archive}",
+    "strong_radius_psi_xi_regressed_B": "${table-strong-radius-psi-xi-regressed-B.archive}",
+    "strong_phase_psi_xi_regressed_B": "${table-strong-phase-psi-xi-regressed-B.archive}",
+    "strong_radius_klqe_klqr_echo_only": "${table-strong-radius-klqe-klqr-echo-only.archive}",
+    "strong_phase_klqe_klqr_echo_only": "${table-strong-phase-klqe-klqr-echo-only.archive}",
+    "strong_drive": "${table-strong-drive.archive}",
+    "ref_radius": "${table-strong-original-klqe-radius.archive}",
+    "ref_phase": "${table-strong-original-klqe-phase.archive}",
+    "ref_drive": "${table-strong-drive.archive}"
+   }
+  },
+  {
+   "id": "ref-hard",
+   "job": "50-figure-data/ref-hard.job.json",
+   "inputs": {
+    "run": "${s40.archive}"
+   }
+  },
+  {
+   "id": "table-hard-radius-psi-r-rdot-exact-B",
+   "job": "50-figure-data/hard_radius_psi-r-rdot-exact-B.job.json",
+   "inputs": {
+    "base": "${s40.archive}",
+    "ref": "${ref-hard.archive}",
+    "run": "${s40.archive}"
+   }
+  },
+  {
+   "id": "table-hard-phase-psi-r-rdot-exact-B",
+   "job": "50-figure-data/hard_phase_psi-r-rdot-exact-B.job.json",
+   "inputs": {
+    "base": "${s40.archive}",
+    "ref": "${ref-hard.archive}",
+    "run": "${s40.archive}"
+   }
+  },
+  {
+   "id": "table-hard-radius-psi-e-edot-exact-B",
+   "job": "50-figure-data/hard_radius_psi-e-edot-exact-B.job.json",
+   "inputs": {
+    "base": "${s40.archive}",
+    "ref": "${ref-hard.archive}",
+    "run": "${s41.archive}"
+   }
+  },
+  {
+   "id": "table-hard-phase-psi-e-edot-exact-B",
+   "job": "50-figure-data/hard_phase_psi-e-edot-exact-B.job.json",
+   "inputs": {
+    "base": "${s40.archive}",
+    "ref": "${ref-hard.archive}",
+    "run": "${s41.archive}"
+   }
+  },
+  {
+   "id": "table-hard-radius-psi-xi-regressed-B",
+   "job": "50-figure-data/hard_radius_psi-xi-regressed-B.job.json",
+   "inputs": {
+    "base": "${s40.archive}",
+    "ref": "${ref-hard.archive}",
+    "run": "${s42.archive}"
+   }
+  },
+  {
+   "id": "table-hard-phase-psi-xi-regressed-B",
+   "job": "50-figure-data/hard_phase_psi-xi-regressed-B.job.json",
+   "inputs": {
+    "base": "${s40.archive}",
+    "ref": "${ref-hard.archive}",
+    "run": "${s42.archive}"
+   }
+  },
+  {
+   "id": "table-hard-radius-klqe-klqr-echo-only",
+   "job": "50-figure-data/hard_radius_klqe-klqr-echo-only.job.json",
+   "inputs": {
+    "std": "${s59.archive}"
+   }
+  },
+  {
+   "id": "table-hard-phase-klqe-klqr-echo-only",
+   "job": "50-figure-data/hard_phase_klqe-klqr-echo-only.job.json",
+   "inputs": {
+    "std": "${s59.archive}"
+   }
+  },
+  {
+   "id": "table-hard-original-klqe-radius",
+   "job": "50-figure-data/hard_original-klqe_radius.job.json",
+   "inputs": {
+    "base": "${s40.archive}",
+    "ref": "${ref-hard.archive}",
+    "klqe": "${s52.archive}"
+   }
+  },
+  {
+   "id": "table-hard-original-klqe-phase",
+   "job": "50-figure-data/hard_original-klqe_phase.job.json",
+   "inputs": {
+    "base": "${s40.archive}",
+    "ref": "${ref-hard.archive}",
+    "klqe": "${s52.archive}"
+   }
+  },
+  {
+   "id": "table-hard-drive",
+   "job": "50-figure-data/hard_drive.job.json",
+   "inputs": {
+    "base": "${s40.archive}",
+    "ref": "${ref-hard.archive}",
+    "u1": "${s41.archive}",
+    "u2": "${s42.archive}",
+    "u3": "${s52.archive}",
+    "std": "${s59.archive}"
+   }
+  },
+  {
+   "id": "figures-hard",
+   "job": "60-figures/hard.job.json",
+   "inputs": {
+    "hard_radius_psi_r_rdot_exact_B": "${table-hard-radius-psi-r-rdot-exact-B.archive}",
+    "hard_phase_psi_r_rdot_exact_B": "${table-hard-phase-psi-r-rdot-exact-B.archive}",
+    "hard_radius_psi_e_edot_exact_B": "${table-hard-radius-psi-e-edot-exact-B.archive}",
+    "hard_phase_psi_e_edot_exact_B": "${table-hard-phase-psi-e-edot-exact-B.archive}",
+    "hard_radius_psi_xi_regressed_B": "${table-hard-radius-psi-xi-regressed-B.archive}",
+    "hard_phase_psi_xi_regressed_B": "${table-hard-phase-psi-xi-regressed-B.archive}",
+    "hard_radius_klqe_klqr_echo_only": "${table-hard-radius-klqe-klqr-echo-only.archive}",
+    "hard_phase_klqe_klqr_echo_only": "${table-hard-phase-klqe-klqr-echo-only.archive}",
+    "hard_drive": "${table-hard-drive.archive}",
+    "ref_radius": "${table-hard-original-klqe-radius.archive}",
+    "ref_phase": "${table-hard-original-klqe-phase.archive}",
+    "ref_drive": "${table-hard-drive.archive}"
+   }
+  }
+ ]
+}

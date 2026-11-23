@@ -234,9 +234,23 @@ void rpeClockAndResponse() {
     check(cancelled, "Forced sidecar ignored cancellation");
 }
 } // namespace
+void arbitraryStroboscopicSeed() {
+    ForcedSaddle system;auto o=options();o.fixedPoints=o.periodicOrbits=o.manifolds=o.vectorField=false;
+    const double angle=tau*o.forcingSectionTime+.37,v=.02,h=.01;
+    const PhaseState seed{.12*std::cos(angle)+h+.5*v+v*v,.08*std::sin(angle)+v};
+    const double v1=v*std::exp(.4),h1=h*std::exp(-.7);
+    o.sectionSeeds={seed};auto result=analyzePhaseSpace(system,o);
+    check(result.poincareMaps.size()==1,"Arbitrary forcing section seed missing");
+    auto r=result.poincareMaps[0];check(r.status=="complete","Stroboscopic refinement failed");
+    near(r.returnState[0],.12*std::cos(angle)+h1+.5*v1+v1*v1,1e-8,"Exact nonperiodic forced endpoint");
+    near(r.returnState[1],.08*std::sin(angle)+v1,1e-8,"Exact expanding deviation");
+    near(r.returnDerivative[0],std::exp(-.7),1e-7,"Forced DP x derivative");
+    near(r.returnDerivative[1],(-.5-2*v)*std::exp(-.7)+(.5+2*v1)*std::exp(.4),1e-7,"Forced DP nonlinear cross derivative");
+}
 int main() {
     try {
         exactSaddle();
+        arbitraryStroboscopicSeed();
         sharedClocks();
         rpeClockAndResponse();
         rpeSaddle();

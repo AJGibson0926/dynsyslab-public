@@ -25,3 +25,11 @@ Start menu when you want them. More: [INSTALL.md](https://github.com/AJGibson092
 and the [overview](https://github.com/AJGibson0926/dynsyslab-public/blob/{{TAG}}/docs/AGENT_WELCOME.md).
 
 Python client (optional, any OS): `python -m pip install git+https://github.com/AJGibson0926/dynsyslab-public@{{TAG}}`
+
+### Data packs
+
+Data packs are version-pinned job files that regenerate published data and figures from scratch,
+offline, with this release alone. They hold parameters and instructions, never run data. Packs for
+this release are attached as `DynSysLab-datapack-<name>-<release-date>-v<version>.zip`, with
+checksums in `SHA256SUMS-datapacks.txt`. Unzip one and follow its `README.md`; see
+[DATA_PACKS.md](https://github.com/AJGibson0926/dynsyslab-public/blob/{{TAG}}/docs/DATA_PACKS.md).

@@ -1,0 +1,25 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "postprocess",
+ "label": "krom-rr-recentred",
+ "sources": [
+  "${inputs.s44}"
+ ],
+ "methods": [
+  {
+   "name": "krom_recenter",
+   "settings": {
+    "target_state": [
+     1.0,
+     0.0
+    ]
+   }
+  }
+ ],
+ "archive": {
+  "enabled": true
+ },
+ "resources": {
+  "peak_bytes": 3298207
+ }
+}

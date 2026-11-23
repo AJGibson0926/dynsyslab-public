@@ -1,4 +1,5 @@
 #include "SystemSupport.hpp"
+#include <dynsyslab/core/OscillatorObservables.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -64,6 +65,17 @@ std::unique_ptr<ODESystem> nonlinearPendulum(SystemConfiguration configuration) 
         observables.push_back(Observable::fromExpressions(
             {"torque_dimensionless", "Normalized torque", "dimensionless", "dimensional", {}, false},
             {torque / torqueScale}));
+    }
+    // Reference examples use natural-time velocity. Pull their dimensionless
+    // formulas back to (theta, dtheta/dt), which is this system's native state.
+    if(length>0 && gravity>0) {
+        const auto addPhase=[&](const std::string& name,std::size_t harmonic,OscillatorEnvelope envelope) {
+            auto entries=phaseEnvelopeObservables(name,harmonic,envelope,"dimensional",std::sqrt(length/gravity));
+            observables.insert(observables.end(),entries.begin(),entries.end());
+        };
+        addPhase("phase_sech",1,OscillatorEnvelope::sech);
+        addPhase("phase5_sech",5,OscillatorEnvelope::sech);
+        addPhase("phase_gaussian_velocity",1,OscillatorEnvelope::gaussianVelocity);
     }
     return std::make_unique<FunctionalSystem>(descriptorFor("nonlinear_pendulum"), configuration,
         selectedInitial(configuration, std::move(initial)), rhs, jacobian, input,

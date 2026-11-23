@@ -67,6 +67,16 @@ struct KoopmanPIDCorrection {
 
 using StateTargetFunction = std::function<std::vector<double>(double)>;
 
+// A checked gain from the bilinear_certificate step: u = u* + K (z - z*), z = split(psi).
+// The sign is the certificate's (u = K z), opposite to LQR's u = -K x. No Riccati solve
+// runs. The guarantee covers the bilinear model plus its stated residual sector only.
+struct CertifiedKoopmanFeedback {
+    std::vector<double> gain;         // inputs x split dimension
+    std::vector<double> targetLifted; // z*, split dimension
+    std::vector<double> targetInput;  // u*, inputs
+    double sampleTime{};              // the discrete hold the certificate assumes
+};
+
 class KoopmanLQRController {
 public:
     KoopmanLQRController(std::shared_ptr<const KoopmanModel> model,
@@ -106,6 +116,10 @@ public:
     // PID correction on a lifted output, added to the KLQR input: u += PID(y_target - y(z)).
     void setPIDCorrection(KoopmanPIDCorrection correction);
     [[nodiscard]] bool stateful() const noexcept { return integral_.has_value() || pid_.has_value(); }
+    // Replaces the scheduled LQR gain. Cannot be combined with integral action, PID or
+    // balanced truncation, and a controller target must equal the certified z*.
+    void setCertifiedFeedback(CertifiedKoopmanFeedback feedback);
+    [[nodiscard]] const std::optional<CertifiedKoopmanFeedback>& certifiedFeedback() const noexcept { return certified_; }
     [[nodiscard]] const std::vector<double>& integralState() const noexcept { return integralState_; }
 
 private:
@@ -113,6 +127,7 @@ private:
         const std::vector<double>& inputMap) const;
     void solveGain(const std::vector<double>& inputMap) const;
     std::optional<BalancedReductionOptions> reduction_;
+    std::optional<CertifiedKoopmanFeedback> certified_;
     mutable std::size_t lastReducedOrder_{};
     mutable double lastReductionErrorBound_{};
     std::shared_ptr<const KoopmanModel> model_;

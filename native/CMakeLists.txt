@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(dynsyslab_native VERSION 0.7.0 LANGUAGES CXX)
+project(dynsyslab_native VERSION 0.8.0 LANGUAGES CXX)
 
 include(CTest)
 option(DYNSYSLAB_BUILD_PYTHON "Build optional Python bindings" OFF)
@@ -52,26 +52,119 @@ function(dynsyslab_eigen_module target)
   set_property(TARGET ${target} PROPERTY JOB_POOL_COMPILE dynsyslab_eigen_compile)
 endfunction()
 
+# Build identity recorded in archives and data packs (one translation unit, set at configure).
+find_package(Git QUIET)
+set(DYNSYSLAB_GIT_COMMIT "unknown")
+set(DYNSYSLAB_GIT_MODIFIED 0)
+if(GIT_FOUND)
+  execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE _commit OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET RESULT_VARIABLE _commit_result)
+  if(_commit_result EQUAL 0)
+    set(DYNSYSLAB_GIT_COMMIT "${_commit}")
+    execute_process(COMMAND "${GIT_EXECUTABLE}" status --porcelain --untracked-files=no WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+      OUTPUT_VARIABLE _status OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(_status)
+      set(DYNSYSLAB_GIT_MODIFIED 1)
+    endif()
+  endif()
+endif()
+set_property(SOURCE src/BuildInfo.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+  "DYNSYSLAB_SOURCE_COMMIT=\"${DYNSYSLAB_GIT_COMMIT}\"" "DYNSYSLAB_SOURCE_MODIFIED=${DYNSYSLAB_GIT_MODIFIED}"
+  "DYNSYSLAB_COMPILER_ID=\"${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}\"" "DYNSYSLAB_BUILD_TYPE=\"$<CONFIG>\"")
+
 add_library(dynsyslab_foundation ${DYNSYSLAB_LIBRARY_KIND}
-  src/Models.cpp src/Npy.cpp src/Json.cpp src/Text.cpp src/FileDigest.cpp src/OutputPath.cpp
+  src/Models.cpp src/Npy.cpp src/Json.cpp src/Text.cpp src/FileDigest.cpp src/BuildInfo.cpp src/PortableNormal.cpp src/OutputPath.cpp
   src/LegacyCsv.cpp src/LegacyCsvImport.cpp
   src/TimeSeries.cpp src/Fourier.cpp src/DiscreteFourier.cpp src/NumericalDifferentiation.cpp src/TimeSeriesArchive.cpp
-  src/Extension.cpp src/ODE.cpp src/Integrator.cpp src/Hierarchy.cpp
-  src/AnalyticExpression.cpp src/ObservableExpressions.cpp
-  src/SpecialFunctions.cpp src/Lauricella.cpp src/QuarticOrbit.cpp src/AnalyticSolution.cpp
+  src/Extension.cpp src/ODE.cpp src/Integrator.cpp src/KnownInput.cpp src/InputAffineSensor.cpp src/Hierarchy.cpp
+  src/AnalyticExpression.cpp src/ObservableExpressions.cpp src/OscillatorObservables.cpp src/BasisFunctions.cpp
+  src/SpecialFunctions.cpp src/Lauricella.cpp src/QuarticOrbit.cpp src/AnalyticSolution.cpp src/AnalyticHistories.cpp src/PeriodicAnalysis.cpp src/TorusAnalysis.cpp src/CoefficientShift.cpp
   src/AnalyticQuadrature.cpp src/AnalyticDoublePendulum.cpp src/AnalyticModelLimits.cpp src/AnalyticKuramoto.cpp
   src/NeuralKnowledge.cpp src/CoupledKnowledge.cpp src/BubbleKnowledge.cpp
   src/AnalyticHenonHeiles.cpp src/AnalyticOscillators.cpp src/AnalyticRPE.cpp src/AnalyticOtherSystems.cpp
-  src/SystemsHarmonic.cpp src/ResearchPapers.cpp src/ResearchPapersExtra.cpp src/DynamicalKnowledge.cpp src/RpeDynamicalKnowledge.cpp src/DoublePendulumKnowledge.cpp
+  src/SystemsHarmonic.cpp src/ResearchPapers.cpp src/ResearchPapersExtra.cpp src/ResearchPapersOscillators.cpp src/DynamicalKnowledge.cpp src/RpeDynamicalKnowledge.cpp src/DoublePendulumKnowledge.cpp
   src/Hankel.cpp src/PathSimplification.cpp src/ObservableDerivative.cpp src/Observable.cpp src/System.cpp src/SystemSupport.cpp src/SystemLabels.cpp src/Targets.cpp
   src/TrainingDomain.cpp
-  src/SystemsBasic.cpp src/SystemsMechanical.cpp src/SystemsBiological.cpp
+  src/SystemsBasic.cpp src/SystemsTriangular.cpp src/SystemsMultiwell.cpp src/SystemsIntegrable.cpp src/AnalyticIntegrable.cpp src/AnalyticCelestial.cpp src/SystemsToda.cpp src/AnalyticToda.cpp src/Toda.cpp src/SystemsMechanical.cpp src/SystemsBiological.cpp
   src/SystemsBubble.cpp src/SystemsRPE.cpp src/SystemsMarmottant.cpp src/AcousticReceiver.cpp
   src/SystemsReddySzeri.cpp)
 dynsyslab_module(dynsyslab_foundation)
 find_package(boost_math CONFIG REQUIRED)
 find_package(boost_multiprecision CONFIG REQUIRED)
 target_link_libraries(dynsyslab_foundation PRIVATE Boost::math)
+
+# Exact geometric analysis is independent of integration, fitting, and archives.
+add_library(dynsyslab_math ${DYNSYSLAB_LIBRARY_KIND}
+  src/math/Arithmetic.cpp src/math/Topology.cpp src/math/HarmonicAnalysis.cpp src/math/AnalyticFourier.cpp src/math/KeplerFourier.cpp src/math/PeriodicSnapshots.cpp src/math/InvariantProjection.cpp src/math/DiscreteCycles.cpp src/math/CyclicCocycle.cpp
+  src/math/DirectScattering.cpp src/math/ReflectionlessScattering.cpp src/math/ScatteringQuery.cpp
+  src/math/Resonance.cpp src/math/Distributions.cpp src/math/SpectralFilters.cpp src/math/PeriodicAtlas.cpp src/math/PeriodicChart.cpp src/math/PeriodicClock.cpp src/math/TorusFourier.cpp src/math/PhaseCoverFourier.cpp src/math/TorusClock.cpp src/math/Perturbation.cpp src/math/HamiltonianPerturbation.cpp src/math/TorusQuery.cpp src/math/Query.cpp
+  src/math/OrbitIntegrator.cpp src/math/OrbitFamily.cpp src/math/DampedOrbit.cpp src/math/MelnikovTools.cpp src/math/OrbitGramian.cpp src/math/OrbitQuery.cpp
+  src/math/EigenvalueLattice.cpp src/math/ShellPacket.cpp src/math/ReebGraph.cpp src/math/SpectralDiagnosticsQuery.cpp
+  src/math/ResolventLinearAlgebra.cpp src/math/LaplaceTransform.cpp src/math/KoopmanResolvent.cpp src/math/GeneralizedLaplace.cpp
+  src/math/KoopmanFrequencyResponse.cpp src/math/ShellResolvent.cpp src/math/FrequencyGramian.cpp src/math/ResolventQuery.cpp
+  src/math/ResolventLeastSquares.cpp src/math/DiscreteResolvent.cpp src/math/PronyIdentification.cpp src/math/ForcedResponseEstimation.cpp
+  src/math/IsochronDecomposition.cpp src/math/HarmonicContinuation.cpp src/math/ContractionCheck.cpp src/math/ResolventDataQuery.cpp)
+dynsyslab_module(dynsyslab_math)
+target_link_libraries(dynsyslab_math PUBLIC dynsyslab_foundation PRIVATE Boost::multiprecision Boost::math)
+
+add_library(dynsyslab_lie ${DYNSYSLAB_LIBRARY_KIND}
+  src/lie/Polynomial.cpp src/lie/Closure.cpp src/lie/Structure.cpp src/lie/Query.cpp src/lie/Bounds.cpp
+  src/lie/InverseRadius.cpp src/lie/SinusoidalMechanics.cpp)
+dynsyslab_module(dynsyslab_lie)
+target_link_libraries(dynsyslab_lie PUBLIC dynsyslab_foundation PRIVATE Boost::multiprecision)
+if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
+  add_executable(dynsyslab_known_input_tests tests/known_input_tests.cpp)
+  target_link_libraries(dynsyslab_known_input_tests PRIVATE dynsyslab_foundation)
+  add_test(NAME dynsyslab_known_input_tests COMMAND dynsyslab_known_input_tests)
+  add_executable(dynsyslab_integrable_system_tests tests/integrable_system_tests.cpp)
+  add_executable(dynsyslab_toda_tests tests/toda_tests.cpp)
+  target_link_libraries(dynsyslab_toda_tests PRIVATE dynsyslab_foundation)
+  add_test(NAME dynsyslab_toda_tests COMMAND dynsyslab_toda_tests)
+  add_executable(dynsyslab_resolvent_tools_tests tests/resolvent_tools_tests.cpp)
+  target_link_libraries(dynsyslab_resolvent_tools_tests PRIVATE dynsyslab_math)
+  add_test(NAME dynsyslab_resolvent_tools_tests COMMAND dynsyslab_resolvent_tools_tests)
+  add_executable(dynsyslab_resolvent_data_tests tests/resolvent_data_tests.cpp)
+  target_link_libraries(dynsyslab_resolvent_data_tests PRIVATE dynsyslab_math)
+  add_test(NAME dynsyslab_resolvent_data_tests COMMAND dynsyslab_resolvent_data_tests)
+  add_executable(dynsyslab_orbit_tools_tests tests/orbit_tools_tests.cpp)
+  target_link_libraries(dynsyslab_orbit_tools_tests PRIVATE dynsyslab_math)
+  add_test(NAME dynsyslab_orbit_tools_tests COMMAND dynsyslab_orbit_tools_tests)
+  add_executable(dynsyslab_spectral_diagnostics_tests tests/spectral_diagnostics_tests.cpp)
+  target_link_libraries(dynsyslab_spectral_diagnostics_tests PRIVATE dynsyslab_math)
+  add_test(NAME dynsyslab_spectral_diagnostics_tests COMMAND dynsyslab_spectral_diagnostics_tests)
+  add_executable(dynsyslab_torus_analysis_tests tests/torus_analysis_tests.cpp)
+  add_executable(dynsyslab_inverse_scattering_tests tests/inverse_scattering_tests.cpp)
+  target_link_libraries(dynsyslab_inverse_scattering_tests PRIVATE dynsyslab_math)
+  add_test(NAME dynsyslab_inverse_scattering_tests COMMAND dynsyslab_inverse_scattering_tests)
+  target_link_libraries(dynsyslab_torus_analysis_tests PRIVATE dynsyslab_math)
+  add_test(NAME dynsyslab_torus_analysis_tests COMMAND dynsyslab_torus_analysis_tests)
+  target_link_libraries(dynsyslab_integrable_system_tests PRIVATE dynsyslab_foundation)
+  add_test(NAME dynsyslab_integrable_system_tests COMMAND dynsyslab_integrable_system_tests)
+  add_executable(dynsyslab_math_tests tests/math_tests.cpp)
+  add_executable(dynsyslab_torus_clock_tests tests/torus_clock_tests.cpp)
+  target_link_libraries(dynsyslab_torus_clock_tests PRIVATE dynsyslab_math)
+  add_test(NAME dynsyslab_torus_clock_tests COMMAND dynsyslab_torus_clock_tests)
+  add_executable(dynsyslab_discrete_cycle_tests tests/discrete_cycle_tests.cpp)
+  target_link_libraries(dynsyslab_discrete_cycle_tests PRIVATE dynsyslab_math)
+  add_test(NAME dynsyslab_discrete_cycle_tests COMMAND dynsyslab_discrete_cycle_tests)
+  target_link_libraries(dynsyslab_math_tests PRIVATE dynsyslab_math)
+  add_test(NAME dynsyslab_math_tests COMMAND dynsyslab_math_tests)
+  add_executable(dynsyslab_spectral_filter_tests tests/spectral_filter_tests.cpp)
+  add_executable(dynsyslab_periodic_clock_tests tests/periodic_clock_tests.cpp)
+  target_link_libraries(dynsyslab_periodic_clock_tests PRIVATE dynsyslab_math)
+  add_test(NAME dynsyslab_periodic_clock_tests COMMAND dynsyslab_periodic_clock_tests)
+  target_link_libraries(dynsyslab_spectral_filter_tests PRIVATE dynsyslab_math)
+  add_test(NAME dynsyslab_spectral_filter_tests COMMAND dynsyslab_spectral_filter_tests)
+  add_executable(dynsyslab_multiwell_system_tests tests/multiwell_system_tests.cpp)
+  target_link_libraries(dynsyslab_multiwell_system_tests PRIVATE dynsyslab_foundation)
+  add_test(NAME dynsyslab_multiwell_system_tests COMMAND dynsyslab_multiwell_system_tests)
+  add_executable(dynsyslab_lie_tests tests/lie_tests.cpp)
+  target_link_libraries(dynsyslab_lie_tests PRIVATE dynsyslab_lie)
+  add_test(NAME dynsyslab_lie_tests COMMAND dynsyslab_lie_tests)
+  add_executable(dynsyslab_sinusoidal_closure_tests tests/sinusoidal_closure_tests.cpp)
+  target_link_libraries(dynsyslab_sinusoidal_closure_tests PRIVATE dynsyslab_lie)
+  add_test(NAME dynsyslab_sinusoidal_closure_tests COMMAND dynsyslab_sinusoidal_closure_tests)
+endif()
 
 add_library(dynsyslab_delay ${DYNSYSLAB_LIBRARY_KIND} src/Delay.cpp
   src/AnalyticDelay.cpp src/DelayExponential.cpp src/DelayResearch.cpp)
@@ -125,7 +218,7 @@ endif()
 
 add_library(dynsyslab_eigenfunctions ${DYNSYSLAB_LIBRARY_KIND}
   src/EigenfunctionSpectrum.cpp src/EigenfunctionCoordinates.cpp
-  src/PolynomialEigenfunctions.cpp src/EigenfunctionFit.cpp src/PolynomialBasis.cpp
+  src/PolynomialEigenfunctions.cpp src/EigenfunctionFit.cpp src/PolynomialBasis.cpp src/KnownEigenfunctions.cpp
   src/PolynomialEigenfunctionConstruction.cpp src/PolynomialEigenfunctionSpectrum.cpp)
 dynsyslab_module(dynsyslab_eigenfunctions)
 target_link_libraries(dynsyslab_eigenfunctions PUBLIC dynsyslab_foundation)
@@ -139,8 +232,8 @@ if(DYNSYSLAB_ENABLE_LINALG)
     dynsyslab_eigen_compile=${DYNSYSLAB_EIGEN_COMPILE_JOBS})
 
   add_library(dynsyslab_numerics ${DYNSYSLAB_LIBRARY_KIND}
-    src/EigenNumericsSvd.cpp src/EigenNumericsLeastSquaresReal.cpp
-    src/EigenNumericsLeastSquaresComplex.cpp
+    src/EigenNumericsSvd.cpp src/EigenNumericsLeastSquaresReal.cpp src/EigenNumericsStreamingQr.cpp
+    src/EigenNumericsLeastSquaresComplex.cpp src/NonlinearLeastSquares.cpp
     src/EigenNumericsNormalEquations.cpp
     src/EigenNumericsNullspace.cpp src/EigenNumericsComplexSpectrum.cpp
     src/EigenNumericsEigen.cpp src/EigenNumericsControl.cpp
@@ -154,6 +247,23 @@ if(DYNSYSLAB_ENABLE_LINALG)
     src/EigenNumericsControlDesign.cpp src/EigenNumericsSystemNorms.cpp src/LoopMargins.cpp
     src/TransferFunction.cpp)
   dynsyslab_eigen_module(dynsyslab_numerics)
+  target_link_libraries(dynsyslab_math PRIVATE dynsyslab_numerics)
+  target_compile_definitions(dynsyslab_math PRIVATE DYNSYSLAB_MATH_NUMERICS=1)
+  if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
+    target_compile_definitions(dynsyslab_resolvent_tools_tests PRIVATE DYNSYSLAB_MATH_NUMERICS=1)
+  endif()
+  add_library(dynsyslab_control_certificates ${DYNSYSLAB_LIBRARY_KIND}
+    src/DenseSdp.cpp src/BilinearKrom.cpp src/ResidualSector.cpp src/SupportedResidualSector.cpp src/CertifiedDesign.cpp
+    src/math/ControlCertificateQuery.cpp)
+  dynsyslab_eigen_module(dynsyslab_control_certificates)
+  target_link_libraries(dynsyslab_control_certificates PUBLIC dynsyslab_foundation)
+  target_link_libraries(dynsyslab_math PRIVATE dynsyslab_control_certificates)
+  target_compile_definitions(dynsyslab_math PRIVATE DYNSYSLAB_MATH_CONTROL_CERTIFICATES=1)
+  if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
+    add_executable(dynsyslab_control_certificate_tests tests/control_certificate_tests.cpp)
+    target_link_libraries(dynsyslab_control_certificate_tests PRIVATE dynsyslab_control_certificates)
+    add_test(NAME dynsyslab_control_certificate_tests COMMAND dynsyslab_control_certificate_tests)
+  endif()
 
   add_library(dynsyslab_phase_space ${DYNSYSLAB_LIBRARY_KIND}
     src/PhaseSpace.cpp src/PhaseKnowledge.cpp src/PhaseFlow.cpp src/PhaseFixedPoints.cpp
@@ -179,7 +289,7 @@ else()
 endif()
 
 add_library(dynsyslab_koopman ${DYNSYSLAB_LIBRARY_KIND}
-  src/KROM.cpp src/KoopmanModel.cpp src/KoopmanModelConstruction.cpp src/KoopmanValidation.cpp
+  src/KROM.cpp src/KoopmanModel.cpp src/KoopmanModelConstruction.cpp src/KoopmanValidation.cpp src/KoopmanDifferential.cpp
   src/ScatteredEigenfunctions.cpp src/KoopmanDatasets.cpp src/KoopmanInspection.cpp
   src/ScientificCompatibility.cpp src/SpectralDictionary.cpp src/SpectralKromSerialization.cpp)
 dynsyslab_module(dynsyslab_koopman)
@@ -197,10 +307,10 @@ if(DYNSYSLAB_ENABLE_LINALG)
   add_library(dynsyslab_spectral ${DYNSYSLAB_LIBRARY_KIND}
     src/Spectral.cpp src/DmdControl.cpp src/DmdControlEigenfunctions.cpp src/EdmdControl.cpp
     src/KoopmanSpectralFit.cpp src/KoopmanResiduals.cpp src/KoopmanMeasures.cpp src/KoopmanStochastic.cpp src/KoopmanRkhs.cpp
-    src/KoopmanDictionaryFit.cpp)
+      src/KoopmanDictionaryFit.cpp src/PeriodicSpectralComparison.cpp src/PeriodicDelayForecast.cpp src/PeriodicPacketFeatures.cpp)
   dynsyslab_module(dynsyslab_spectral)
   target_link_libraries(dynsyslab_spectral PUBLIC
-    dynsyslab_foundation dynsyslab_koopman PRIVATE dynsyslab_numerics)
+    dynsyslab_foundation dynsyslab_koopman PRIVATE dynsyslab_numerics dynsyslab_math)
   if(DYNSYSLAB_ENABLE_ARCHIVE_IO)
     target_sources(dynsyslab_spectral PRIVATE src/EdmdControlArchive.cpp)
   endif()
@@ -260,7 +370,7 @@ if(DYNSYSLAB_ENABLE_LINALG)
   add_library(dynsyslab_linear_analysis ${DYNSYSLAB_LIBRARY_KIND}
     src/Observability.cpp src/ModalObservability.cpp src/Pbh.cpp src/Controllability.cpp src/KoopmanLinearAnalysis.cpp
     src/SystemStructure.cpp src/KoopmanStateSpace.cpp src/EmpiricalObservability.cpp
-    src/EigenfunctionObservability.cpp)
+    src/EigenfunctionObservability.cpp src/KromDifferentialAnalysis.cpp src/KromLocalControlAnalysis.cpp)
   dynsyslab_module(dynsyslab_linear_analysis)
   # The toolkit's dense kernels live in dynsyslab_numerics; their core headers are
   # part of this module's API, so numerics is a public dependency.
@@ -271,11 +381,31 @@ if(DYNSYSLAB_ENABLE_LINALG)
   # the estimator/controller split lives in the workflow job format and factories.
   add_library(dynsyslab_control ${DYNSYSLAB_LIBRARY_KIND}
     src/Estimation.cpp src/EstimationRuntime.cpp src/EstimationSelection.cpp src/EstimationRealization.cpp
-    src/ReducedOrderEstimation.cpp
-    src/LQR.cpp src/ClassicalControl.cpp src/ReducedOrderControl.cpp)
+    src/ReducedOrderEstimation.cpp src/EnsembleBayes.cpp src/PeriodicEstimation.cpp src/PeriodicIdentification.cpp src/PeriodicFeatureIdentification.cpp src/PeriodicTransport.cpp src/ShootingIdentification.cpp src/SequentialShooting.cpp src/OnlineShooting.cpp
+    src/LQR.cpp src/ClassicalControl.cpp src/ReducedOrderControl.cpp src/KoopmanBilinearBridge.cpp)
   dynsyslab_module(dynsyslab_control)
   target_link_libraries(dynsyslab_control PUBLIC
-    dynsyslab_koopman dynsyslab_linear_analysis PRIVATE dynsyslab_numerics)
+    dynsyslab_koopman dynsyslab_linear_analysis dynsyslab_math dynsyslab_control_certificates PRIVATE dynsyslab_numerics)
+  if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
+    add_executable(dynsyslab_periodic_transport_tests tests/periodic_transport_tests.cpp)
+    target_link_libraries(dynsyslab_periodic_transport_tests PRIVATE dynsyslab_control)
+    add_test(NAME dynsyslab_periodic_transport_tests COMMAND dynsyslab_periodic_transport_tests)
+    add_executable(dynsyslab_shooting_identification_tests tests/shooting_identification_tests.cpp)
+    target_link_libraries(dynsyslab_shooting_identification_tests PRIVATE dynsyslab_control)
+    add_test(NAME dynsyslab_shooting_identification_tests COMMAND dynsyslab_shooting_identification_tests)
+    add_executable(dynsyslab_sequential_shooting_tests tests/sequential_shooting_tests.cpp)
+    target_link_libraries(dynsyslab_sequential_shooting_tests PRIVATE dynsyslab_control)
+    add_test(NAME dynsyslab_sequential_shooting_tests COMMAND dynsyslab_sequential_shooting_tests)
+    add_executable(dynsyslab_online_shooting_tests tests/online_shooting_tests.cpp)
+    target_link_libraries(dynsyslab_online_shooting_tests PRIVATE dynsyslab_control)
+    add_test(NAME dynsyslab_online_shooting_tests COMMAND dynsyslab_online_shooting_tests)
+    add_executable(dynsyslab_periodic_estimation_tests tests/periodic_estimation_tests.cpp)
+    add_executable(dynsyslab_periodic_feature_tests tests/periodic_feature_tests.cpp)
+    target_link_libraries(dynsyslab_periodic_feature_tests PRIVATE dynsyslab_control dynsyslab_spectral dynsyslab_math dynsyslab_numerics)
+    add_test(NAME dynsyslab_periodic_feature_tests COMMAND dynsyslab_periodic_feature_tests)
+    target_link_libraries(dynsyslab_periodic_estimation_tests PRIVATE dynsyslab_control)
+    add_test(NAME dynsyslab_periodic_estimation_tests COMMAND dynsyslab_periodic_estimation_tests)
+  endif()
 endif()
 
 if(DYNSYSLAB_ENABLE_SQLITE)
@@ -342,11 +472,17 @@ endif()
 
 if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
   if(DYNSYSLAB_ENABLE_LINALG AND DYNSYSLAB_ENABLE_ARCHIVE_IO)
+    add_executable(dynsyslab_streaming_spectral_tests tests/streaming_spectral_tests.cpp)
+    target_link_libraries(dynsyslab_streaming_spectral_tests PRIVATE dynsyslab_spectral dynsyslab_math dynsyslab_numerics)
+    add_test(NAME dynsyslab_streaming_spectral_tests COMMAND dynsyslab_streaming_spectral_tests)
     add_executable(dynsyslab_koopman_spectral_tests tests/koopman_spectral_tests.cpp)
-    target_link_libraries(dynsyslab_koopman_spectral_tests PRIVATE dynsyslab_spectral)
+    target_link_libraries(dynsyslab_koopman_spectral_tests PRIVATE dynsyslab_spectral dynsyslab_math dynsyslab_numerics)
     add_test(NAME dynsyslab_koopman_spectral_tests COMMAND dynsyslab_koopman_spectral_tests)
+    add_executable(dynsyslab_observable_dictionary_tests tests/observable_dictionary_tests.cpp)
+    target_link_libraries(dynsyslab_observable_dictionary_tests PRIVATE dynsyslab_spectral)
+    add_test(NAME dynsyslab_observable_dictionary_tests COMMAND dynsyslab_observable_dictionary_tests)
   endif()
-  foreach(test core system integrator analytic_solution)
+  foreach(test core system integrator analytic_solution triangular_system)
     add_executable(dynsyslab_${test}_tests tests/${test}_tests.cpp)
     target_link_libraries(dynsyslab_${test}_tests PRIVATE dynsyslab_core)
     add_test(NAME dynsyslab_${test}_tests COMMAND dynsyslab_${test}_tests)
@@ -401,7 +537,7 @@ if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
     endif()
     foreach(test phase_space phase_surface phase_forcing phase_bifurcation observable_expression echo_jet coordinate_closure global_jet spectral sindy reconstruction koopman_control scattered_eigenfunction
                  boundary_eigenfunction eigenvalue_optimization classical_control
-                 estimation estimation_runtime linear_analysis linear_systems loop_robustness empirical_observability reduced_order decomposition history_koopman history_input_regression dmd_control edmd_control polynomial_construction eigenfunction_contract scientific_compatibility coordinate_runtime)
+                 estimation estimation_runtime linear_analysis krom_audit linear_systems loop_robustness empirical_observability reduced_order decomposition history_koopman history_input_regression dmd_control edmd_control polynomial_construction eigenfunction_contract scientific_compatibility coordinate_runtime)
       add_executable(dynsyslab_${test}_tests tests/${test}_tests.cpp)
       target_link_libraries(dynsyslab_${test}_tests PRIVATE dynsyslab_core)
       add_test(NAME dynsyslab_${test}_tests COMMAND dynsyslab_${test}_tests)
@@ -452,7 +588,7 @@ if(DYNSYSLAB_BUILD_PYTHON)
 endif()
 
 set(_dsl_modules dynsyslab_foundation dynsyslab_delay dynsyslab_lattice dynsyslab_pde
-  dynsyslab_koopman dynsyslab_c_api dynsyslab_identification)
+  dynsyslab_koopman dynsyslab_c_api dynsyslab_identification dynsyslab_lie dynsyslab_math)
 if(TARGET dynsyslab_eigenfunctions)
   list(APPEND _dsl_modules dynsyslab_eigenfunctions)
 endif()

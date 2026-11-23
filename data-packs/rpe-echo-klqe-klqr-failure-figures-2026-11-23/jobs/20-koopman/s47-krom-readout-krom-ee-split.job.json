@@ -1,0 +1,27 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "postprocess",
+ "label": "krom-ee-split",
+ "sources": [
+  "${inputs.s32}"
+ ],
+ "methods": [
+  {
+   "name": "krom_readout",
+   "settings": {
+    "readouts": [
+     {
+      "name": "lifted_split",
+      "kind": "lifted_split"
+     }
+    ]
+   }
+  }
+ ],
+ "archive": {
+  "enabled": true
+ },
+ "resources": {
+  "peak_bytes": 2449955
+ }
+}

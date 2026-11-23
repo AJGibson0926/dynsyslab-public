@@ -76,6 +76,20 @@ std::unique_ptr<ODESystem> makeRPE(SystemConfiguration configuration) {
     const char* labels[]{"Inertial kinetic energy","Internal gas pressure","Laplace pressure",
         "Viscous damping","Momentum balance","Far-field acoustic echo"};
     std::vector<Observable> observables;
+    // First integral from the RPE integrating factor r^3 (the elliptic-solution
+    // references are recorded in AnalyticRPE.cpp). For arbitrary kappa, use the
+    // logarithmic gas-energy limit at kappa=1. Subtract H(1,0) so equilibrium is 0.
+    const auto gasEnergy=medium.kappa==1.0 ? -gas*r.unary("log")
+        : gas/(3.0*(medium.kappa-1.0))*(r.power(3.0*(1.0-medium.kappa))-1.0);
+    const auto energy=0.5*r.power(3)*v.power(2)+gasEnergy
+        +(external-vapor)/3.0*(r.power(3)-1.0)+capillarity/2.0*(r.power(2)-1.0);
+    const auto loss=-viscosity*r*v.power(2);
+    const auto inputPower=inputSign*external*r.power(2)*v;
+    for(const auto& item:std::vector<std::pair<ObservableDescriptor,AnalyticExpression>>{
+        {{"mechanical_energy","Mechanical energy above equilibrium","dimensionless","dimensionless",{},false},energy},
+        {{"energy_dissipation","Viscous energy rate","dimensionless","dimensionless",{},false},loss},
+        {{"control_power_coefficient","Energy rate per control input","dimensionless","dimensionless",{},false},inputPower}})
+        observables.push_back(Observable::fromExpressions(item.first,{item.second}));
     for (std::size_t index=0;index<6;++index) {
         const std::string units=index==5 ? "Pa m" : "dimensionless";
         observables.push_back(Observable::fromExpressions(
@@ -102,7 +116,7 @@ std::unique_ptr<ODESystem> makeRPE(SystemConfiguration configuration) {
             return genericInvalid(x, 2) || x[0] <= 0.01;
         }, std::vector<double>{1.0, 0.0}, std::move(observables),
         std::map<std::string,std::string>{{"r","radius"},{"R","radius"},
-        {"rdot","radial_velocity"},{"Rdot","radial_velocity"},{"echo","far_field_acoustic_echo"},
+        {"rdot","radial_velocity"},{"Rdot","radial_velocity"},{"echo","far_field_acoustic_echo"},{"energy","mechanical_energy"},
         {"echo_dot","far_field_acoustic_echo_dot"},{"echo_ddot","far_field_acoustic_echo_ddot"},
         {"echo_dot_dr","far_field_acoustic_echo_dot_dr"},{"echo_dot_dv","far_field_acoustic_echo_dot_dv"}},
         std::map<std::string,std::vector<std::string>>{{"echo",{"far_field_acoustic_echo"}},

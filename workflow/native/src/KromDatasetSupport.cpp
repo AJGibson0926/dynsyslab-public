@@ -27,7 +27,8 @@ std::string trainingDataRole(const std::string& method, const json::Value& setti
         "hermitian_dmd", "tlsdmd", "multdmd", "stochastic_resdmd", "specrkhs", "boundary_eigenfunctions",
         "eigenvalue_optimization", "echo_history_koopman", "history_basis", "sindy_dynamics", "koopman_validation"};
     if (method == "dmdc" || method == "edmdc") return "forced_allowed";
-    if (method == "control_regression" || method == "history_control_regression") return "forced_required";
+    if (method == "control_regression" || method == "history_control_regression"
+        || method == "bilinear_certificate") return "forced_required";
     if (method == "input_map") {
         const auto& map = settings.at("map");
         const auto representation = settings.at("representation").string(map.at("representation").string());

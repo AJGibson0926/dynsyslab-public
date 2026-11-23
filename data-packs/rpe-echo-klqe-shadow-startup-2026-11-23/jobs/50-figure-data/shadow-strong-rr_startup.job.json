@@ -1,0 +1,131 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "postprocess",
+ "label": "shadow-strong-rr_startup",
+ "sources": [
+  "${inputs.run}"
+ ],
+ "methods": [
+  {
+   "name": "figure_dataset",
+   "settings": {
+    "inputs": {
+     "run": "${inputs.run}"
+    },
+    "arrays": [
+     {
+      "name": "time",
+      "from": "run",
+      "array": "estimator_time",
+      "column": 0
+     },
+     {
+      "name": "x",
+      "from": "run",
+      "array": "values",
+      "columns": [
+       0,
+       1
+      ],
+      "onto": {
+       "from": "run",
+       "array": "estimator_time"
+      }
+     },
+     {
+      "name": "target",
+      "from": "run",
+      "array": "control_target_values",
+      "columns": [
+       0,
+       1
+      ],
+      "onto": {
+       "from": "run",
+       "array": "estimator_time"
+      }
+     },
+     {
+      "name": "xhat",
+      "from": "run",
+      "array": "state_estimate",
+      "columns": [
+       0,
+       1
+      ]
+     },
+     {
+      "name": "r",
+      "from": "run",
+      "array": "values",
+      "column": 0,
+      "onto": {
+       "from": "run",
+       "array": "estimator_time"
+      }
+     },
+     {
+      "name": "rdot",
+      "from": "run",
+      "array": "values",
+      "column": 1,
+      "onto": {
+       "from": "run",
+       "array": "estimator_time"
+      }
+     },
+     {
+      "name": "r_t",
+      "from": "run",
+      "array": "control_target_values",
+      "column": 0,
+      "onto": {
+       "from": "run",
+       "array": "estimator_time"
+      }
+     },
+     {
+      "name": "rdot_t",
+      "from": "run",
+      "array": "control_target_values",
+      "column": 1,
+      "onto": {
+       "from": "run",
+       "array": "estimator_time"
+      }
+     },
+     {
+      "name": "r_hat",
+      "from": "run",
+      "array": "state_estimate",
+      "column": 0
+     },
+     {
+      "name": "rdot_hat",
+      "from": "run",
+      "array": "state_estimate",
+      "column": 1
+     },
+     {
+      "name": "ideal",
+      "from": "run",
+      "array": "applied_input",
+      "column": 0
+     },
+     {
+      "name": "klqr",
+      "from": "run",
+      "array": "commanded_input",
+      "column": 0
+     }
+    ]
+   }
+  }
+ ],
+ "archive": {
+  "enabled": true
+ },
+ "resources": {
+  "peak_bytes": 20000000
+ }
+}
