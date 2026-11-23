@@ -92,7 +92,7 @@ circle-preserving supplied generators. Its harmonic witnesses stay independent
 on `s^2+c^2=1`, so it does not confuse ambient polynomial growth with a physical
 obstruction. For `s=sin(x_1),c=cos(x_1),v=x_2`, the physical angular
 partial is `R=(c,-s,0)`; do not substitute ambient `d_s,d_c`.
-See the [pendulum proof and executable cases](../case-studies/PENDULUM_DERIVATIVE_CLOSURE.md).
+See the pendulum proof and executable cases.
 The general exact query API below remains unchanged.
 
 Requests require `schema: dynsyslab.lie-algebra-query/v1`, `dimension`, and
@@ -235,7 +235,7 @@ linear-control, eigenfunction and spectral services retain their responsibilitie
 
 The pressure-controlled RPE family now has an exact infinite-algebra recognizer,
 using the auxiliary variable w=1/r and a bracket recurrence valid on r*w=1.
-See [the explicit proof](../reports/rpe-lie-control-review-2026-11-21/STRUCTURAL_PROOF.md)
+See the explicit proof
 and `examples/native/lie-algebra/rpe-pressure-algebra.json`.
 For saved approximate polynomial KROMs, use [KROM audits](KROM_AUDIT.md)
 to distinguish fitting-coordinate derivative completion from physical drift/control closure.

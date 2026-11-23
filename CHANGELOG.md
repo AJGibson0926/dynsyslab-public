@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.1 — 2026-11-23
+
+First published build of the 0.8 line; the 0.8.0 tag failed its release gate and was never released.
+
+- Data packs keep exact bytes on Windows checkouts, so their manifests validate.
+- Public documentation no longer links to private-only reports.
+
 ## 0.8.0 — 2026-11-23
 
 **Data packs: version-pinned job files that regenerate published results offline.** See

@@ -3,7 +3,7 @@
 - [Mathematics toolkit](architecture/MATHEMATICS_TOOLKIT.md) - exact arithmetic, p-adic finite computations, graphs, Fourier calculus, resonances and distribution pairings.
 - [Multiwell systems](MULTIWELL_SYSTEMS.md) - native triple-well chain and three-leaf Hamiltonian clover, observables and presets.
 
-- [Nonlinear pendulum derivative-closure proof](case-studies/PENDULUM_DERIVATIVE_CLOSURE.md) - exact harmonic obstruction, native certificates and comparison with Duffing/Van der Pol.
+- Nonlinear pendulum derivative-closure proof - exact harmonic obstruction, native certificates and comparison with Duffing/Van der Pol.
 
 - [Oscillator observables and spectral dictionaries](architecture/OSCILLATOR_OBSERVABLES_DICTIONARIES.md) - formulas, Colbrook sources, CLI/API and ownership.
 

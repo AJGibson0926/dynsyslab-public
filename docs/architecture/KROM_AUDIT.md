@@ -87,7 +87,7 @@ an artificially tiny score from predicting almost unchanged values at small dt.
 
 The inverse-radius proof recognizer belongs to `dynsyslab_lie`, not to RPE or a
 controller. Run `examples/native/lie-algebra/rpe-pressure-algebra.json` for the
-exact recurrence certificate. The [RPE report](../reports/rpe-lie-control-review-2026-11-21/REPORT.md)
+exact recurrence certificate. The RPE report
 illustrates each audit and records its limits.
 
 The theoretical distinctions follow [Katayama–Susuki](https://arxiv.org/abs/2611.20438)

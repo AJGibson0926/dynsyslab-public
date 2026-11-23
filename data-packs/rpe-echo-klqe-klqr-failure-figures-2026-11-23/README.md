@@ -1,8 +1,8 @@
 # RPE echo-only KLQE to KLQR failure figures
 
-Pack `rpe-echo-klqe-klqr-failure-figures-2026-11-23`, pinned to DynSysLab v0.8.0. It holds instructions only: every result is generated on your machine.
+Pack `rpe-echo-klqe-klqr-failure-figures-2026-11-23`, pinned to DynSysLab v0.8.1. It holds instructions only: every result is generated on your machine.
 
-Offline, with the installed v0.8.0 release:
+Offline, with the installed v0.8.1 release:
 
 ```powershell
 $cli = "$env:LOCALAPPDATA\Programs\DynSysLab\bin\dynsyslab-cli.exe"

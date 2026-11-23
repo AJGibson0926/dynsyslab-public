@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(dynsyslab_native VERSION 0.8.0 LANGUAGES CXX)
+project(dynsyslab_native VERSION 0.8.1 LANGUAGES CXX)
 
 include(CTest)
 option(DYNSYSLAB_BUILD_PYTHON "Build optional Python bindings" OFF)

@@ -167,7 +167,7 @@ implementation for these observables.
 
 ## Sources and scope
 
-For the pendulum, the [exact derivative-closure check](../case-studies/PENDULUM_DERIVATIVE_CLOSURE.md)
+For the pendulum, the exact derivative-closure check
 rules out a nontrivial finite bank closed under both drift and physical
 derivatives. The new dictionaries are useful approximation spaces; their finite
 size or orthogonality does not bypass that obstruction.
