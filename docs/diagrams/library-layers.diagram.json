@@ -1,0 +1,61 @@
+{
+ "schema": "dynsyslab.architecture-diagram/v1",
+ "title": "DynSysLab libraries: who owns what",
+ "description": "Native library layering after the observable/eigenfunction, domain and time-series consolidation (native/CMakeLists.txt, workflow/native, viewer/native, native_ui). Each layer depends only on the layers to its left.",
+ "root": {
+  "id": "layers", "kind": "group", "layout": "row", "gap": 60,
+  "children": [
+   {"id": "foundation", "kind": "module", "label": "Foundation", "icon": "library", "layout": "column", "gap": 22,
+    "children": [
+     {"id": "f-functions", "kind": "data", "label": "Functions", "icon": "heatmap",
+      "notes": ["Observable, Eigenfunction, Eigenvalue", "FunctionExpansion + ExpansionDictionary", "AnalyticExpression (atan2, elliptic K, E, F)"]},
+     {"id": "f-domains", "kind": "data", "label": "Domains", "icon": "matrix",
+      "notes": ["FunctionDomain: one optional state map q(x)", "DomainGrid, GridField, evaluateOnGrid", "grid-field archive"]},
+     {"id": "f-series", "kind": "data", "label": "Time series", "icon": "time_series",
+      "notes": ["TimeSeries: crop, resample, spectrum", "WindowHistory (crop by crop)", "Fourier"]},
+     {"id": "f-systems", "kind": "data", "label": "Systems", "icon": "library",
+      "notes": ["catalog + observables", "eigenfunction library (exact, principal, shell)"]}
+    ]},
+   {"id": "eigenfunctions", "kind": "module", "label": "Eigenfunctions", "icon": "spectrum", "layout": "column", "gap": 22,
+    "children": [
+     {"id": "e-spectrum", "kind": "data", "label": "Spectrum", "icon": "spectrum", "notes": ["one class: rates or multipliers, branches, origin"]},
+     {"id": "e-interp", "kind": "data", "label": "FunctionInterpolation", "icon": "heatmap"},
+     {"id": "e-fit", "kind": "data", "label": "Fits and projection", "icon": "matrix",
+      "notes": ["EigenfunctionFitResult", "projectObservable", "libraryEigenfunctions"]}
+    ]},
+   {"id": "middle", "kind": "group", "layout": "column", "gap": 40,
+    "children": [
+     {"id": "koopman", "kind": "module", "label": "Koopman", "icon": "krom", "layout": "column", "gap": 22,
+      "children": [
+       {"id": "k-model", "kind": "data", "label": "KoopmanModel (K-ROM)", "icon": "krom"},
+       {"id": "k-sets", "kind": "data", "label": "EigenfunctionSet (H-DMD)", "icon": "matrix"}
+      ]},
+     {"id": "observation", "kind": "module", "label": "Observation", "icon": "estimator", "layout": "column", "gap": 22,
+      "children": [
+       {"id": "o-maps", "kind": "data", "label": "Coordinate maps", "icon": "heatmap",
+        "notes": ["pull-back, push-forward", "fold set, round trip", "flow map, Koopman action"]},
+       {"id": "o-history", "kind": "data", "label": "History coordinates", "icon": "svd"}
+      ]}
+    ]},
+   {"id": "workflow", "kind": "module", "label": "Workflow (jobs)", "icon": "monitor", "layout": "column", "gap": 22,
+    "children": [
+     {"id": "w-methods", "kind": "data", "label": "Post-processing methods", "icon": "matrix",
+      "notes": ["hdmd, sindy, edmd, eigenfunction_expansion", "coordinate_transform, krom_extract", "domain_field, animation"]},
+     {"id": "w-solve", "kind": "data", "label": "Solve and control", "icon": "controller", "notes": ["klqr, klqe, pipelines"]}
+    ]},
+   {"id": "viewer", "kind": "module", "label": "Viewer", "icon": "monitor", "layout": "column", "gap": 22,
+    "children": [
+     {"id": "v-payloads", "kind": "data", "label": "Payloads", "icon": "heatmap",
+      "notes": ["domain fields: 2-D, status, 3-D slices", "animations (frames = pages)", "domain coloring, switchable"]},
+     {"id": "v-player", "kind": "data", "label": "Animation player", "icon": "time_series",
+      "notes": ["toolbar: play, pause, step, stop", "CLI animate: HTML player"]}
+    ]}
+  ]
+ },
+ "edges": [
+  {"from": "foundation", "to": "eigenfunctions"},
+  {"from": "eigenfunctions", "to": "middle"},
+  {"from": "middle", "to": "workflow"},
+  {"from": "workflow", "to": "viewer", "label": "archives"}
+ ]
+}

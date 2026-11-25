@@ -104,17 +104,17 @@ std::vector<std::complex<double>> evaluateEdmdControlEigenfunctions(
     return evaluateDmdControlEigenfunctions(model.lifted,theta,samples);
 }
 
-PolynomialEigenfunctionSet EdmdControlResult::eigenfunctionSet() const {
+EigenfunctionFitResult EdmdControlResult::eigenfunctionSet() const {
     validateDictionary(dictionary);
     if(!lifted.hasEigenfunctions||lifted.discreteEigenvalues.size()!=lifted.rank)
         throw std::invalid_argument("EDMDc has no exportable polynomial eigenbasis");
-    EigenfunctionCoordinates q;q.dimension=dictionary.dimension;
-    return {{dictionary.dimension,dictionary.exponents,dictionary.center,dictionary.scale},
-        lifted.eigenfunctionCoefficients,
-        EigenfunctionSpectrum::fromDiscreteMultipliers(lifted.discreteEigenvalues,lifted.deltaTime),q};
+    FunctionDomain q;q.dimension=dictionary.dimension;
+    return {FunctionExpansion({dictionary.dimension,dictionary.exponents,dictionary.center,dictionary.scale},
+        lifted.eigenfunctionCoefficients,q),
+        Spectrum::fromDiscreteMultipliers(lifted.discreteEigenvalues,lifted.deltaTime),{}};
 }
 
-KoopmanSINDyResult EdmdControlResult::polynomialEigenfunctions() const {
+KoopmanSINDyResult EdmdControlResult::expansion() const {
     validateDictionary(dictionary);
     if(!lifted.hasEigenfunctions||lifted.discreteEigenvalues.size()!=lifted.rank
         ||!std::isfinite(lifted.deltaTime)||lifted.deltaTime<=0)

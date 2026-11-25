@@ -4,10 +4,13 @@
 
 namespace dynsyslab::core::detail {
 namespace {
+SystemConfiguration readSystem(const json::Value& metadata);
 bool coordinateOnly(const NpzRecord& a) {
-    return a.contains("polynomial_contract_json") &&
-        !json::parse(a.at("polynomial_contract_json").string())
-            .at("physical_system_attached").boolean();
+    if (a.contains("polynomial_contract_json"))
+        return !json::parse(a.at("polynomial_contract_json").string()).at("physical_system_attached").boolean();
+    // Expansion eigenfunctions of data with no producing system are functions of their coordinates only.
+    return a.contains("expansion_coefficients") && !a.metadataJson().empty()
+        && readSystem(json::parse(a.metadataJson())).identifier.empty();
 }
 SystemConfiguration readSystem(const json::Value& metadata) {
     const auto& encoded=metadata.at("system_configuration");

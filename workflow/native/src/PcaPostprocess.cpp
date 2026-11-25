@@ -115,47 +115,6 @@ std::filesystem::path runPcaPostprocess(
             +",\"relative_residual\":"+numeric(result.relativeResidual)
             +",\"lambda\":"+numeric(result.lambda)
             +",\"converged\":"+std::string(result.converged?"true":"false");
-    } else if (method=="hankel_pod" || method=="hankel_svd") {
-        const bool center=settings.at("center").boolean(false);
-        auto input=prepareHankel(source,settings,false);
-        archiveHankelLayout(archive,input,settings.at("save_matrix").boolean());
-        const auto result=dynsyslab::core::fitHankelPOD(input.matrix,count(settings.at("rank"),0,"rank",true),center);
-        const auto& decomposition=result.decomposition;
-        archive.arrays["left_singular_vectors"]=
-            dynsyslab::core::NpyArray::fromDoubles(
-                {decomposition.rows,decomposition.rank},decomposition.left);
-        archive.arrays["singular_values"]=dynsyslab::core::NpyArray::fromDoubles(
-            {decomposition.rank},decomposition.singularValues);
-        archive.arrays["right_singular_vectors"]=
-            dynsyslab::core::NpyArray::fromDoubles(
-                {decomposition.rank,decomposition.columns},decomposition.right);
-        archive.arrays["mean"]=dynsyslab::core::NpyArray::fromDoubles(
-            {result.embeddedFeatures},result.mean);
-        const auto& offsets=input.alignEnd?input.matrix.ends:input.matrix.starts;
-        std::vector<double> time; time.reserve(offsets.size());
-        for (auto tick:offsets) time.push_back(source.time[tick]);
-        archive.arrays["time"]=dynsyslab::core::NpyArray::fromDoubles({time.size()},time);
-        // The legacy names describe the SVD of H-transpose. Expose the physical
-        // feature modes and their signed time coefficients unambiguously as well.
-        std::vector<double> modes(decomposition.right.size()), scores(decomposition.left);
-        for (std::size_t k=0;k<decomposition.rank;++k) {
-            for (std::size_t row=0;row<result.embeddedFeatures;++row)
-                modes[row*decomposition.rank+k]=decomposition.right[k*result.embeddedFeatures+row];
-            for (std::size_t j=0;j<result.embeddedSamples;++j)
-                scores[j*decomposition.rank+k]*=decomposition.singularValues[k];
-        }
-        archive.arrays["pod_modes"]=dynsyslab::core::NpyArray::fromDoubles({result.embeddedFeatures,decomposition.rank},modes);
-        archive.arrays["scores"]=dynsyslab::core::NpyArray::fromDoubles({result.embeddedSamples,decomposition.rank},scores);
-        details="\"hankel_window\":"+json::dump(input.provenance)
-            +",\"pod_modes_array\":\"pod_modes\",\"temporal_vectors_array\":\"left_singular_vectors\",\"temporal_scores_array\":\"scores\""
-            +",\"centered\":"+std::string(center?"true":"false")
-            +",\"rank\":"+std::to_string(decomposition.rank)
-            +",\"matrix_size\":"+std::to_string(result.matrixSize)
-            +",\"delay_stride_samples\":"+std::to_string(result.delayStride)
-            +",\"state_dimension\":"+std::to_string(source.dimension)
-            +",\"embedded_feature_dimension\":"
-            +std::to_string(result.embeddedFeatures)
-            +",\"embedded_samples\":"+std::to_string(result.embeddedSamples);
     } else throw std::invalid_argument("unknown PCA/POD stage");
     archive.arrays["metadata_json"]=dynsyslab::core::NpyArray::fromString(
         metadata(source,method,label,details));

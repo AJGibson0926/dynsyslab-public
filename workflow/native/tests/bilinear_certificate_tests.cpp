@@ -345,10 +345,9 @@ void historyHeldInput(const fs::path& root) {
     c::PooledHankelBasis basis; basis.delays = 2; basis.rank = 2;
     basis.leftSingularVectors = {1, 0, 0, 1}; basis.singularValues = {1, 1};
     c::FrozenHistoryTransform transform(basis, dt, {0, 1}, "position");
-    c::EigenfunctionCoordinates q; q.dimension = 2; q.kind = c::EigenfunctionCoordinateKind::causalHistory;
+    c::FunctionDomain q; q.dimension = 2;
     q.providerIdentity = transform.identity();
-    c::PolynomialEigenfunctionSet bank({2, {1, 0, 0, 1}, {0, 0}, {1, 1}}, {0., 1.},
-        c::EigenfunctionSpectrum::fromContinuousRates({lambda}, dt), q);
+    c::EigenfunctionFitResult bank{c::FunctionExpansion({2, {1, 0, 0, 1}, {0, 0}, {1, 1}}, {0., 1.}, q), c::Spectrum::fromContinuousRates({lambda}, dt), {}};
     c::KoopmanModel model(bank, config);
     c::NpzRecord extra; c::writeFrozenHistoryTransform(extra, transform);
     const auto kromPath = root / "history-krom.npz";

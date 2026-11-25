@@ -16,4 +16,7 @@ std::vector<ResearchPaper> builtInResearchPapers(const std::string &identifier);
 DynamicalKnowledge builtInDynamicalKnowledge(const SystemDescriptor &descriptor,
                                              const SystemConfiguration &configuration);
 DynamicalKnowledge rpeDynamicalKnowledge(const SystemConfiguration &configuration);
+// The catalog's hand-derived eigenfunctions (SystemEigenfunctionLibrary.cpp).
+std::vector<EigenfunctionEntry> builtInEigenfunctions(const SystemDescriptor &descriptor,
+                                                      const SystemConfiguration &configuration);
 } // namespace dynsyslab::core::detail

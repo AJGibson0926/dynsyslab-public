@@ -12,7 +12,7 @@
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/core/KoopmanModel.hpp>
-#include <dynsyslab/core/ScatteredEigenfunctions.hpp>
+#include <dynsyslab/core/FunctionInterpolation.hpp>
 #include <dynsyslab/core/Text.hpp>
 #include <dynsyslab/numerics/LeastSquares.hpp>
 
@@ -29,7 +29,7 @@ std::filesystem::path fitPolynomialEigenfunctions(const std::filesystem::path& k
     const auto model = c::loadKoopmanModel(kromPath);
     const auto* scattered = model.scatteredEigenfunctions();
     if (!scattered) throw std::invalid_argument("eigenfunction_polynomial_degree needs a K-ROM with scattered (H-DMD) eigenfunctions");
-    const std::size_t m = scattered->samples, d = scattered->stateDimension, modes = scattered->continuousEigenvalues.size();
+    const std::size_t m = scattered->samples, d = scattered->stateDimension, modes = scattered->outputs();
     // Normalized coordinates (x - center) / scale keep high powers well conditioned.
     std::vector<double> center(d, 0.0), scale(d, 0.0);
     for (std::size_t i = 0; i < m; ++i) for (std::size_t j = 0; j < d; ++j) center[j] += scattered->trainingStates[i * d + j] / double(m);
@@ -67,12 +67,12 @@ std::filesystem::path fitPolynomialEigenfunctions(const std::filesystem::path& k
         errors.emplace_back(std::sqrt(residual / std::max(norm, 1e-300)));
     }
     const auto smooth = c::KoopmanModel::fromPolynomialCoefficients(model.systemConfiguration(), d, exponents,
-        coefficients, scattered->continuousEigenvalues, center, scale);
+        coefficients, model.continuousEigenvalues(), center, scale);
     std::map<std::string, c::NpyArray> extra;
     const auto parent = c::readNpz(kromPath);
     for (const char* name : {"training_coordinates", "training_time", "training_states"})
         if (parent.contains(name)) extra[name] = parent.at(name);
-    const auto directory = root / L"derived" / L"koopman-polynomial-fit";
+    const auto directory = objectFolder(root, "koopman-polynomial-fit");
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(kromPath.stem().u8string() + "__polynomial-fit-degree-"
         + std::to_string(degree) + "__" + timestamp()) + ".npz");

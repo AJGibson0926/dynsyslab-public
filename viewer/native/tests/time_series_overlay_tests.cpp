@@ -83,6 +83,15 @@ int main() {
                 dsl::timeSeriesOverlay(cut,stemReq).figures.front().traces[0].y[3]==0.1,"Log-axis stem baseline (shared), no zero line");
         stemReq.stemBaseline=-2.0;
         require(dsl::timeSeriesOverlay(cut,stemReq).figures.front().traces[0].y[0]==-2.0,"Explicit stem baseline (log axis keeps no zero line)");
+        auto markReq=stemReq;markReq.stemBaseline.reset();markReq.logBaseline=false;
+        for (auto& curve:markReq.curves) {curve.lineStyle="markers";curve.label="_";}
+        const auto markTrace=dsl::timeSeriesOverlay(cut,markReq).figures.front().traces.front();
+        require(markTrace.marker && markTrace.lineStyle=="none" && markTrace.markerShape=="large-circle" &&
+                markTrace.label.empty(),"Point markers without a legend entry");
+        auto axisReq=stemReq;axisReq.rightAxis=dsl::Figure::RightAxis{"Echo e",0.25,1.0};
+        const auto axisPanel=dsl::timeSeriesOverlay(cut,axisReq).figures.front();
+        require(axisPanel.rightAxis && axisPanel.rightAxis->label=="Echo e" && axisPanel.rightAxis->scale==0.25 &&
+                axisPanel.rightAxis->offset==1.0,"Right axis mapping reaches the panel");
         fs::remove(cut);
         fs::remove(file);return 0;
     } catch (const std::exception& e) { fs::remove(file);std::cerr<<e.what()<<'\n';return 1; }

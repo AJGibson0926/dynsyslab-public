@@ -32,7 +32,7 @@ void testRecoveryAndEigenfunctions() {
     require(fit.hasEigenfunctions,"complex linear eigenfunctions missing");
     const auto predicted=core::predictDmdControl(fit,x,u,count);
     const auto values=core::evaluateDmdControlEigenfunctions(fit,x,count);
-    const auto polynomial=fit.polynomialEigenfunctions();
+    const auto polynomial=fit.expansion();
     for(std::size_t mode=0;mode<fit.rank;++mode)
         require(std::abs(core::evaluatePolynomialEigenfunction(polynomial,mode,x.data())
             -values[mode])<1e-12,"DMDc shared polynomial export failed");

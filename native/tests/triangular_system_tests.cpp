@@ -23,9 +23,9 @@ void verify(SystemConfiguration config) {
     const auto& p=sys->configuration().parameters;
     auto exact=knownPolynomialEigenfunctions(*sys);
     check(exact.eigenfunctions.has_value(),"Exact bank missing");
-    const auto& bank=*exact.eigenfunctions;
-    const auto rates=bank.spectrum().continuousRates();
-    check(bank.eigenfunctionCount()==4 && bank.coordinates().names[0]=="x_1","Bank contract");
+    const auto& bank=exact.eigenfunctions->functions;
+    const auto rates=exact.eigenfunctions->spectrum.continuousRates();
+    check(bank.outputCount()==4 && bank.coordinates().names[0]=="x_1","Bank contract");
     check(sys->descriptor().stateNames==std::vector<std::string>{"x_1","x_2"},"State names");
     check(sys->observableCatalog().contains("eta"),"Analytic observable missing");
     for(double x1:{-2.,-.1,0.,.7,3.}) for(double x2:{-1.,0.,2.}) {

@@ -146,6 +146,11 @@ std::vector<std::string> viewerFigureArguments(const json::Value& job, const std
     textOption(args, figure, "time_label", "--time-label");
     textOption(args, figure, "title", "--title");
     numberOption(args, figure, "columns", "--columns");
+    if (!figure.at("right_axis").isNull()) {  // plotted = offset + scale * right-axis value
+        textOption(args, figure.at("right_axis"), "label", "--right-axis-label");
+        numberOption(args, figure.at("right_axis"), "scale", "--right-axis-scale");
+        numberOption(args, figure.at("right_axis"), "offset", "--right-axis-offset");
+    }
     numberOption(args, figure, "width", "--width");
     numberOption(args, figure, "height", "--height");
     numberOption(args, figure, "start", "--start");

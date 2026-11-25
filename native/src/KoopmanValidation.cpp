@@ -208,10 +208,11 @@ KoopmanValidationResult validateKoopmanSemigroup(const KoopmanModel& model,
         model.requiresExternalCoordinates()?EigenfunctionValidationInput::coordinates:
         EigenfunctionValidationInput::physicalState,std::move(horizons),minimum,maximum);
 }
-EigenfunctionValidationResult validateEigenfunctions(const PolynomialEigenfunctionSet& bank,
+EigenfunctionValidationResult validateEigenfunctions(const FunctionExpansion& functions,
+    const Spectrum& spectrum,
     const std::vector<double>& time,const std::vector<double>& q,std::vector<double> horizons,
     const std::vector<double>& minimum,const std::vector<double>& maximum) {
-    return validateEigenfunctions(KoopmanModel(bank),time,q,time.size(),bank.coordinateDimension(),
+    return validateEigenfunctions(KoopmanModel(functions,spectrum),time,q,time.size(),functions.coordinateDimension(),
         EigenfunctionValidationInput::coordinates,std::move(horizons),minimum,maximum);
 }
 

@@ -1,3 +1,5 @@
+#include <dynsyslab/core/LongPath.hpp>
+#include "MeasurementMap.hpp"
 #include "PostprocessInternal.hpp"
 #include "ObservationSource.hpp"
 #include "KromDatasetSupport.hpp"
@@ -8,6 +10,8 @@
 #include <dynsyslab/core/AcousticReceiver.hpp>
 #include <dynsyslab/core/CoordinateTransform.hpp>
 #include <dynsyslab/core/HistoryObservationArchive.hpp>
+#include <dynsyslab/core/FileDigest.hpp>
+#include <dynsyslab/core/EigenfunctionArchive.hpp>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -128,9 +132,15 @@ core::CoordinateSeries measuredDerivativeCoordinates(const SourceData& source, c
     return {c::TimeSeries(source.time, values, 2 * m), c::TimeSeries(source.time, rates, 2 * m)};
 }
 
-std::filesystem::path runCoordinateStep(const SourceData& source,const json::Value& settings,
+// One coordinate change computed in memory: the full archive (arrays and metadata) and the settings
+// that recompute it (a fitted history basis is pinned to its stored transform archive).
+struct CoordinateStep { dynsyslab::core::NpzRecord archive; json::Value recorded; bool replayable{true}; };
+
+CoordinateStep computeCoordinateStep(const SourceData& source,const json::Value& settings,
     const std::filesystem::path& root,const std::string& label) {
     namespace c=dynsyslab::core;
+    auto recorded=settings;
+    bool replayable=true;
     const auto kind=settings.at("kind").string("identity");
     const bool modelRates=settings.at("system_derivatives").boolean(false);
     const bool integral=kind=="window_integral";
@@ -147,7 +157,8 @@ std::filesystem::path runCoordinateStep(const SourceData& source,const json::Val
         throw std::invalid_argument("A receiver requires one named acoustic term and a physical state source");
     if(integral&&mapped&&!original.at("coordinate_provider").isNull())
         throw std::invalid_argument("Use the scalar measurement array on a transformed trajectory");
-    if(kind=="observable"&&!receiver&&settings.at("definition").isNull()&&!original.at("coordinate_provider").isNull())
+    const bool eigenfunction=kind=="observable"&&!settings.at("eigenfunction").isNull();
+    if(kind=="observable"&&!receiver&&!eigenfunction&&settings.at("definition").isNull()&&!original.at("coordinate_provider").isNull())
         throw std::invalid_argument("A catalog observable maps the physical state; put this step first in the chain or use a column of the input");
     if(modelRates&&datasetDynamics(source)!="unforced")
         throw std::invalid_argument("Autonomous derivative reference requires confirmed unforced data");
@@ -172,7 +183,25 @@ std::filesystem::path runCoordinateStep(const SourceData& source,const json::Val
     if(kind=="columns")result=selectedColumns(source,settings,original,meta);
     if(kind=="measured_derivatives")result=measuredDerivativeCoordinates(source,settings,meta,physicalSource);
     std::optional<c::Observable> analyticMap;  // for the closure diagnostic
-    if(kind=="observable"||(integral&&mapped)) {
+    if(eigenfunction) {
+        // An eigenfunction is an observable: {"object": eigenfunctions archive, "mode": j,
+        // "representation": "interpolation" | "expansion"}, evaluated along the series by
+        // Observable::evaluate (at each state, or at each sample's window for a window map).
+        const auto& spec=settings.at("eigenfunction");
+        const auto objectPath=std::filesystem::u8path(spec.at("object").string());
+        const auto mode=std::size_t(spec.at("mode").number(0));
+        std::optional<c::ObservableCatalog> catalog;
+        try{catalog=c::createSystem(systemConfiguration(source))->observableCatalog();}catch(const std::exception&){}
+        const auto psi=c::readEigenfunction(c::readNpz(objectPath),mode,spec.at("representation").string(),
+                                            catalog?&*catalog:nullptr);
+        result=c::CoordinateSeries{psi.evaluate(q),std::nullopt};
+        replayable=false;  // values depend on the eigenfunctions object as well as the source: keep them
+        meta.object()["coordinate_names"]=json::Value::Array{"Re psi_"+std::to_string(mode),"Im psi_"+std::to_string(mode)};
+        meta.object()["eigenfunction"]=json::Value::Object{{"object",std::filesystem::absolute(objectPath).generic_u8string()},
+            {"mode",double(mode)},{"representation",spec.at("representation").string()},
+            {"eigenvalue",json::Value::Array{psi.eigenvalue().continuous.real(),psi.eigenvalue().continuous.imag()}}};
+        meta.object()["value_space"]="observable-values";
+    } else if(kind=="observable"||(integral&&mapped)) {
         auto map=[&] {
             if(receiver)return receiverMap(source,settings,meta);
             if(!settings.at("definition").isNull())return c::Observable::fromExpressionDefinition(settings.at("definition"));
@@ -223,6 +252,7 @@ std::filesystem::path runCoordinateStep(const SourceData& source,const json::Val
     } else if(kind=="history"&&settings.at("transform_archive").string().empty()) {
         // The history basis is part of this coordinate change, never a separate stage.
         auto fitted=fitHistoryCoordinates(source,settings,root,label);
+        replayable=false;  // a fitted basis decimates its measurement: keep these values (see header)
         meta.object()["derivative_evidence"]=modelRates?"frozen-projection-of-exact-measurement-rate":"none";
         result=std::move(fitted.series);
         meta.object()["coordinate_provider"]="causal-history";
@@ -242,7 +272,7 @@ std::filesystem::path runCoordinateStep(const SourceData& source,const json::Val
         meta.object()["coordinate_labels"]=std::move(labels);
     } else if(kind=="history") {
         const auto path=historyTransformArchive(std::filesystem::u8path(settings.at("transform_archive").string()));
-        const auto transform=c::loadFrozenHistoryTransform(path);
+        const auto transform=readMeasurementMap(path);
         const auto observable=settings.at("observable").string(settings.at("measurement").string(transform.measurement()));
         if(physicalSource&&observable!=transform.measurement()) {
             const auto system=c::createSystem(systemConfiguration(source));
@@ -325,9 +355,56 @@ std::filesystem::path runCoordinateStep(const SourceData& source,const json::Val
     meta.object()["coordinate_dimension"]=double(d);
     meta.object()["delta_t"]=n>1&&z.uniformTimeSteps()?z.deltaTime():0;
     archive.arrays["metadata_json"]=c::NpyArray::fromString(json::dump(meta));
-    return publish(root,source,"coordinate-transform",label,std::move(archive));
+    return {std::move(archive),std::move(recorded),replayable};
 }
+
+constexpr const char* kCoordinateRecordSchema="dynsyslab.coordinate-record/v1";
+
+// The archive a coordinate step publishes: by default only its metadata and the record that
+// recomputes it (source path and SHA-256, settings, the arrays the replay produces); with
+// "store_values": true, or when the step cannot be replayed exactly, the computed arrays.
+std::filesystem::path runCoordinateStep(const SourceData& source,const json::Value& settings,
+    const std::filesystem::path& root,const std::string& label) {
+    namespace c=dynsyslab::core;
+    auto step=computeCoordinateStep(source,settings,root,label);
+    if(settings.at("store_values").boolean(false)||!step.replayable)
+        return publish(root,source,"coordinate-transform",label,std::move(step.archive));
+    auto meta=json::parse(step.archive.metadataJson());
+    json::Value::Array arrays;
+    for(const auto& [name,array]:step.archive.arrays)if(name!="metadata_json")arrays.emplace_back(name);
+    const auto sourcePath=std::filesystem::absolute(source.path);
+    meta.object()["recorded_archive"]=json::Value::Object{{"schema",kCoordinateRecordSchema},{"arrays",arrays},
+        {"source",json::Value::Object{{"path",sourcePath.generic_u8string()},{"sha256",c::sha256File(sourcePath)}}},
+        {"settings",step.recorded},{"label",label}};
+    c::NpzRecord record;
+    record.arrays["metadata_json"]=c::NpyArray::fromString(json::dump(meta));
+    return publish(root,source,"coordinate-transform",label,std::move(record));
+}
+
+// Replays a recorded coordinate change: checks that its source is unchanged, loads it (replaying it
+// in turn when it is itself recorded) and recomputes the step; the stored metadata is kept.
+dynsyslab::core::NpzRecord replayCoordinateRecord(const std::filesystem::path& path,dynsyslab::core::NpzRecord stored) {
+    namespace c=dynsyslab::core;
+    const auto meta=json::parse(stored.metadataJson());
+    const auto& record=meta.at("recorded_archive");
+    const auto sourcePath=std::filesystem::u8path(record.at("source").at("path").string());
+    if(!std::filesystem::is_regular_file(c::extendedLengthPath(sourcePath)))
+        throw std::runtime_error(path.u8string()+": its source archive is missing: "+sourcePath.u8string());
+    if(c::sha256File(sourcePath)!=record.at("source").at("sha256").string())
+        throw std::runtime_error(path.u8string()+": its source archive changed since it was recorded: "+sourcePath.u8string());
+    auto step=computeCoordinateStep(loadCoordinateInput(sourcePath,record.at("settings")),record.at("settings"),{},record.at("label").string());
+    step.archive.arrays["metadata_json"]=stored.arrays.at("metadata_json");
+    return std::move(step.archive);
+}
+const bool coordinateRecordRegistered=(dynsyslab::core::registerRecordedArchiveReader(kCoordinateRecordSchema,replayCoordinateRecord),true);
 }  // namespace
+
+SourceData loadCoordinateInput(const std::filesystem::path& path,const json::Value& settings) {
+    const bool measuredIntegral=settings.at("kind").string()=="window_integral"
+        && settings.at("observable").isNull() && settings.at("definition").isNull();
+    return measuredIntegral?loadObservationSource(path,settings.at("measurement_array").string("values")):loadSource(path);
+}
+
 
 // One coordinate change, or a chain of them: each step reads the previous
 // step's output, so (r,v) -> (e,e') -> xi(e) is one stage. Intermediate

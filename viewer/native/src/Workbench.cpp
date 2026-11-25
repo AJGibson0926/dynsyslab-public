@@ -164,7 +164,7 @@ bool Workbench::createChildren() {
     if (!sortDate_ || !sortTrajectories_ || !sortSize_ || !sortTooltip_ ||
         !selectionContext_ ||
         !navigation_.create(window_, kNavigationId, fonts_) ||
-        !inspector_.create(window_, fonts_) || !plots_.create(window_, fonts_) ||
+        !inspector_.create(window_, fonts_) || !plots_.create(window_, plotFonts_) ||
         !plotDragToolbar_.create(window_, plots_, fonts_) ||
         !leftSplitter_.create(window_, kLeftSplitterId)) return false;
     navigation_.setCatalog(&catalog_);
@@ -274,6 +274,9 @@ void Workbench::drawButton(const DRAWITEMSTRUCT& item) {
 
 void Workbench::updateExportButtons() {
     plotDragToolbar_.updateCoordinates();
+    // Complex displays and animations add toolbar rows or controls: relayout when they change.
+    static int toolbarRows = 0;
+    if (plotDragToolbar_.rowCount() != toolbarRows) { toolbarRows = plotDragToolbar_.rowCount(); layout(); }
     updateWorkspaceTabs();
     const BOOL enabled = plots_.hasPayload() ? TRUE : FALSE;
     SetWindowTextW(phaseContext_,phaseCancellation_ ? L"Cancel context" : L"Phase context");

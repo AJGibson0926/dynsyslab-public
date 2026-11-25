@@ -88,7 +88,7 @@ bool containsPart(const std::filesystem::path& path, const std::string& part) {
 bool selected(const std::filesystem::path& path, const ArchiveAuditScope& scope,
               const std::chrono::system_clock::time_point now) {
     if (path.filename().u8string().find(".partial.npz") != std::string::npos) return false;
-    if (!scope.includeDerived && containsPart(path, "derived")) return false;
+    if (!scope.includeDerived && (containsPart(path, "derived") || containsPart(path, "objects"))) return false;
     if (!scope.systems.empty() && std::none_of(scope.systems.begin(), scope.systems.end(),
         [&](const auto& name) { return containsPart(path, name); })) return false;
     if (scope.modifiedWithinDays >= 0.0) {

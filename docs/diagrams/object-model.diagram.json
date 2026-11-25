@@ -1,0 +1,41 @@
+{
+ "schema": "dynsyslab.architecture-diagram/v1",
+ "title": "Function objects: observables, eigenfunctions and their domains",
+ "description": "core/Observable.hpp, Eigenfunction.hpp, Eigenvalue.hpp, Spectrum.hpp, FunctionRepresentation.hpp, FunctionExpansion.hpp, FunctionInterpolation.hpp, FunctionDomain.hpp. An expression is one kind of expansion; a domain has one optional state map, itself an Observable.",
+ "root": {
+  "id": "model", "kind": "group", "layout": "column", "align": "start", "gap": 60,
+  "children": [
+   {"id": "top-row", "kind": "group", "layout": "row", "gap": 70,
+    "children": [
+     {"id": "observable", "kind": "module", "label": "Observable", "icon": "heatmap",
+      "notes": ["g(x): evaluate, Jacobian", "flow and partial derivatives", "representation(): expansion | interpolation | evaluator"]},
+     {"id": "representations", "kind": "module", "label": "FunctionRepresentation", "icon": "matrix", "layout": "row", "gap": 24,
+      "children": [
+       {"id": "expansion", "kind": "data", "label": "FunctionExpansion", "icon": "matrix",
+        "notes": ["g_r = Σ_k A_rk φ_k(q)", "terms: monomials, kernels, expressions", "a formula = one expression term"]},
+       {"id": "interpolation", "kind": "data", "label": "FunctionInterpolation", "icon": "heatmap", "notes": ["sampled values, chosen interpolant"]}
+      ]},
+     {"id": "domain", "kind": "module", "label": "FunctionDomain", "icon": "matrix", "layout": "column", "gap": 20,
+      "children": [
+       {"id": "statemap", "kind": "data", "label": "State map q(x)", "icon": "heatmap",
+        "notes": ["an Observable: identity, formula, or catalog observables (bound by name)", "absent: q is supplied"]},
+       {"id": "measurement", "kind": "data", "label": "Measurement map", "icon": "svd", "notes": ["frozen Hankel provider"]}
+      ]}
+    ]},
+   {"id": "bottom-row", "kind": "group", "layout": "row", "gap": 90,
+    "children": [
+     {"id": "eigenfunction", "kind": "module", "label": "Eigenfunction : Observable", "icon": "heatmap",
+      "notes": ["one scalar output", "propagate: exp(λt) ψ"]},
+     {"id": "eigenvalue", "kind": "data", "label": "Eigenvalue", "icon": "spectrum", "notes": ["λ, μ = exp(λΔt), conjugate"]},
+     {"id": "spectrum", "kind": "data", "label": "Spectrum", "icon": "spectrum", "notes": ["eigenvalues of a set", "origin of the fit"]}
+    ]}
+  ]
+ },
+ "edges": [
+  {"from": "eigenfunction", "to": "observable", "from_side": "top", "to_side": "bottom", "label": "is an"},
+  {"from": "eigenfunction", "to": "eigenvalue", "label": "has"},
+  {"from": "spectrum", "to": "eigenvalue", "from_side": "left", "to_side": "right", "label": "list of"},
+  {"from": "observable", "to": "representations", "label": "represented by"},
+  {"from": "representations", "to": "domain", "label": "on"}
+ ]
+}

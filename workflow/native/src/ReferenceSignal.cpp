@@ -157,7 +157,7 @@ std::filesystem::path runReferenceSignal(const std::vector<std::filesystem::path
         {"format", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("reference-signal")},
         {"label", json::Value(label)}, {"system", json::Value(system->descriptor().identifier)},
         {"target", targetSpec}, {"data_role", json::Value("reference_signal")}})));
-    const auto directory = root / L"derived" / L"reference-signal";
+    const auto directory = objectFolder(root, "reference-signal");
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(label + "__" + timestamp()) + ".npz");
     c::writeNpzAtomicNew(path, record);

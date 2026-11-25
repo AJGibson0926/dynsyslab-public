@@ -1,3 +1,7 @@
+#include <optional>
+#include "ExpansionArchive.hpp"
+#include "ObjectPublishing.hpp"
+#include "TimeSeriesSource.hpp"
 #include <dynsyslab/workflow/DecompositionPostprocess.hpp>
 
 #include <dynsyslab/core/Text.hpp>
@@ -63,7 +67,7 @@ dynsyslab::core::SystemConfiguration configuration(const std::string& text) {
 }
 std::filesystem::path destination(const std::filesystem::path& root,
     const std::filesystem::path& source,const std::string& method) {
-    return root/L"derived"/dynsyslab::core::wide(method)/dynsyslab::core::wide(safe(source.stem().u8string()
+    return postprocess_detail::objectFolder(root, method)/dynsyslab::core::wide(safe(source.stem().u8string()
         +"__"+method+"__"+timestamp())+".npz");
 }
 std::string metadata(const std::filesystem::path& source,const std::string& method,
@@ -95,6 +99,10 @@ std::filesystem::path runDecompositionPostprocess(
     const auto states=stateArray.doubles(),time=timeArray.doubles();
     const std::size_t samples=stateArray.shape[0],dimension=stateArray.shape[1];
     dynsyslab::core::NpzRecord output; std::string details;
+    std::optional<dynsyslab::core::EigenfunctionFitResult> expansion;
+    std::optional<dynsyslab::core::SystemConfiguration> expansionSystem;
+    std::string expansionReason;
+    std::vector<std::complex<double>> expansionValues;  // the eigenfunctions at the samples
     if (method=="edmd") {
         dynsyslab::core::EDMDOptions options;
         options.regularization=settings.at("regularization").number(0.0);
@@ -124,10 +132,39 @@ std::filesystem::path runDecompositionPostprocess(
             {dimension,result.featureCount},result.modes);
         output.arrays["eigenfunction_values"]=dynsyslab::core::NpyArray::fromComplex(
             {samples,result.featureCount},result.eigenfunctionValues);
+        expansionValues=result.eigenfunctionValues;
         output.arrays["eigenfunction_coefficients"]=dynsyslab::core::NpyArray::fromComplex(
             {result.featureCount,result.featureCount},result.eigenfunctionCoefficients);
         output.arrays["operator"]=dynsyslab::core::NpyArray::fromDoubles(
             {result.featureCount,result.featureCount},result.operatorMatrix);
+        // The fitted eigenfunctions as an expansion in the EDMD dictionary itself.
+        std::shared_ptr<const dynsyslab::core::ExpansionDictionary> basis;
+        if (kind=="polynomial") {
+            dynsyslab::core::PolynomialDictionary d;
+            d.coordinateDimension=dimension;
+            d.exponents=result.dictionaryExponents;
+            basis=std::make_shared<const dynsyslab::core::ExpansionDictionary>(
+                dynsyslab::core::ExpansionDictionary::monomials(std::move(d)));
+        } else {
+            dynsyslab::core::SpectralDictionary d;  // exp(-|x-c|^2/(2 w^2)) = gaussian, amplitude 1
+            d.kind="gaussian";d.dimension=dimension;d.constant=false;
+            d.nodes=options.dictionary.radialBasisCenters;d.bandwidth=options.dictionary.radialBasisWidth;
+            basis=std::make_shared<const dynsyslab::core::ExpansionDictionary>(
+                dynsyslab::core::ExpansionDictionary::fromSpectral(d));
+        }
+        const std::size_t features=result.featureCount;
+        std::vector<std::complex<double>> coefficients(features*features);
+        for (std::size_t j=0;j<features;++j)
+            for (std::size_t k=0;k<features;++k) coefficients[j*features+k]=result.eigenfunctionCoefficients[k*features+j];
+        try {
+            std::optional<dynsyslab::core::SystemConfiguration> system;
+            try { system=configuration(source.metadataJson()); } catch (const std::exception&) {}
+            expansion.emplace(dynsyslab::core::EigenfunctionFitResult{
+                dynsyslab::core::FunctionExpansion(basis,std::move(coefficients),snapshotDomain(source.metadataJson(),dimension,system)),
+                dynsyslab::core::Spectrum::fromStoredRates(result.continuousEigenvalues,result.deltaTime,
+                    dynsyslab::core::EigenvalueDomain::discreteTime),{}});
+            expansionSystem=system;
+        } catch (const std::exception& error) { expansionReason=error.what(); }
         details="\"dictionary\":\""+kind+"\",\"feature_count\":"
             +std::to_string(result.featureCount)+",\"regularization\":"
             +std::to_string(options.regularization)+",\"eigenvalue_domain\":\"discrete-time\"";
@@ -168,8 +205,15 @@ std::filesystem::path runDecompositionPostprocess(
             +std::to_string(result.rank)+",\"observable\":\""
             +escape(observableName.empty()?std::to_string(options.observableIndex):observableName)+"\"";
     } else throw std::invalid_argument("unknown decomposition stage");
-    output.arrays["metadata_json"]=dynsyslab::core::NpyArray::fromString(
-        metadata(sourcePath,method,label,details));
+    const auto meta=metadata(sourcePath,method,label,details);
+    output.arrays["metadata_json"]=dynsyslab::core::NpyArray::fromString(meta);
+    // EDMD (Williams, Kevrekidis & Rowley, J. Nonlinear Sci. 25, 2015) publishes its eigenfunctions as a
+    // data object: the spectrum and its expansion in the dictionary; modes and operator are properties.
+    if (expansion) {
+        dynsyslab::core::DataOrigin origin{method,settings,{postprocess_detail::dataReference(sourcePath,"time_series")}};
+        if (!writeExpansionEigenfunctions(output,*expansion,origin,time,expansionValues,{},meta,expansionReason))
+            output.arrays["expansion_contract_skipped"]=dynsyslab::core::NpyArray::fromString(expansionReason);
+    }
     const auto path=destination(root,sourcePath,method);
     dynsyslab::core::writeNpzAtomic(path,output); return path;
 }

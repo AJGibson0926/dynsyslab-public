@@ -2,6 +2,7 @@
 
 #include "dynsyslab_viewer/Json.hpp"
 
+#include <complex>
 #include <filesystem>
 #include <map>
 #include <optional>
@@ -9,6 +10,9 @@
 #include <vector>
 
 namespace dsl {
+// Default size of plot text relative to the application UI text.
+inline constexpr double defaultPlotFontScale = 2.3;
+
 
 struct Relation {
     std::string target;
@@ -77,6 +81,14 @@ struct Trace {
     double lineWidthPoints = 0.0; // Zero selects the role's standard pen.
     // Marker shape when `marker` is set: "" = small filled dot, "open-circle" = hollow ring.
     std::string markerShape;
+    // A complex heat map keeps its values so the complex display can be switched in place
+    // (ComplexHeatmap.hpp): which split panel this is (0 or 1, -1 for none) and the function name.
+    std::vector<std::complex<double>> complexValues;
+    int complexPart = -1;
+    std::string complexName;
+    // Fixed colour range of a scalar heat map (e.g. one range for every frame of an animation);
+    // empty: the range of this trace's values.
+    std::optional<std::pair<double, double>> colorLimits;
 };
 
 struct DetailInset {
@@ -138,6 +150,9 @@ struct Figure {
     bool boxAxes3D = false;
     // Index abscissas (singular-value index, mode number): ticks and grid at integers.
     bool integerXTicks = false;
+    // Optional right ordinate for a curve plotted as offset + scale * value.
+    struct RightAxis { std::string label; double scale = 1, offset = 0; };
+    std::optional<RightAxis> rightAxis;
 };
 
 struct Payload {
@@ -151,6 +166,14 @@ struct Payload {
     std::string layout;
     std::string complexDisplay;
     std::vector<std::size_t> selectedModes;
+    // An animation: its pages are frames with the same panels, played in order by the plot
+    // toolbar (first, back, play/pause, forward, stop).
+    struct Animation {
+        double frameSeconds = 0.4;
+        bool loop = true;
+        bool autoplay = true;
+    };
+    std::optional<Animation> animation;
 
     static Payload load(const std::wstring& path);
 };

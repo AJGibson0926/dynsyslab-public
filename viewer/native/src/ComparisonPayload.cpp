@@ -124,7 +124,7 @@ void mergeSharedTraces(Figure& figure, std::size_t, bool colored) {
         for (const auto& [index, copies] : groups) {
             auto& trace = figure.traces[index];
             if (trace.role != "control_target") continue;
-            trace.color = kSharedTargetColor; trace.lineWidthPoints = 2.4;
+            trace.color = kSharedTargetColor; trace.lineWidthPoints = 4.8;
             const bool solid = copies == widest && !solidTaken;
             trace.lineStyle = solid ? "solid" : "dash"; solidTaken = solidTaken || solid;
         }

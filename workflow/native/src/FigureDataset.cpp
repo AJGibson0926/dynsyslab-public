@@ -4,6 +4,8 @@
 //            "arrays":[{"name":"radius","from":"run","array":"values","column":0,
 //                       "onto":{"from":"base","array":"time"},"clock":"time","scale":1.0,
 //                       "scale_before":1.0 (applied before interpolation; "scale" after),
+//                       "offset":0.0 (added after "scale"),
+//                       "keep_times":[t,...] (NaN except at the nearest samples, for point markers),
 //                       "nan_after_end":false}, ...]}
 // "columns":[0,1] keeps a matrix. "onto" interpolates linearly onto another array's clock, with
 // the arithmetic of numpy.interp, and "nan_after_end" marks samples past a run's last time.
@@ -96,6 +98,20 @@ std::filesystem::path runFigureDataset(const std::vector<std::filesystem::path>&
             auto sampled = resample ? interpolate(clock, sourceClock, values, spec.at("nan_after_end").boolean(false))
                                     : std::move(values);
             if (!spec.at("scale").isNull()) for (auto& value : sampled) value *= spec.at("scale").number();
+            if (!spec.at("offset").isNull()) for (auto& value : sampled) value += spec.at("offset").number();
+            if (!spec.at("keep_times").isNull()) {  // NaN except at the samples nearest the listed times
+                const auto times = resample ? clock : record(spec).at(spec.at("clock").string("time")).doubles();
+                if (times.size() != sampled.size() || times.empty())
+                    throw std::invalid_argument("figure_dataset: keep_times needs a clock matching the array");
+                std::vector<double> kept(sampled.size(), std::numeric_limits<double>::quiet_NaN());
+                for (const auto& item : spec.at("keep_times").array()) {
+                    const double wanted = item.number();
+                    auto at = static_cast<std::size_t>(std::lower_bound(times.begin(), times.end(), wanted) - times.begin());
+                    if (at == times.size() || (at > 0 && wanted - times[at - 1] < times[at] - wanted)) --at;
+                    kept[at] = sampled[at];
+                }
+                sampled = std::move(kept);
+            }
             series.push_back(std::move(sampled));
         }
         const auto rows = series.front().size();
@@ -109,7 +125,7 @@ std::filesystem::path runFigureDataset(const std::vector<std::filesystem::path>&
     out.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(json::Value(json::Value::Object{
         {"format", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("figure-dataset")},
         {"label", json::Value(label)}, {"dataset_settings", settings}})));
-    const auto directory = root / L"derived" / L"figure-dataset";
+    const auto directory = objectFolder(root, "figure-dataset");
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(label + "__" + timestamp()) + ".npz");
     c::writeNpzAtomicNew(path, out);

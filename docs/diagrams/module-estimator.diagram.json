@@ -1,0 +1,59 @@
+{
+ "schema": "dynsyslab.architecture-diagram/v1",
+ "title": "Module: K-ROM estimator (KLQE with feedback: estimate)",
+ "description": "Inside EstimatedControl.cpp, EstimatorFactory.cpp, KlqeProcessCovariance.cpp, native/src/Estimation.cpp and EstimationRuntime.cpp. Settings follow s59-standard-klqe-klqr-hard. Red cards and arrows are audit findings.",
+ "root": {
+  "id": "page", "kind": "group", "layout": "row", "gap": 80,
+  "children": [
+   {"id": "inputs", "kind": "group", "layout": "column", "gap": 40,
+    "children": [
+     {"id": "krom", "kind": "data", "label": "K-ROM archive", "icon": "krom",
+      "notes": ["Λ, constant or bilinear B_ψ", "reconstruction__echo → C_y, y₀", "optional C_x for x̂"]},
+     {"id": "plant", "kind": "module", "label": "Simulated plant (Solver)", "icon": "monitor",
+      "notes": ["state x at every sample tick", "control_sample_time: 1e-3"]}
+    ]},
+   {"id": "klqe", "kind": "module", "label": "KLQE + KLQR", "icon": "estimator", "layout": "column", "align": "end", "gap": 70,
+    "notes": ["continuous Luenberger observer, steady gain", "no discrete Kalman covariance update"],
+    "children": [
+     {"id": "row-0", "kind": "group", "layout": "row",
+      "children": [
+       {"id": "design", "kind": "module", "label": "Design gain L (once)", "icon": "svd",
+        "notes": {"process_covariance W": "1e5 (or K-ROM residual)", "measurement_covariance V": "1e-4",
+                  "L": "CARE on (Λ, C_y) by duality", "require_detectable": "true"},
+        "flags": ["a residual W evaluates ψ on true states"]}
+      ]},
+     {"id": "row-1", "kind": "group", "layout": "row", "gap": 60,
+      "children": [
+       {"id": "sensor", "kind": "module", "label": "Sensor", "icon": "time_series",
+        "notes": ["y = h(x) + D u_prev", "measurement: far_field_acoustic_echo", "measurement_noise: none"],
+        "flags": ["only truth access: simulates y", "s50–s52 measure echo_dot, the", "model Lie derivative along f(x)"]},
+       {"id": "observer", "kind": "module", "label": "Observer step (ZOH)", "icon": "estimator",
+        "notes": ["ż = (Λ − L C_y) z + L (y_prev − y₀) + B u", "exact ZOH over dt", "innovation = y − (y₀ + C_y ẑ)",
+                  "initial_estimate: zero"],
+        "flags": ["update uses the previous sample's y"]}
+      ]},
+     {"id": "row-2", "kind": "group", "layout": "row", "gap": 60,
+      "children": [
+       {"id": "clamp", "kind": "module", "label": "Clamp, gate, shadow", "icon": "monitor",
+        "notes": {"control_limit": "clip", "active_time_window": "gate", "applied_controller": "shadow override"},
+        "flags": ["shadow mode drives the plant with", "a full-state klqr"]},
+       {"id": "law", "kind": "module", "label": "Feedback law", "icon": "controller",
+        "notes": ["u = −K (ẑ − z_ref)", "B evaluated at ẑ"]}
+      ]}
+    ]},
+   {"id": "output", "kind": "data", "label": "Solve archive", "icon": "archive",
+    "notes": ["lifted_estimate ẑ, state_estimate x̂", "measurement_values, innovation", "commanded_input, applied_input",
+              "estimator_gain L, observer_poles", "metadata: feedback_architecture"]}
+  ]
+ },
+ "edges": [
+  {"from": "krom", "to": "design"},
+  {"from": "plant", "to": "sensor", "style": "flagged", "label": "x"},
+  {"from": "design", "to": "observer", "from_side": "bottom", "to_side": "top"},
+  {"from": "sensor", "to": "observer", "label": "y"},
+  {"from": "observer", "to": "law", "from_side": "bottom", "to_side": "top", "label": "ẑ"},
+  {"from": "law", "to": "clamp", "from_side": "left", "to_side": "right"},
+  {"from": "clamp", "to": "plant", "from_side": "left", "to_side": "bottom", "label": "u"},
+  {"from": "klqe", "to": "output"}
+ ]
+}

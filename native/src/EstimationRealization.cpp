@@ -12,11 +12,11 @@ RealModalRealization makeRealModalRealization(const KoopmanModel& parent,
         ||realTolerance<0||!std::isfinite(realTolerance))
         throw std::invalid_argument("real modal realization requires sampled eigenfunctions and representatives");
     const auto n=parent.eigenfunctionCount(),N=source->samples,m=selected.size();
-    ScatteredEigenfunctionData data;data.trainingStates=source->trainingStates;
+    InterpolationData data;data.trainingStates=source->trainingStates;
     data.samples=N;data.stateDimension=source->stateDimension;data.neighbors=source->neighbors;
     data.finiteDifferenceRelativeStep=source->finiteDifferenceRelativeStep;
     data.trainingValues.assign(N*m,{});data.provenance="RMS normalized conjugate-reduced H-DMD realization";
-    std::vector<std::size_t> partners;std::vector<std::complex<double>> factors,alpha;
+    std::vector<std::size_t> partners;std::vector<std::complex<double>> factors,alpha,rates;
     std::set<std::size_t> consumed;
     for(std::size_t j=0;j<m;++j) {
         const auto index=selected[j];if(index>=n)throw std::out_of_range("modal representative exceeds KROM");
@@ -57,10 +57,10 @@ RealModalRealization makeRealModalRealization(const KoopmanModel& parent,
         }
         if(error>tolerance*tolerance*std::max(partnerEnergy,1e-50))
             throw std::invalid_argument("sampled coordinates do not satisfy the real/conjugate relation");
-        data.continuousEigenvalues.push_back(rate);partners.push_back(partner);
+        rates.push_back(rate);partners.push_back(partner);
         factors.push_back(divisor);alpha.push_back(ratio);
     }
-    KoopmanModel model(std::move(data),parent.systemConfiguration());
+    KoopmanModel model(std::move(data),Spectrum::fromContinuousRates(rates),parent.systemConfiguration());
     for(const auto& item:parent.reconstructions()) {
         ReconstructionResult map;map.outputs=item.second.outputs;map.modes=m;map.matrix.resize(map.outputs*m);
         for(std::size_t row=0;row<map.outputs;++row)for(std::size_t j=0;j<m;++j) {

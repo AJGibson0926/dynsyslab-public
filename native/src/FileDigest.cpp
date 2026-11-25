@@ -1,4 +1,5 @@
 #include <dynsyslab/core/FileDigest.hpp>
+#include <dynsyslab/core/LongPath.hpp>
 
 #include <algorithm>
 #include <array>
@@ -54,7 +55,8 @@ std::string sha256Text(const std::string& text) {
 }
 
 std::string sha256File(const std::filesystem::path& path) {
-    std::ifstream stream(path,std::ios::binary);if(!stream)throw std::runtime_error("unable to open file for SHA-256: "+path.u8string());
+    // Extended-length form: archive paths can pass MAX_PATH (LongPath.hpp).
+    std::ifstream stream(extendedLengthPath(path),std::ios::binary);if(!stream)throw std::runtime_error("unable to open file for SHA-256: "+path.u8string());
     Sha256Stream digest;std::vector<char> buffer(1u<<20);
     while(stream){stream.read(buffer.data(),static_cast<std::streamsize>(buffer.size()));
         if(stream.gcount()>0)digest.update(buffer.data(),static_cast<std::size_t>(stream.gcount()));}

@@ -1,8 +1,9 @@
 #include "HistoryControl.hpp"
+#include <algorithm>
 #include <cmath>
-#include <map>
 #include <mutex>
 #include <stdexcept>
+#include <vector>
 namespace dynsyslab::workflow::detail {
 namespace c = dynsyslab::core;
 
@@ -70,29 +71,44 @@ dynsyslab::core::StateTargetFunction historyCoordinateTarget(
     c::StateTargetFunction stateTarget, c::FrozenHistoryTransform transform, c::Observable measurement) {
     if (!stateTarget) throw std::invalid_argument("History-coordinate target needs a state target");
     if (measurement.outputDimension() != 1) throw std::invalid_argument("History target needs a scalar measurement");
-    struct Cache { std::mutex lock; std::map<long long, double> y; std::map<long long, std::vector<double>> q; };
+    // y[i] is the measured target at sample i >= 0; earlier samples equal y[0]. The last
+    // projection is cached because the integrator can ask for one sample more than once.
+    struct Cache { std::mutex lock; std::vector<double> y; bool hasLast{}; long long lastK{}; std::vector<double> last; };
     auto cache = std::make_shared<Cache>();
     const double dt = transform.sampleInterval();
     if (!(dt > 0)) throw std::invalid_argument("History-coordinate target needs a clocked transform");
+    const auto& fitted = transform.basis();
+    const auto columns = transform.retainedCoordinates();
+    auto weights = std::make_shared<std::vector<double>>();
+    weights->reserve(columns.size() * fitted.delays);
+    for (const auto column : columns) for (std::size_t j = 0; j < fitted.delays; ++j)
+        weights->push_back(fitted.leftSingularVectors[j * fitted.rank + column]);
     return [=](double time) {
         const auto k = std::llround(time / dt);
         std::lock_guard<std::mutex> guard(cache->lock);
-        if (const auto found = cache->q.find(k); found != cache->q.end()) return found->second;
+        if (cache->hasLast && cache->lastK == k) return cache->last;
         const auto& basis = transform.basis();
-        auto sample = [&](long long index) {
-            if (const auto found = cache->y.find(index); found != cache->y.end()) return found->second;
-            const auto x = stateTarget(std::max(0.0, double(index) * dt));
-            return cache->y[index] = measurement.evaluateReal(x.data()).front();
-        };
-        std::vector<double> q;
-        for (const auto column : transform.retainedCoordinates()) {
-            double sum = 0.0;
-            for (std::size_t j = 0; j < basis.delays; ++j)
-                sum += basis.leftSingularVectors[j * basis.rank + column]
-                     * sample(k - static_cast<long long>(basis.delays - 1 - j));
-            q.push_back(sum / basis.singularValues[column]);
+        const auto newest = std::max(k, 0LL);
+        for (auto i = static_cast<long long>(cache->y.size()); i <= newest; ++i) {
+            const auto x = stateTarget(std::max(0.0, double(i) * dt));
+            cache->y.push_back(measurement.evaluateReal(x.data()).front());
         }
-        return cache->q[k] = q;
+        const auto delays = static_cast<long long>(basis.delays);
+        const long long oldest = k - (delays - 1);
+        const auto repeated = static_cast<std::size_t>(std::min(delays, std::max(-oldest, 0LL)));
+        const double* history = repeated < basis.delays
+            ? cache->y.data() + (oldest + static_cast<long long>(repeated)) : nullptr;
+        std::vector<double> q;
+        q.reserve(columns.size());
+        for (std::size_t axis = 0; axis < columns.size(); ++axis) {
+            const double* weight = weights->data() + axis * basis.delays;
+            double sum = 0.0;
+            for (std::size_t j = 0; j < repeated; ++j) sum += weight[j] * cache->y[0];
+            for (std::size_t j = repeated; j < basis.delays; ++j) sum += weight[j] * history[j - repeated];
+            q.push_back(sum / basis.singularValues[columns[axis]]);
+        }
+        cache->hasLast = true; cache->lastK = k; cache->last = q;
+        return q;
     };
 }
 }

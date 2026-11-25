@@ -73,10 +73,10 @@ J margins(const LoopRobustness &m) {
       {"response", complexArray(m.response)}};
 }
 J derivativeClosure(const KoopmanModel &model, const J &request) {
-  const auto &bank = model.polynomialEigenfunctions();
-  const auto &dict = bank.dictionary();
+  const auto &bank = model.expansion();
+  const auto &dict = bank.monomialTable();
   const auto d = dict.coordinateDimension, features = dict.featureCount();
-  const auto modes = bank.eigenfunctionCount(), split = model.splitDimension();
+  const auto modes = bank.outputCount(), split = model.splitDimension();
   std::vector<lie::Polynomial> seeds(split + 1, lie::Polynomial{d, {}});
   seeds[0].terms.push_back({std::vector<unsigned>(d), "1"});
   for (std::size_t k = 0; k < features; ++k) {
@@ -146,7 +146,7 @@ core::json::Value evaluateKromAuditQuery(const core::json::Value &request) {
   const auto model = loadKoopmanModel(path);
   out["krom"] = path.generic_u8string();
   out["fitting_coordinates"] =
-      eigenfunctionCoordinatesJson(model.coordinates());
+      functionDomainJson(model.coordinates());
   out["lifted_dimension"] = double(model.splitDimension());
   out["eigenvalues"] = complexArray(model.continuousEigenvalues());
   if (action == "trajectory")

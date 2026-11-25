@@ -3,9 +3,9 @@
 #include "dynsyslab_viewer/Theme.hpp"
 #include <gdiplus.h>
 namespace dsl {
-inline constexpr float curveLineWidthPoints = 1.8f;
-inline constexpr float phaseLineWidthPoints = 1.25f;
-inline constexpr float targetLineWidthPoints = 1.5f;
+inline constexpr float curveLineWidthPoints = 3.6f;
+inline constexpr float phaseLineWidthPoints = 2.5f;
+inline constexpr float targetLineWidthPoints = 3.0f;
 inline constexpr Gdiplus::REAL targetDashPattern[]{4.f, 6.f};
 float plotSeriesWidthPoints(const Trace&);
 void stylePlotSeriesPen(Gdiplus::Pen&, const Trace&);

@@ -94,7 +94,8 @@ std::filesystem::path runBoundaryEigenfunctions(
     options.singularValueTolerance=settings.at("svd_tolerance").number(1.0e-12);
     auto fit=dynsyslab::core::fitBoundaryEigenfunctions(
         eigenvalues,deltaTime,ensemble,observable,options);
-    dynsyslab::core::KoopmanModel model(std::move(fit.eigenfunctions),configuration);
+    dynsyslab::core::KoopmanModel model(std::move(fit.eigenfunctions),
+        dynsyslab::core::Spectrum::fromContinuousRates(fit.continuousEigenvalues),configuration);
     for(const auto& source:sources)model.addDatasetReference({
         std::filesystem::absolute(source.path).lexically_normal().generic_u8string(),
         "training",datasetDynamics(source),{}});
@@ -115,7 +116,7 @@ std::filesystem::path runBoundaryEigenfunctions(
     extra["fit_relative_residual_by_output"]=
         dynsyslab::core::NpyArray::fromDoubles(
             {fit.relativeResidualByOutput.size()},fit.relativeResidualByOutput);
-    const auto directory=root/L"derived"/L"koopman-boundary-eigenfunctions";
+    const auto directory=objectFolder(root, "koopman-boundary-eigenfunctions");
     std::filesystem::create_directories(directory);
     const auto output=directory/dynsyslab::core::wide(safeName(
         primary.path.stem().u8string()+"__boundary-eigenfunctions__"+timestamp())+".npz");

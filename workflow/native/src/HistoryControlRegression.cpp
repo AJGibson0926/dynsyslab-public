@@ -7,6 +7,7 @@
 // the held-input relation psi_{k+1,j} = mu_j psi_{k,j} + D_j u_k is fitted per
 // mode by (ridge) least squares. The continuous map stored for KLQR is the exact
 // zero-order-hold inverse B_j = D_j lambda_j / (mu_j - 1) (D_j / dt as lambda->0).
+#include "MeasurementMap.hpp"
 #include "PostprocessInternal.hpp"
 #include "KromEvidence.hpp"
 
@@ -31,15 +32,13 @@ std::filesystem::path runHistoryControlRegression(
     if (kromPath.empty()) throw std::invalid_argument("history_control_regression requires a KROM");
     if (sources.empty()) throw std::invalid_argument("history_control_regression needs forced sources");
     auto model = c::loadKoopmanModel(kromPath);
-    if (model.coordinates().kind != c::EigenfunctionCoordinateKind::causalHistory)
+    if (!model.coordinates().computableFromMeasurements())
         throw std::invalid_argument("history_control_regression requires a causal-history KROM");
     if (model.inputDimension() != 1)
         throw std::invalid_argument("history_control_regression supports one scalar input");
-    const auto transformPath = settings.at("history_transform").string(
-        model.coordinates().providerArtifact.empty() ? kromPath.u8string() : model.coordinates().providerArtifact);
-    const auto transform = c::loadFrozenHistoryTransform(std::filesystem::u8path(transformPath));
-    if (transform.identity() != model.coordinates().providerIdentity)
-        throw std::invalid_argument("History transform differs from KROM training coordinates");
+    const auto measurementMap = loadMeasurementMap(model, kromPath, settings);
+    const auto& transformPath = measurementMap.path;
+    const auto& transform = measurementMap.transform;
     const double dt = transform.sampleInterval();
     const auto& rates = model.spectrum().continuousRates();
     const std::size_t modes = model.liftedDimension();
@@ -107,7 +106,7 @@ std::filesystem::path runHistoryControlRegression(
         {"relative_residual", json::Value(targetEnergy > 0 ? std::sqrt(residualEnergy / targetEnergy) : 0.0)},
         {"control_map_time_domain", json::Value("continuous-time")}, {"delta_t", json::Value(dt)},
         {"independent_archive", json::Value(true)}};
-    const auto directory = root / L"derived" / L"koopman-control-regression";
+    const auto directory = objectFolder(root, "koopman-control-regression");
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(kromPath.stem().u8string()
         + "__history-control-regression__" + timestamp()) + ".npz");

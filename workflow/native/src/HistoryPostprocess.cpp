@@ -1,3 +1,4 @@
+#include "MeasurementMap.hpp"
 #include <dynsyslab/workflow/HistoryPostprocess.hpp>
 #include "ObservationSource.hpp"
 #include <dynsyslab/core/CoordinateTransform.hpp>
@@ -78,7 +79,7 @@ std::filesystem::path runHistoryProjection(const std::filesystem::path& path,
     const json::Value& settings,const std::filesystem::path& root,const std::string& label) {
     const auto transformPath=std::filesystem::u8path(settings.at("transform").string());
     if(transformPath.empty())throw std::invalid_argument("History projection requires a frozen transform archive");
-    const auto transform=c::loadFrozenHistoryTransform(transformPath);
+    const auto transform=postprocess_detail::readMeasurementMap(transformPath);
     const auto source=sourceData(path,settings);
     if(measurementName(settings)!=transform.measurement())
         throw std::invalid_argument("Projection measurement differs from the frozen transform");

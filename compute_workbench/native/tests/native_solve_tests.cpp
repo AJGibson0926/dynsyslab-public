@@ -1,3 +1,4 @@
+#include <dynsyslab/core/EigenfunctionArchive.hpp>
 #include <dynsyslab/workflow/Solve.hpp>
 #include <dynsyslab/workflow/Run.hpp>
 #include <dynsyslab/workflow/Postprocess.hpp>
@@ -323,25 +324,30 @@ void solveAndArchive() {
         "\"archive\":{\"enabled\":true}}";
     const auto post = dynsyslab::workflow::executePostprocess(dynsyslab::core::json::parse(postJson), root,
                                                               root / "post-progress.json");
-    require(post.archives.size() == 6, "native post-processing archives");
+    require(post.archives.size() == 8, "native post-processing archives");  // H-DMD and SINDy: eigenfunctions + reconstructions
     const auto spectrum = dynsyslab::core::readNpz(post.archives.front());
     require(spectrum.contains("discrete_eigenvalues"), "DMD discrete spectrum");
     require(spectrum.contains("continuous_eigenvalues"), "DMD continuous spectrum");
-    const auto sindy = dynsyslab::core::readNpz(post.archives[2]);
-    require(sindy.contains("coefficients"), "SINDy coefficients");
-    require(sindy.contains("polynomial_exponents"), "SINDy polynomial representation");
-    require(sindy.at("coordinate_observable_names").string()=="position\nvelocity",
-            "SINDy observable coordinates");
-    require(sindy.at("reconstruction_names").string()=="state"
-            && sindy.at("reconstruction__state").shape[0]==2,
+    const auto sindy = dynsyslab::core::readNpz(post.archives[3]);
+    const auto sindyReadouts = dynsyslab::core::readNpz(post.archives[4]);
+    require(sindy.contains("expansion_coefficients"), "SINDy expansion coefficients");
+    require(!sindy.contains("training_states"), "SINDy copies no training states");
+    {
+        const auto set = dynsyslab::core::readEigenfunctionSet(sindy);
+        require(set.representation().domainObservables(set.representation().domains().front())
+                    == std::vector<std::string>{"position", "velocity"}, "SINDy observable coordinates");
+    }
+    require(sindyReadouts.at("reconstruction_names").string()=="state"
+            && sindyReadouts.at("reconstruction__state").shape[0]==2,
             "SINDy observable reconstruction C");
     const auto hdmd=dynsyslab::core::readNpz(post.archives[1]);
-    require(hdmd.contains("reconstruction_matrix") && hdmd.contains("eigenfunction_values"),
-            "H-DMD reconstruction contract");
-    const auto edmd=dynsyslab::core::readNpz(post.archives[3]);
+    const auto hdmdReadouts=dynsyslab::core::readNpz(post.archives[2]);
+    require(hdmd.contains("eigenfunction_values") && hdmdReadouts.contains("reconstruction_matrix"),
+            "H-DMD eigenfunctions and reconstructions objects");
+    const auto edmd=dynsyslab::core::readNpz(post.archives[5]);
     require(edmd.contains("eigenfunction_coefficients")&&edmd.contains("operator"),
             "native EDMD contract");
-    const auto havok=dynsyslab::core::readNpz(post.archives[4]);
+    const auto havok=dynsyslab::core::readNpz(post.archives[6]);
     require(havok.contains("A")&&havok.contains("B")&&havok.contains("forcing"),
             "native HAVOK contract");
     const auto controlledCopy=root / "controlled-copy.npz";
@@ -351,7 +357,8 @@ void solveAndArchive() {
         "\"kind\":\"postprocess\",\"label\":\"native-regression-test\",\"sources\":[\""
         + jsonEscape(result.archives.front().u8string()) + "\"],\"methods\":[{"
         "\"name\":\"control_regression\",\"enabled\":true,\"settings\":{\"krom\":\""
-        + jsonEscape(post.archives[2].u8string()) + "\",\"additional_sources\":[\""
+        + jsonEscape(post.archives[3].u8string()) + "\",\"reconstructions\":\""
+        + jsonEscape(post.archives[4].u8string()) + "\",\"additional_sources\":[\""
         + jsonEscape(controlledCopy.u8string())
         + "\"],\"grid_columns\":9,\"grid_rows\":7}}],"
         "\"archive\":{\"enabled\":true}}";

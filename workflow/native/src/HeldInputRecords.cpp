@@ -45,7 +45,7 @@ bool insideWindow(const json::Value& window, const SourceData& s, std::size_t k)
 
 HeldInputRecords heldInputRecords(const c::KoopmanModel& model, const c::FrozenHistoryTransform* transform,
     const std::vector<std::filesystem::path>& sources, const json::Value& settings, bool strictHold) {
-    const bool history = model.coordinates().kind == c::EigenfunctionCoordinateKind::causalHistory;
+    const bool history = model.coordinates().computableFromMeasurements();
     if (history && !transform) throw std::invalid_argument("causal-history held-input pairs need the frozen transform");
     const bool external = !history && model.requiresExternalCoordinates();
     const double fitStart = settings.at("fit_start").number(0.0);

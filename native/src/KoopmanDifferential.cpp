@@ -9,15 +9,18 @@ KoopmanModel::stateJacobian(const double *x) const {
   if (requiresExternalCoordinates())
     throw std::invalid_argument(
         "Instantaneous state Jacobian is unavailable for history coordinates");
-  if (scattered_)
+  if (scattered_) {
+    if (!scattered_->data().coordinateObservable.empty())
+      throw std::logic_error("an observable-bound scattered KROM has no state Jacobian");
     return scattered_->gradient(x);
+  }
   const auto q = coordinateObservable().evaluateReal(x);
   const auto h = coordinateObservable().jacobian(x);
   const auto d = stateDimension(), k = coordinateDimension(),
              m = liftedDimension();
   std::vector<std::complex<double>> result(m * d);
   for (std::size_t i = 0; i < m; ++i) {
-    const auto row = polynomialEigenfunctions().gradient(i, q.data());
+    const auto row = expansion().gradient(i, q.data());
     for (std::size_t a = 0; a < d; ++a)
       for (std::size_t b = 0; b < k; ++b)
         result[i * d + a] += row[b] * h[b * d + a];

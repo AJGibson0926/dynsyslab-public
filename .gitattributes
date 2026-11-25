@@ -22,5 +22,9 @@ tools/analyze_rpe_echo_jet_nonlinear_sine.py export-ignore
 viewer/focus_profiles/rpe-successful-control.json export-ignore
 docs/STUDY_RECORDS.md export-ignore
 
+# Data packs ship only with the release they pin. These 0.8.1 packs stay with tag v0.8.1 and are
+# left out of later public exports.
+data-packs/rpe-echo-klqe-klqr-failure-figures-2026-11-23/** export-ignore
+data-packs/rpe-echo-klqe-shadow-startup-2026-11-23/** export-ignore
 # Data packs are hashed byte for byte: never convert their line endings on checkout.
 data-packs/** -text

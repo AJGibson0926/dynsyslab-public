@@ -36,10 +36,9 @@ int main(){std::filesystem::path path;try{
         std::chrono::steady_clock::now().time_since_epoch().count())+".npz");
     c::saveFrozenHistoryTransform(path,transform);
     check(c::loadFrozenHistoryTransform(path).identity()==transform.identity(),"Standalone transform changed");
-    c::EigenfunctionCoordinates q;q.kind=c::EigenfunctionCoordinateKind::causalHistory;q.dimension=2;
+    c::FunctionDomain q;q.dimension=2;
     q.providerIdentity=transform.identity();
-    c::PolynomialEigenfunctionSet polynomial({2,{1,0,0,1},{0,0},{1,1}},
-        {1.,{0,1}},c::EigenfunctionSpectrum::fromContinuousRates({{-1,2}}),q);
+    c::EigenfunctionFitResult polynomial{c::FunctionExpansion({2,{1,0,0,1},{0,0},{1,1}}, {1.,{0,1}}, q), c::Spectrum::fromContinuousRates({{-1,2}}), {}};
     auto model=std::make_shared<c::KoopmanModel>(polynomial,1);
     model->setControlMap("constant",c::ConstantControlMap{{1.},1,1,"regression"});
     c::KoopmanLQRController controller(model,{1,0,0,1},{1},{},"constant");

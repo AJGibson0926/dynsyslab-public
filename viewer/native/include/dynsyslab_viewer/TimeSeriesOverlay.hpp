@@ -34,6 +34,8 @@ struct TimeSeriesOverlay {
     std::optional<double> stemBaseline;
     bool logBaseline = false;
     bool integerTicks = false;  // index abscissa: ticks at integers (Figure::integerXTicks)
+    // Right ordinate showing value = (plotted - offset) / scale on every panel.
+    std::optional<Figure::RightAxis> rightAxis;
 };
 
 // Read aligned N or N-by-C arrays. A zero bin count retains every source vertex.

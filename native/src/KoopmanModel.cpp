@@ -56,31 +56,34 @@ std::vector<std::complex<double>> evaluateStored(
 
 KoopmanModel::KoopmanModel(KoopmanSINDyResult eigenfunctions,
                            SystemConfiguration system)
-    : KoopmanModel(polynomialEigenfunctionsFromLegacy(eigenfunctions),std::move(system),
-                   fitDiagnosticsFromLegacy(eigenfunctions)) {
+    : KoopmanModel(polynomialEigenfunctionsFromLegacy(eigenfunctions),std::move(system)) {
     eigenfunctions.dynamicalStateDimension=stateDimension();
     eigenfunctions_=std::move(eigenfunctions);
 }
 
-KoopmanModel::KoopmanModel(ScatteredEigenfunctionData eigenfunctions,
+KoopmanModel::KoopmanModel(InterpolationData eigenfunctions, Spectrum spectrum,
                            SystemConfiguration system)
-    : systemConfiguration_(std::move(system)),
-      scattered_(std::make_shared<ScatteredEigenfunctionSet>(
+    : spectrum_(std::move(spectrum)), systemConfiguration_(std::move(system)),
+      scattered_(std::make_shared<FunctionInterpolation>(
           std::move(eigenfunctions))) {
     system_=std::shared_ptr<ODESystem>(createSystem(systemConfiguration_).release());
     systemConfiguration_=system_->configuration();
-    if(scattered_->data().stateDimension!=system_->descriptor().stateDimension)
+    const std::size_t physicalDimension=system_->descriptor().stateDimension;
+    const auto& bound=scattered_->data().coordinateObservable;
+    if(bound.empty()&&scattered_->data().stateDimension!=physicalDimension)
         throw std::invalid_argument(
             "scattered KROM eigenfunctions and dynamical system differ in dimension");
-    eigenfunctions_.continuousEigenvalues=scattered_->data().continuousEigenvalues;
-    eigenfunctions_.stateDimension=scattered_->data().stateDimension;
-    eigenfunctions_.dynamicalStateDimension=scattered_->data().stateDimension;
-    scatteredSpectrum_=EigenfunctionSpectrum::fromContinuousRates(eigenfunctions_.continuousEigenvalues);
-    scatteredCoordinates_.kind=EigenfunctionCoordinateKind::physicalState;
-    scatteredCoordinates_.dimension=eigenfunctions_.stateDimension;
-    scatteredCoordinates_.physicalStateDimension=eigenfunctions_.stateDimension;
-    coordinateObservable_=std::make_shared<Observable>(
-        system_->observableCatalog().at("state"));
+    if(spectrum_->size()!=scattered_->outputCount())
+        throw std::invalid_argument("interpolated eigenfunctions and spectrum differ in size");
+    eigenfunctions_.continuousEigenvalues=spectrum_->continuousRates();
+    eigenfunctions_.stateDimension=physicalDimension;
+    eigenfunctions_.dynamicalStateDimension=physicalDimension;
+    if(!bound.empty()){  // bind the catalog observables the interpolation was sampled on
+        auto q=scattered_->coordinates().bound(system_->observableCatalog());
+        if(q.stateMap->stateDimension()!=physicalDimension)
+            throw std::invalid_argument("scattered KROM coordinates and their observable differ in dimension");
+        scattered_=std::dynamic_pointer_cast<const FunctionInterpolation>(scattered_->onDomain(std::move(q)));
+    }
 }
 
 std::size_t KoopmanModel::stateDimension() const {
@@ -108,7 +111,7 @@ std::size_t KoopmanModel::inputDimension() const {
     return matrix.size() / stateDimension();
 }
 const KoopmanSINDyResult& KoopmanModel::eigenfunctions() const {
-    if(!spectrum().hasContinuousRates())throw std::logic_error("Legacy eigenfunctions() requires finite continuous rates; use polynomialEigenfunctions()");
+    if(!spectrum().hasContinuousRates())throw std::logic_error("Legacy eigenfunctions() requires finite continuous rates; use expansion()");
     return eigenfunctions_;
 }
 const std::vector<std::complex<double>>&
@@ -116,18 +119,20 @@ KoopmanModel::continuousEigenvalues() const {
     return spectrum().continuousRates();
 }
 std::string KoopmanModel::eigenfunctionRepresentation() const {
-    return scattered_ ? "scattered-interpolation" : "analytic-polynomial";
+    if(scattered_)return "scattered-interpolation";
+    return polynomial_->monomial()?"analytic-polynomial":"expansion";
 }
 std::vector<KoopmanEigenfunctionDescriptor>
 KoopmanModel::eigenfunctionDescriptors() const {
     std::vector<KoopmanEigenfunctionDescriptor> result;
     for(std::size_t index=0;index<liftedDimension();++index)
         result.push_back({index,spectrum().continuousRate(index).value_or(std::complex<double>{}),
-            eigenfunctionRepresentation(),scattered_?"finite-difference":"analytic",
+            eigenfunctionRepresentation(),
+            scattered_||!polynomial_->dictionary().exactGradient()?"finite-difference":"analytic",
             spectrum().continuousRate(index).has_value()});
     return result;
 }
-const ScatteredEigenfunctionData*
+const InterpolationData*
 KoopmanModel::scatteredEigenfunctions() const noexcept {
     return scattered_?&scattered_->data():nullptr;
 }
@@ -137,20 +142,20 @@ const SystemConfiguration& KoopmanModel::systemConfiguration() const {
 }
 
 std::vector<std::complex<double>> KoopmanModel::evaluate(const double* state) const {
-    if(scattered_)return scattered_->evaluate(state);
-    if(coordinates().kind==EigenfunctionCoordinateKind::physicalState)return evaluateCoordinates(state);
-    if (!coordinateObservable_)
+    const auto& q=coordinates();
+    if(q.isPhysicalState())return scattered_?scattered_->evaluate(state):evaluateCoordinates(state);
+    if (!q.stateMap)
         throw std::logic_error(
             "causal-history KROM requires evaluateCoordinates after updating its history projector");
-    const auto coordinates=coordinateObservable_->evaluateReal(state);
-    return evaluateCoordinates(coordinates.data());
+    const auto values=q.stateMap->evaluateReal(state);
+    return scattered_?scattered_->evaluate(values.data()):evaluateCoordinates(values.data());
 }
 
 const Observable& KoopmanModel::coordinateObservable() const {
-    if (!coordinateObservable_)
+    if (!coordinates().stateMap)
         throw std::logic_error(
             "causal-history KROM has no instantaneous state observable");
-    return *coordinateObservable_;
+    return *coordinates().stateMap;
 }
 
 bool KoopmanModel::requiresExternalCoordinates() const noexcept {
@@ -158,7 +163,10 @@ bool KoopmanModel::requiresExternalCoordinates() const noexcept {
 }
 
 std::vector<std::complex<double>> KoopmanModel::evaluateCoordinates(const double* coordinates) const {
-    if(scattered_)throw std::logic_error("direct coordinate evaluation requires polynomial eigenfunctions");
+    if(scattered_){
+        if(!scattered_->data().coordinateObservable.empty())return scattered_->evaluate(coordinates);
+        throw std::logic_error("direct coordinate evaluation requires polynomial eigenfunctions");
+    }
     return polynomial_->evaluate(coordinates);
 }
 
@@ -215,6 +223,8 @@ std::vector<std::complex<double>> KoopmanModel::exactControlMap(const double* st
     if(!system_)throw std::logic_error("State-Jacobian control map needs a physical-system adapter");
     const auto original = system_->inputMatrix(state); const std::size_t inputs = inputDimension();
     if(scattered_){
+        if(!scattered_->data().coordinateObservable.empty())throw std::logic_error(
+            "an observable-bound scattered KROM needs a fitted input map");
         const auto gradients=scattered_->gradient(state);
         std::vector<std::complex<double>> result(liftedDimension()*inputs);
         for(std::size_t mode=0;mode<liftedDimension();++mode)
@@ -224,11 +234,12 @@ std::vector<std::complex<double>> KoopmanModel::exactControlMap(const double* st
                         *original[axis*inputs+input];
         return result;
     }
-    if (!coordinateObservable_)
+    const auto& map=this->coordinates().stateMap;
+    if (!map)
         throw std::logic_error(
             "an exact state-Jacobian control map is unavailable for causal-history coordinates");
-    const auto coordinates=coordinateObservable_->evaluateReal(state);
-    const auto coordinateJacobian=coordinateObservable_->jacobian(state);
+    const auto coordinates=map->evaluateReal(state);
+    const auto coordinateJacobian=map->jacobian(state);
     std::vector<std::complex<double>> result(liftedDimension() * inputs);
     for (std::size_t mode = 0; mode < liftedDimension(); ++mode) {
         const auto gradient = polynomial_->gradient(mode,coordinates.data());
@@ -368,8 +379,8 @@ KoopmanModel KoopmanModel::extract(const std::vector<std::size_t>& indices) cons
     if (unique.size() != indices.size() || *unique.rbegin() >= liftedDimension())
         throw std::out_of_range("KROM extraction indices are invalid");
     KoopmanModel result=scattered_
-        ? KoopmanModel(scattered_->extract(indices)->data(),systemConfiguration_)
-        : KoopmanModel(polynomial_->extract(indices),inputDimension(),fitDiagnostics_.extract(indices));
+        ? KoopmanModel(scattered_->select(indices)->data(),spectrum().extract(indices),systemConfiguration_)
+        : KoopmanModel(polynomial_->select(indices),spectrum().extract(indices),inputDimension(),fitDiagnostics_.extract(indices));
     if(!scattered_&&system_)result.attachPhysicalSystem(systemConfiguration_);
     // Spectral diagnostics refer to the original trial subspace; extraction intentionally clears them.
     result.datasetReferences_=datasetReferences_;

@@ -1,3 +1,4 @@
+#include "ObservablePhasePayload.hpp"
 #include "ArchiveCatalog.hpp"
 #include "HierarchyCatalog.hpp"
 #include "ModeWeightPayload.hpp"
@@ -105,7 +106,7 @@ bool kromMethod(const std::string& method) {
 }
 
 bool spectrumMethod(const std::string& method) {
-    static const std::set<std::string> methods{"dmd","dmdc","edmdc","hankel-dmd","hdmd","edmd",
+    static const std::set<std::string> methods{"dmd","dmdc","edmdc","hankel-dmd","hankel-dmd-reconstructions","hdmd","edmd",
         "trajectory-eigenvalue-optimization","eigenvalue_optimization"};
     return methods.count(method)!=0;
 }
@@ -346,10 +347,28 @@ void enrichArchiveCatalogItem(CatalogItem& item,
             "expands training domain of");
         for(const auto& result:metadata.at("result_archives").array())
             relation(item,result.string(),"produced control result");
+        // A declared format outranks guesses from the file name (e.g. "koopman" in a label).
+        if (format=="dynsyslab.animation/v1") {  // panels strung into frames (animation job)
+            item.kind="animation"; item.category="Animations"; item.subtitle="Animation";
+            item.views={"animation"};
+        }
+        if (format=="dynsyslab.grid-field/v1") {  // a function on its domain (domain_field job)
+            item.kind="domain_field"; item.category="Domain fields"; item.subtitle="Function on its domain";
+            item.views={"domain_field"};
+        }
     } catch (...) {
         // A malformed or unsupported archive remains visible through the
         // conservative filesystem classification and can still be inspected.
     }
+    try {  // declared kinds outrank everything above, whatever else the metadata lacks
+        if (archive.metadataJson.empty()) return;
+        const auto metadata=json::parse(archive.metadataJson);
+        if (isObservableSeries(metadata)) {  // an observable evaluated along a trajectory
+            item.kind="observable_series"; item.category="Observables along trajectories";
+            item.subtitle=metadata.at("eigenfunction").isNull()?"Observable along a trajectory":"Eigenfunction along a trajectory";
+            item.views={"observable_phase","time"};
+        }
+    } catch (...) {}
 }
 
 void enrichArchiveCatalogItem(CatalogItem& item,

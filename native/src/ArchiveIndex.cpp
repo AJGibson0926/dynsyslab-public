@@ -313,7 +313,8 @@ std::string summarizeArchiveMetadata(const std::string& metadataJson) {
             "attempt_count", "stop_reason", "controller_kind", "source_archive",
             "source_archives", "source_spectrum", "source_krom", "result_archives",
             "forcing_type", "data_role", "initial_state_policy", "dataset_references",
-            "training_archives", "validation_archives", "test_archives", "validated_krom"};
+            "training_archives", "validation_archives", "test_archives", "validated_krom",
+            "value_space", "eigenfunction"};
         for (const auto* field : fields) copyField(summary, source, field);
         if (source.at("format").string() == "dynsyslab.hierarchy/v1") {
             copyField(summary, source, "job");
@@ -321,6 +322,7 @@ std::string summarizeArchiveMetadata(const std::string& metadataJson) {
             copyField(summary, source, "tier");
         }
         copyPath(summary, source, "system_configuration", "identifier");
+        copyPath(summary, source, "data_object", "kind");
         if (!source.at("analysis_metadata").at("krom").isNull())
             summary["analysis_metadata"].object().emplace("krom", true);
         copyPath(summary, source, "controller_configuration", "settings", "krom");

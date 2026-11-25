@@ -29,6 +29,7 @@
 //
 // The output is a KROM archive with the map stored under "map_name" (default: the
 // representation) so a controller selects it with control_representation alone.
+#include "MeasurementMap.hpp"
 #include "PostprocessInternal.hpp"
 #include "KromDatasetSupport.hpp"
 #include "DerivativeSettings.hpp"
@@ -309,7 +310,7 @@ std::filesystem::path runInputMap(const std::vector<std::filesystem::path>& sour
     if (kromPath.empty()) throw std::invalid_argument("input_map requires a KROM");
     auto model = c::loadKoopmanModel(kromPath);
     if (model.inputDimension() != 1) throw std::invalid_argument("input_map supports one scalar input");
-    const bool history = model.coordinates().kind == c::EigenfunctionCoordinateKind::causalHistory;
+    const bool history = model.coordinates().computableFromMeasurements();
     const auto representation = settings.at("representation").string(history ? "history_exact" : "exact");
     const bool analytic = representation == "exact" || representation == "history_exact";
     if (!analytic && representation != "constant" && representation != "bilinear")
@@ -328,11 +329,9 @@ std::filesystem::path runInputMap(const std::vector<std::filesystem::path>& sour
         const bool strictHold = settings.at("strict_hold").boolean(!history);
         if (history) {
             if (fit != "held_input") throw std::invalid_argument("causal-history input_map regression uses fit held_input");
-            transformPath = settings.at("history_transform").string(model.coordinates().providerArtifact.empty()
-                ? kromPath.u8string() : model.coordinates().providerArtifact);
-            const auto transform = c::loadFrozenHistoryTransform(std::filesystem::u8path(transformPath));
-            if (transform.identity() != model.coordinates().providerIdentity)
-                throw std::invalid_argument("History transform differs from KROM training coordinates");
+            auto map = loadMeasurementMap(model, kromPath, settings);
+            transformPath = map.path;
+            const auto transform = std::move(map.transform);
             diagnostics = heldInputRegression(model, heldInputRecords(model, &transform, sources, settings, strictHold),
                                               settings, representation, mapName);
         } else if (fit == "held_input") {
@@ -353,7 +352,7 @@ std::filesystem::path runInputMap(const std::vector<std::filesystem::path>& sour
         {"source_archive", json::Value(kromPath.generic_u8string())}, {"input_map", json::Value(std::move(inputMap))},
         {"control_map_time_domain", json::Value("continuous-time")}, {"independent_archive", json::Value(true)}};
     if (!transformPath.empty()) meta["history_transform"] = json::Value(transformPath);
-    const auto directory = root / L"derived" / L"koopman-input-map";
+    const auto directory = objectFolder(root, "koopman-input-map");
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(kromPath.stem().u8string() + "__input-map-" + representation
         + "__" + timestamp()) + ".npz");

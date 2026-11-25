@@ -72,6 +72,8 @@ public:
     void setScrollPosition(int pixels);
     std::vector<std::size_t> visibleFigureIndices() const;
     bool isKrom() const { return payload_ && payload_->layout == "krom"; }
+    std::optional<Payload::Animation> animation() const { return payload_ ? payload_->animation : std::nullopt; }
+    const Payload* payloadIdentity() const { return payload_.get(); }
     std::string complexDisplay() const { return payload_ ? payload_->complexDisplay : ""; }
     void setComplexDisplay(const std::string& display);
     void selectKromModes(std::vector<std::size_t> modes);

@@ -24,7 +24,7 @@ struct KoopmanSINDyOptions {
     bool gramNullspace{true};
 };
 
-// Compatibility fit DTO. New runtime code uses PolynomialEigenfunctionSet;
+// Compatibility fit DTO. New runtime code uses FunctionExpansion + Spectrum;
 // new SINDy callers use EigenfunctionFitResult in EigenfunctionFit.hpp.
 struct KoopmanSINDyResult {
     // Construct the SAME polynomial representation without fitting. Coefficients

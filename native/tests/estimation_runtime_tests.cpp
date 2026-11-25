@@ -13,9 +13,8 @@ template<class F> void rejects(F f) {
     throw std::runtime_error("Invalid observer input was accepted");
 }
 c::KoopmanModel scalar() {
-    c::EigenfunctionCoordinates q;q.dimension=1;q.kind=c::EigenfunctionCoordinateKind::causalHistory;
-    c::PolynomialEigenfunctionSet bank({1,{1},{0},{1}},{1.},
-        c::EigenfunctionSpectrum::fromContinuousRates({-1.}),q);
+    c::FunctionDomain q;q.dimension=1;
+    c::EigenfunctionFitResult bank{c::FunctionExpansion({1,{1},{0},{1}}, {1.}, q), c::Spectrum::fromContinuousRates({-1.}), {}};
     c::KoopmanModel model(bank,1);
     model.setControlMap("fit",c::ConstantControlMap{{2.},1,1,"test fixture"});
     model.setReconstruction("y",{{1.},1,1,0,0,0});
@@ -99,9 +98,8 @@ void bilinear() {
         t+=h;close(observer.observe(t,{.7},{u}).lifted[0],z);
     }
     // Complex/conjugate map: compare to independent small-step complex RK4.
-    c::EigenfunctionCoordinates q;q.dimension=2;
-    c::PolynomialEigenfunctionSet bank({2,{1,0,0,1},{0,0},{1,1}},
-        {1.,{0,1}},c::EigenfunctionSpectrum::fromContinuousRates({{-.3,2}}),q);
+    c::FunctionDomain q;q.dimension=2;
+    c::EigenfunctionFitResult bank{c::FunctionExpansion({2,{1,0,0,1},{0,0},{1,1}}, {1.,{0,1}}, q), c::Spectrum::fromContinuousRates({{-.3,2}}), {}};
     c::KoopmanModel oscillator(bank,1);
     oscillator.setReconstruction("y",{{1.},1,1,0,0,0});
     const std::complex<double> N{.2,.1},M{.1,-.2},b{.3,.4};

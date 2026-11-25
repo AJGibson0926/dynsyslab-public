@@ -28,7 +28,7 @@ json::Value inspectKoopmanModel(const KoopmanModel &model) {
         {"representation", model.eigenfunctionRepresentation()},
         {"eigenfunction_count", double(model.eigenfunctionCount())},
         {"real_lifted_dimension", double(model.realLiftedDimension())},
-        {"coordinates", eigenfunctionCoordinatesJson(model.coordinates())},
+        {"coordinates", functionDomainJson(model.coordinates())},
         {"physical_system_attached", model.hasPhysicalSystem()},
         {"input_dimension", double(model.inputDimension())},
         {"spectrum_domain",
@@ -48,9 +48,12 @@ json::Value inspectKoopmanModel(const KoopmanModel &model) {
         result["physical_state_dimension"] = double(*model.physicalStateDimension());
     else
         result["physical_state_dimension"] = json::Value{};
-    if (!model.scatteredEigenfunctions())
-        result["polynomial_feature_count"] =
-            double(model.polynomialEigenfunctions().dictionary().featureCount());
+    if (!model.scatteredEigenfunctions()) {
+        result["dictionary_size"] = double(model.expansion().dictionary().size());
+        json::Value::Array kinds;
+        for (const auto& kind : model.expansion().dictionary().kinds()) kinds.emplace_back(kind);
+        result["dictionary_term_kinds"] = kinds;
+    }
     return result;
 }
 } // namespace dynsyslab::core

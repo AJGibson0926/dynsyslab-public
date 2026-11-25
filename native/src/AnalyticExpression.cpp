@@ -1,9 +1,16 @@
 #include <dynsyslab/core/AnalyticExpression.hpp>
+#include <dynsyslab/core/EllipticIntegrals.hpp>
 #include <cmath>
 #include <stdexcept>
 #include <utility>
 
 namespace dynsyslab::core {
+namespace {
+bool unaryName(const std::string& op) {
+    return op=="negative"||op=="exp"||op=="log"||op=="sin"||op=="cos"||op=="tanh"||op=="sech"||op=="ellipk"||op=="ellipe";
+}
+bool functionName(const std::string& op) { return op=="atan2"||op=="ellipf"||op=="ellipeinc"; }
+}  // namespace
 struct AnalyticExpression::Node {
     std::string operation;
     std::size_t dimension{}, index{};
@@ -33,11 +40,16 @@ double AnalyticExpression::evaluate(const double* x) const {
     if(op=="cos")return std::cos(a);
     if(op=="tanh")return std::tanh(a);
     if(op=="sech") {const double e=std::exp(-std::abs(a));return 2*e/(1+e*e);}
+    if(op=="ellipk")return ellipticK(a);
+    if(op=="ellipe")return ellipticE(a);
     const double b=n.arguments[1].evaluate(x);
     if(op=="add")return a+b;
     if(op=="subtract")return a-b;
     if(op=="multiply")return a*b;
     if(op=="divide")return a/b;
+    if(op=="atan2")return std::atan2(a,b);
+    if(op=="ellipf")return ellipticF(a,b);
+    if(op=="ellipeinc")return ellipticEIncomplete(a,b);
     throw std::logic_error("unknown expression operation");
 }
 AnalyticExpression AnalyticExpression::binary(const std::string& op,const AnalyticExpression& b) const {
@@ -63,11 +75,15 @@ AnalyticExpression AnalyticExpression::power(double value) const {
     return AnalyticExpression(std::make_shared<Node>(Node{"power",stateDimension(),0,value,{*this}}));
 }
 AnalyticExpression AnalyticExpression::unary(const std::string& op) const {
-    if(op!="negative"&&op!="exp"&&op!="log"&&op!="sin"&&op!="cos"&&op!="tanh"&&op!="sech")
+    if(!unaryName(op))
         throw std::invalid_argument("unsupported unary expression operation");
     auto result=AnalyticExpression(std::make_shared<Node>(Node{op,stateDimension(),0,0,{*this}}));
     if(node_->operation=="constant")return constant(result.evaluate(nullptr),stateDimension());
     return result;
+}
+AnalyticExpression AnalyticExpression::function(const std::string& op,const AnalyticExpression& b) const {
+    if(!functionName(op))throw std::invalid_argument("unsupported two-argument expression function");
+    return binary(op,b);
 }
 AnalyticExpression AnalyticExpression::derivative(std::size_t axis) const {
     if(axis>=stateDimension())throw std::out_of_range("expression derivative axis");
@@ -83,11 +99,21 @@ AnalyticExpression AnalyticExpression::derivative(std::size_t axis) const {
     if(op=="cos")return -a.unary("sin")*da;
     if(op=="tanh")return (1-a.unary("tanh").power(2))*da;
     if(op=="sech")return -a.unary("sech")*a.unary("tanh")*da;
+    // dK/dm = (E - (1-m)K)/(2m(1-m)), dE/dm = (E - K)/(2m) (DLMF 19.4.1, with m = k^2).
+    if(op=="ellipk")return (a.unary("ellipe")-(1-a)*a.unary("ellipk"))/(2*a*(1-a))*da;
+    if(op=="ellipe")return (a.unary("ellipe")-a.unary("ellipk"))/(2*a)*da;
     const auto& b=n.arguments[1]; const auto db=b.derivative(axis);
     if(op=="add")return da+db;
     if(op=="subtract")return da-db;
     if(op=="multiply")return da*b+a*db;
     if(op=="divide")return (da*b-a*db)/b.power(2);
+    if(op=="atan2")return (b*da-a*db)/(a.power(2)+b.power(2));
+    // DLMF 19.4.2 in the parameter m: dF/dphi = 1/Delta, dE/dphi = Delta, Delta = sqrt(1 - m sin^2 phi).
+    const auto delta=(1-b*a.unary("sin").power(2)).power(0.5);
+    if(op=="ellipf")
+        return da/delta+(a.function("ellipeinc",b)/(2*b*(1-b))-a.function("ellipf",b)/(2*b)
+                         -(2*a).unary("sin")/(4*(1-b)*delta))*db;
+    if(op=="ellipeinc")return delta*da+(a.function("ellipeinc",b)-a.function("ellipf",b))/(2*b)*db;
     throw std::logic_error("unknown expression derivative");
 }
 AnalyticExpression AnalyticExpression::flowDerivative(
@@ -129,10 +155,11 @@ AnalyticExpression AnalyticExpression::fromJson(const json::Value& value) {
         return state(dimension,std::size_t(index));
     }
     const auto& args=value.at("arguments").array();
-    const bool binaryOp=op=="add"||op=="subtract"||op=="multiply"||op=="divide";
+    const bool binaryOp=op=="add"||op=="subtract"||op=="multiply"||op=="divide"||functionName(op);
     if(args.size()!=(binaryOp?2:1))throw std::invalid_argument("expression arity mismatch");
     const auto a=fromJson(args[0]);
     if(a.stateDimension()!=dimension)throw std::invalid_argument("expression dimensions differ");
+    if(functionName(op))return a.function(op,fromJson(args[1]));
     if(binaryOp)return a.binary(op,fromJson(args[1]));
     if(op=="power")return a.power(value.at("scalar").number());
     return a.unary(op);

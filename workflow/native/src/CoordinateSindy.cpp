@@ -15,11 +15,14 @@ std::filesystem::path runCoordinateSindy(const SourceData& source,const json::Va
     namespace c=dynsyslab::core;
     if(datasetDynamics(source)!="unforced")throw std::invalid_argument("Autonomous coordinate SINDy requires confirmed unforced training data");
     const auto metadataSource=json::parse(source.metadataJson);
-    c::EigenfunctionCoordinates q;q.dimension=source.dimension;
+    c::FunctionDomain q;q.dimension=source.dimension;
     const bool history=metadataSource.at("coordinate_provider").string()=="causal-history";
-    q.kind=history?c::EigenfunctionCoordinateKind::causalHistory:c::EigenfunctionCoordinateKind::measured;
+    // q is data: no state map (the default); a history provider is the measurement map
     q.providerIdentity=metadataSource.at("coordinate_transform_identity").string();
     q.providerArtifact=metadataSource.at("coordinate_transform_archive").string();
+    // An H-SVD coordinate record is its own measurement map.
+    if(history&&q.providerArtifact.empty()&&!metadataSource.at("hankel_basis").isNull())
+        q.providerArtifact=std::filesystem::absolute(source.path).lexically_normal().generic_u8string();
     if(history&&q.providerIdentity.empty())throw std::invalid_argument("History-coordinate fitting needs the frozen transform identity");
     for(std::size_t k=0;k<source.dimension;++k)q.names.push_back((history?"xi_":"q_")+std::to_string(k+1));
     const auto method=settings.at("gamma_method").string("finite_difference");
@@ -60,8 +63,7 @@ std::filesystem::path runCoordinateSindy(const SourceData& source,const json::Va
     if(!std::isfinite(inputs)||inputs<0||inputs!=std::floor(inputs)
         ||inputs>double(std::numeric_limits<std::size_t>::max()/2))
         throw std::invalid_argument("Coordinate SINDy input_dimension must be a nonnegative integer");
-    auto model=physical?c::KoopmanModel(fit.eigenfunctions,*physical,fit.diagnostics):
-        c::KoopmanModel(fit.eigenfunctions,static_cast<std::size_t>(inputs),fit.diagnostics);
+    auto model=physical?c::KoopmanModel(fit,*physical):c::KoopmanModel(fit,static_cast<std::size_t>(inputs));
     if(physical&&!settings.at("input_dimension").isNull()&&inputs!=double(model.inputDimension()))
         throw std::invalid_argument("Declared input dimension conflicts with the physical system");
     model.addDatasetReference({std::filesystem::absolute(source.path).generic_u8string(),"training","unforced",{}});

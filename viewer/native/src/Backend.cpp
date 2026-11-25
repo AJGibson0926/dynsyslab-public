@@ -3,6 +3,7 @@
 #include "dynsyslab_viewer/NativePayload.hpp"
 #include "HierarchyPayload.hpp"
 #include "CatalogPresentation.hpp"
+#include "RecordedArchives.hpp"
 #include "dynsyslab_viewer/KromWorkspace.hpp"
 #include <dynsyslab/core/ArchiveIndex.hpp>
 #include <stdexcept>
@@ -10,6 +11,7 @@
 namespace dsl {
 
 Backend::Backend(BackendConfig config) : config_(std::move(config)) {
+    loadRecordedArchiveReaders();
     std::filesystem::create_directories(config_.cache);
 }
 

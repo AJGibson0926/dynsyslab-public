@@ -2,57 +2,51 @@
 #include <stdexcept>
 
 namespace dynsyslab::core {
-PolynomialEigenfunctionSet polynomialEigenfunctionsFromLegacy(const KoopmanSINDyResult &f) {
-    EigenfunctionCoordinates q;
-    q.dimension = f.stateDimension;
-    if (f.dynamicalStateDimension)
-        q.physicalStateDimension = f.dynamicalStateDimension;
-    q.names = f.coordinateObservableNames;
-    q.expressionDefinition = f.coordinateObservableDefinition;
-    q.providerIdentity = f.coordinateProvider;
-    q.kind = f.coordinateProvider == "causal-history" ? EigenfunctionCoordinateKind::causalHistory
-             : f.coordinateProvider == "measured"     ? EigenfunctionCoordinateKind::measured
-             : (!q.names.empty() || !q.expressionDefinition.empty())
-                 ? EigenfunctionCoordinateKind::analyticObservable
-                 : EigenfunctionCoordinateKind::physicalState;
-    if (q.kind == EigenfunctionCoordinateKind::physicalState && !q.physicalStateDimension)
-        q.physicalStateDimension = q.dimension;
-    return {{f.stateDimension, f.exponents, f.center, f.scale},
-            f.coefficients,
-            EigenfunctionSpectrum::fromStoredRates(f.continuousEigenvalues, f.sampleTime,
+EigenfunctionFitResult polynomialEigenfunctionsFromLegacy(const KoopmanSINDyResult &f) {
+    const bool external = f.coordinateProvider == "causal-history" || f.coordinateProvider == "measured";
+    FunctionDomain q = external ? FunctionDomain::supplied(f.stateDimension)
+        : !f.coordinateObservableDefinition.empty()
+            ? FunctionDomain::fromStateMap(Observable::fromExpressionDefinition(json::parse(f.coordinateObservableDefinition)))
+        : !f.coordinateObservableNames.empty() ? FunctionDomain::fromCatalog(f.coordinateObservableNames, f.stateDimension)
+        : FunctionDomain::physicalState(f.stateDimension);
+    if (!q.stateMap && f.dynamicalStateDimension) q.physicalStateDimension = f.dynamicalStateDimension;
+    if (!f.coordinateObservableNames.empty()) q.names = f.coordinateObservableNames;
+    if (f.coordinateProvider == "causal-history") q.providerIdentity = "causal-history";
+    return {FunctionExpansion({f.stateDimension, f.exponents, f.center, f.scale}, f.coefficients, std::move(q)),
+            Spectrum::fromStoredRates(f.continuousEigenvalues, f.sampleTime,
                                                    f.eigenvalueOrigin == "discrete-time"
                                                        ? EigenvalueDomain::discreteTime
                                                        : EigenvalueDomain::continuousTime,
                                                    f.logarithmBranches),
-            std::move(q)};
+            fitDiagnosticsFromLegacy(f)};
 }
 EigenfunctionFitDiagnostics fitDiagnosticsFromLegacy(const KoopmanSINDyResult &f) {
     // The old DTO was also used for EDMD/manual coefficients. Its C++ type does
     // not establish which algorithm produced them or what its residual meant.
     return {{}, {}, f.samples, f.directFits, f.residualRms, f.residualMaximum};
 }
-KoopmanSINDyResult legacyPolynomialEigenfunctions(const PolynomialEigenfunctionSet &p,
+KoopmanSINDyResult legacyPolynomialEigenfunctions(const FunctionExpansion &p, const Spectrum &spectrum,
                                                   const EigenfunctionFitDiagnostics &diagnostics) {
     KoopmanSINDyResult f;
-    const auto &d = p.dictionary();
     const auto &q = p.coordinates();
-    f.continuousEigenvalues = p.spectrum().continuousRates(); // explicit failure for zero mu
-    f.stateDimension = d.coordinateDimension;
-    f.featureCount = d.featureCount();
-    f.exponents = d.exponents;
-    f.center = d.center;
-    f.scale = d.scale;
+    f.continuousEigenvalues = spectrum.continuousRates(); // explicit failure for zero mu
+    f.stateDimension = p.coordinateDimension();
+    f.featureCount = p.dictionary().size();
+    if (p.monomial()) {  // other bases have no exponent table in this legacy snapshot
+        const auto &d = p.monomialTable();
+        f.exponents = d.exponents;
+        f.center = d.center;
+        f.scale = d.scale;
+    }
     f.coefficients = p.coefficients();
-    f.dynamicalStateDimension = q.physicalStateDimension.value_or(0);
+    f.dynamicalStateDimension = q.stateMap ? q.stateMap->stateDimension() : q.physicalStateDimension.value_or(0);
     f.coordinateObservableNames = q.names;
-    f.coordinateObservableDefinition = q.expressionDefinition;
-    f.coordinateProvider = q.kind == EigenfunctionCoordinateKind::causalHistory ? "causal-history"
-                           : q.kind == EigenfunctionCoordinateKind::measured
-                               ? "measured"
-                               : "instantaneous-observable";
-    f.sampleTime = p.spectrum().sampleInterval();
-    f.logarithmBranches = p.spectrum().logarithmBranches();
-    f.eigenvalueOrigin = p.spectrum().domain() == EigenvalueDomain::discreteTime
+    f.coordinateObservableDefinition = q.stateMapDefinition();
+    f.coordinateProvider = q.requiresExternalValues()
+        ? (q.computableFromMeasurements() ? "causal-history" : "measured") : "instantaneous-observable";
+    f.sampleTime = spectrum.sampleInterval();
+    f.logarithmBranches = spectrum.logarithmBranches();
+    f.eigenvalueOrigin = spectrum.domain() == EigenvalueDomain::discreteTime
                              ? "discrete-time"
                              : "continuous-time";
     f.samples = diagnostics.sampleCount;

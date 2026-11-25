@@ -2,14 +2,14 @@
 #include <stdexcept>
 
 namespace dynsyslab::core {
-PolynomialEigenfunctionSet DmdControlResult::eigenfunctionSet() const {
+EigenfunctionFitResult DmdControlResult::eigenfunctionSet() const {
     if(!hasEigenfunctions||!dimension||discreteEigenvalues.size()!=rank)
         throw std::invalid_argument("DMDc has no exportable linear eigenbasis");
-    EigenfunctionCoordinates q;q.dimension=dimension;
-    return {{dimension,polynomialExponentTable(dimension,1,false),{},{}},eigenfunctionCoefficients,
-        EigenfunctionSpectrum::fromDiscreteMultipliers(discreteEigenvalues,deltaTime),q};
+    FunctionDomain q;q.dimension=dimension;
+    return {FunctionExpansion({dimension,polynomialExponentTable(dimension,1,false),{},{}},eigenfunctionCoefficients,q),
+        Spectrum::fromDiscreteMultipliers(discreteEigenvalues,deltaTime),{}};
 }
-KoopmanSINDyResult DmdControlResult::polynomialEigenfunctions() const {
+KoopmanSINDyResult DmdControlResult::expansion() const {
     if(!hasEigenfunctions||!dimension||discreteEigenvalues.size()!=rank)
         throw std::invalid_argument("DMDc has no exportable linear eigenbasis");
     return KoopmanSINDyResult::fromDiscreteCoefficients(dimension,

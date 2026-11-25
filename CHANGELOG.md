@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.9.0 — 2026-11-25
+
+A maintenance release that brings the public tree up to date before a larger release. It contains
+no data packs. **Archive formats changed**: eigenfunction archives written by 0.8 are refused with a
+message to regenerate them.
+
+**Archives hold data objects.** Each archive a processing step writes is one data object (see
+`docs/architecture/DATA_OBJECTS.md`). It carries a `data_object` envelope: its kind, and the
+method, settings and inputs (with SHA-256) that produced it. Archives are filed by kind under
+`objects/<kind>/`, not by method under `derived/`.
+
+- H-DMD publishes two objects. The eigenfunctions object holds the spectrum and stand-alone
+  eigenfunctions; each eigenfunction has its own window-map row and the shared interpolation. The
+  reconstructions object holds readouts written over those eigenfunctions. H-DMD copies none of its
+  input.
+- SINDy, DMD, EDMD and `eigenfunction_expansion` publish eigenfunctions objects. SINDy copies no
+  training data.
+- `krom_extract` and `control_regression` assemble a K-ROM from eigenfunctions and the
+  reconstructions named by `reconstructions`.
+- Pipelines can reference `${stage.object:KIND}`. `${stage.archive}` names a method's primary
+  object.
+
+**One interpolation framework for every observable.** `core::interpolateSamples` builds an
+interpolation from the samples' full states, found through the series' origin and mapped through
+the domain's state map (the full state by default). Each observable keeps its own interpolant. The
+domain belongs to the eigenfunction; the K-ROM loader never re-domains.
+
+**Observables along time series.** `Observable::evaluate(TimeSeries)` returns a time series, and
+eigenfunctions inherit it. A domain can be a series window, so a window-map eigenfunction evaluates
+new windows without the method that made it. `coordinate_transform` with `kind: observable` accepts
+an `eigenfunction`.
+
+**Coordinate changes store a record, not copies.** Reading one replays it from its digest-checked
+source. `dynsyslab-cli materialize` writes a self-contained copy.
+
+**Viewer.**
+- The "Observable on the phase plane" view shows an observable's values along a trajectory,
+  domain-coloured.
+- Viewer shows composed objects, such as eigenfunctions with their reconstructions.
+- K-ROM training states are found through references instead of copies.
+- Also new: domain fields with domain colouring, 3-D slices, and an animation player (toolbar and
+  `DynSysLabViewerCli animate`).
+
+**Also new.**
+- The system eigenfunction library.
+- Domain grids and coordinate maps: pull-back, push-forward, round trip and fold set.
+- Time-series crop, resample, spectrum and window histories.
+- Redesigned architecture diagrams.
+- I/O-delay control models.
+
 ## 0.8.1 — 2026-11-23
 
 First published build of the 0.8 line; the 0.8.0 tag failed its release gate and was never released.

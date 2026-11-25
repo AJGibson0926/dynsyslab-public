@@ -192,14 +192,15 @@ std::filesystem::path runDmdControl(const std::filesystem::path& path,
     const auto text=json::dump(json::Value(std::move(details)));
     auto meta=json::parse(metadata(source,method,label,text.substr(1,text.size()-2)));
     std::optional<core::KoopmanModel> exportable;
-    if(polynomial&&fit.hasEigenfunctions&&continuous.size()==r) {
+    if(fit.hasEigenfunctions&&continuous.size()==r) {
         const auto sourceMeta=json::parse(source.metadataJson);
         // Only a native solution's values have an unambiguous physical-state
         // contract. Arbitrary measured/latent snapshots need their own provider.
         if(key=="values"&&sourceMeta.at("format").string()=="dynsyslab.solution/v1") {
-            auto bank=polynomial->eigenfunctionSet();auto coordinates=bank.coordinates();
-            coordinates.kind=core::EigenfunctionCoordinateKind::physicalState;
-            core::KoopmanModel model(bank.withCoordinates(coordinates),systemConfiguration(source));
+            auto bank=polynomial?polynomial->eigenfunctionSet():linear.eigenfunctionSet();
+            auto coordinates=core::FunctionDomain::physicalState(bank.functions.coordinateDimension());
+            coordinates.names=bank.functions.coordinates().names;
+            core::KoopmanModel model(bank.functions.withCoordinates(coordinates),bank.spectrum,systemConfiguration(source));
             const auto plan=planAutonomousKoopmanValidation(model,{},root);
             auto refs=core::koopmanDatasetReferencesFromMetadata(meta);
             for(const auto& ref:core::koopmanDatasetReferencesFromMetadata(plan))core::mergeKoopmanDatasetReference(refs,ref);
@@ -214,19 +215,21 @@ std::filesystem::path runDmdControl(const std::filesystem::path& path,
     const auto fitPath=publish(root,source,"koopman-"+method,label,std::move(archive));
     if(!settings.at("export_krom").boolean(false)) return fitPath;
     if(!exportable)
-        throw std::invalid_argument("EDMDc export_krom needs a polynomial fit with eigenfunctions and finite "
+        throw std::invalid_argument("export_krom needs a fit with eigenfunctions and finite "
             "continuous rates on a native solution's state values");
     // Export the eigenfunction bank as a standard K-ROM (koopman-model/v2) so krom_extract, input_map,
     // KLQE and KLQR can use it. The selected (windowed) training states and their eigenfunction values
     // are attached so krom_extract can refit named reconstructions on exactly the fitted domain.
-    const auto values=core::evaluateEdmdControlEigenfunctions(*polynomial,x,pairs);
+    const auto values=polynomial?core::evaluateEdmdControlEigenfunctions(*polynomial,x,pairs)
+                                :core::evaluateDmdControlEigenfunctions(linear,x,pairs);
     std::map<std::string,core::NpyArray> extra;
     extra["training_states"]=core::NpyArray::fromDoubles({pairs,n},x);
     extra["eigenfunction_values"]=core::NpyArray::fromComplex({pairs,r},values);
     // Per-mode consistency on the fitted pairs: ||psi_j(x+) - mu_j psi_j(x) - b_j u|| / ||psi_j(x+) - psi_j(x)||
     // (ResDMD-style relative residual of the controlled model; Colbrook & Townsend, Comm. Pure Appl.
     // Math. 77, 2024, arXiv:2111.14889). krom_extract's principal rule uses it.
-    const auto next=core::evaluateEdmdControlEigenfunctions(*polynomial,y,pairs);
+    const auto next=polynomial?core::evaluateEdmdControlEigenfunctions(*polynomial,y,pairs)
+                              :core::evaluateDmdControlEigenfunctions(linear,y,pairs);
     std::vector<double> consistency(r,0.0);
     for(std::size_t j=0;j<r;++j) {
         double num=0,den=0;
@@ -239,8 +242,8 @@ std::filesystem::path runDmdControl(const std::filesystem::path& path,
     }
     extra["mode_consistency"]=core::NpyArray::fromDoubles({r},consistency);
     meta.object()["edmdc_fit_archive"]=fitPath.generic_u8string();
-    meta.object()["extraction_algorithm"]="edmdc";
+    meta.object()["extraction_algorithm"]=method;
     auto krom=core::makeKoopmanArchive(*exportable,json::dump(meta),std::move(extra));
-    return publish(root,source,"koopman-edmdc-krom",label,std::move(krom));
+    return publish(root,source,"koopman-"+method+"-krom",label,std::move(krom));
 }
 } // namespace dynsyslab::workflow::postprocess_detail

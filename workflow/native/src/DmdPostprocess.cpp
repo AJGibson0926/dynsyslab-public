@@ -1,4 +1,8 @@
+#include <optional>
+#include <dynsyslab/numerics/LeastSquares.hpp>
+#include "ExpansionArchive.hpp"
 #include "PostprocessInternal.hpp"
+#include "TimeSeriesSource.hpp"
 
 #include <dynsyslab/core/Extension.hpp>
 #include <dynsyslab/core/Spectral.hpp>
@@ -29,11 +33,38 @@ std::filesystem::path runDmd(
         {source.samples, result.rank}, result.coordinates);
     archive.arrays["operator"] = dynsyslab::core::NpyArray::fromComplex(
         {result.rank, result.rank}, result.operatorMatrix);
-    archive.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(
-        metadata(source, "dmd", label,
+    const auto meta = metadata(source, "dmd", label,
             "\"eigenvalue_domain\":\"discrete-time\",\"delta_t\":"
             + std::to_string(result.deltaTime) + ",\"rank\":"
-            + std::to_string(result.rank)));
+            + std::to_string(result.rank));
+    archive.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(meta);
+    {   // psi = Phi^+ x: the eigenfunctions as a linear expansion in the state coordinates.
+        const std::size_t n = source.dimension, r = result.rank;
+        std::vector<std::complex<double>> identity(n * n);
+        for (std::size_t i = 0; i < n; ++i) identity[i * n + i] = 1.0;
+        numerics::LeastSquaresOptions solve;
+        solve.method = numerics::LeastSquaresMethod::divideAndConquerSvd;
+        const auto inverse = numerics::solveLeastSquares(result.modes, n, r, identity, n, solve);  // r x n
+        dynsyslab::core::PolynomialDictionary linear;
+        linear.coordinateDimension = n;
+        for (std::size_t i = 0; i < n; ++i)
+            for (std::size_t j = 0; j < n; ++j) linear.exponents.push_back(i == j ? 1 : 0);
+        std::optional<dynsyslab::core::SystemConfiguration> system;
+        try { system = systemConfiguration(source); } catch (const std::exception&) {}
+        std::string reason;
+        try {
+            dynsyslab::core::EigenfunctionFitResult bank{dynsyslab::core::FunctionExpansion(std::move(linear), inverse, snapshotDomain(source.metadataJson, n, system)), dynsyslab::core::Spectrum::fromStoredRates(result.continuousEigenvalues, result.deltaTime,
+                    dynsyslab::core::EigenvalueDomain::discreteTime), {}};
+            // DMD (Schmid, J. Fluid Mech. 656, 2010; Tu et al., J. Comput. Dyn. 1, 2014) publishes its
+            // eigenfunctions as a data object: psi = Phi^+ x as an expansion; modes and operator are properties.
+            const dynsyslab::core::DataOrigin origin{"dmd", settings, {dataReference(source.path, "time_series")}};
+            if (!writeExpansionEigenfunctions(archive, bank, origin, source.time, result.coordinates,
+                                              timeSeriesRecord(source).channels, meta, reason))
+                archive.arrays["expansion_contract_skipped"] = dynsyslab::core::NpyArray::fromString(reason);
+        } catch (const std::exception& error) {
+            archive.arrays["expansion_contract_skipped"] = dynsyslab::core::NpyArray::fromString(error.what());
+        }
+    }
     return publish(root, source, "koopman-dmd", label, std::move(archive));
 }
 

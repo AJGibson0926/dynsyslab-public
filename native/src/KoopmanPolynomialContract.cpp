@@ -1,3 +1,4 @@
+#include <dynsyslab/core/ExpansionDictionary.hpp>
 #include "KoopmanPolynomialContract.hpp"
 #include "KoopmanSpectrumArchive.hpp"
 #include <dynsyslab/core/ScientificCompatibility.hpp>
@@ -30,28 +31,37 @@ bool hasPolynomialContract(const NpzRecord &a) {
 }
 KoopmanModel readPolynomialContract(const NpzRecord &a, const SystemConfiguration &system) {
     const auto meta = json::parse(a.at(key).string());
-    if (meta.at("schema").string() != "dynsyslab.polynomial-eigenfunctions/v1")
-        throw std::invalid_argument("Unsupported polynomial eigenfunction contract");
-    auto q = eigenfunctionCoordinatesFromJson(meta.at("coordinates"));
+    const auto schema = meta.at("schema").string();
+    if (schema != "dynsyslab.polynomial-eigenfunctions/v1" && schema != "dynsyslab.eigenfunction-expansion/v1")
+        throw std::invalid_argument("Unsupported eigenfunction expansion contract");
+    auto q = functionDomainFromJson(meta.at("coordinates"));
     const auto &c = a.at("coefficients");
-    const auto &e = a.at("polynomial_exponents");
-    if (c.shape.size() != 2 || e.shape.size() != 2 || c.shape[1] != e.shape[0] ||
-        e.shape[1] != q.dimension)
-        throw std::invalid_argument("Polynomial contract arrays have incompatible shapes");
-    PolynomialDictionary d;
-    d.coordinateDimension = q.dimension;
-    for (double v : e.doubles())
-        d.exponents.push_back(size(json::Value(v)));
-    d.center = a.at("state_center").doubles();
-    d.scale = a.at("state_scale").doubles();
+    std::shared_ptr<const ExpansionDictionary> basis;
+    if (a.contains("expansion_dictionary_json")) {  // any dictionary
+        basis = std::make_shared<const ExpansionDictionary>(
+            ExpansionDictionary::fromJson(json::parse(a.at("expansion_dictionary_json").string())));
+    } else {  // monomial arrays
+        const auto &e = a.at("polynomial_exponents");
+        if (e.shape.size() != 2 || e.shape[1] != q.dimension)
+            throw std::invalid_argument("Polynomial contract arrays have incompatible shapes");
+        PolynomialDictionary d;
+        d.coordinateDimension = q.dimension;
+        for (double v : e.doubles())
+            d.exponents.push_back(size(json::Value(v)));
+        d.center = a.at("state_center").doubles();
+        d.scale = a.at("state_scale").doubles();
+        basis = std::make_shared<const ExpansionDictionary>(ExpansionDictionary::monomials(std::move(d)));
+    }
+    if (c.shape.size() != 2 || c.shape[1] != basis->size() || basis->dimension() != q.dimension)
+        throw std::invalid_argument("Expansion contract arrays have incompatible shapes");
     const auto domain = meta.at("spectrum_domain").string();
     const double dt = meta.at("sample_interval").number();
     if (domain != "discrete-time" && domain != "continuous-time")
         throw std::invalid_argument("Unknown spectrum domain");
     const auto primary = a.at("spectrum_values").complexDoubles();
     auto spectrum = domain == "continuous-time"
-                        ? EigenfunctionSpectrum::fromContinuousRates(primary, dt)
-                        : EigenfunctionSpectrum::fromStoredDiscrete(
+                        ? Spectrum::fromContinuousRates(primary, dt)
+                        : Spectrum::fromStoredDiscrete(
                               primary, dt, branches(a), a.at("spectrum_rates").complexDoubles());
     if (c.shape[0] != spectrum.size())
         throw std::invalid_argument("Polynomial coefficient count differs from spectrum");
@@ -65,11 +75,10 @@ KoopmanModel readPolynomialContract(const NpzRecord &a, const SystemConfiguratio
         fit.residualRms = a.at("training_residual_rms").doubles();
     if (a.contains("training_residual_maximum"))
         fit.residualMaximum = a.at("training_residual_maximum").doubles();
-    PolynomialEigenfunctionSet bank(std::move(d), c.complexDoubles(), std::move(spectrum),
-                                    std::move(q));
+    FunctionExpansion functions(std::move(basis), c.complexDoubles(), std::move(q));
     return system.identifier.empty()
-               ? KoopmanModel(std::move(bank), size(meta.at("input_dimension")), std::move(fit))
-               : KoopmanModel(std::move(bank), system, std::move(fit));
+               ? KoopmanModel(std::move(functions), std::move(spectrum), size(meta.at("input_dimension")), std::move(fit))
+               : KoopmanModel(std::move(functions), std::move(spectrum), system, std::move(fit));
 }
 void writePolynomialContract(NpzRecord &a, const KoopmanModel &model,const std::string& metadataJson) {
     // Caller-supplied evidence cannot override the model's owned optional fields.
@@ -77,27 +86,33 @@ void writePolynomialContract(NpzRecord &a, const KoopmanModel &model,const std::
         "coordinate_observable_names","coordinate_provider","training_residual_rms",
         "training_residual_maximum","eigenvalue_sample_time","eigenvalue_origin",
         "eigenvalue_log_branches"})a.arrays.erase(keyToClear);
-    const auto &p = model.polynomialEigenfunctions();
-    const auto &d = p.dictionary();
-    auto s = p.spectrum();
+    const auto &p = model.expansion();
+    auto s = model.spectrum();
     // Legacy callers supplied the sampling interval in metadata rather than
     // the in-memory fit. Import that explicit interval, never infer one from physics.
     const auto metadata=metadataJson.empty()?json::Value{}:json::parse(metadataJson);
     if(s.sampleInterval()==0&&!metadata.at("delta_t").isNull()) {
         const double dt=metadata.at("delta_t").number(-1);
         if(!std::isfinite(dt)||dt<=0)throw std::invalid_argument("Invalid legacy sampling interval");
-        s=EigenfunctionSpectrum::fromContinuousRates(s.continuousRates(),dt);
+        s=Spectrum::fromContinuousRates(s.continuousRates(),dt);
     }
     const auto &fit = model.fitDiagnostics();
-    const auto modes = p.eigenfunctionCount();
-    std::vector<double> e;
-    for (auto n : d.exponents)
-        e.push_back(double(n));
-    a.arrays["coefficients"] = NpyArray::fromComplex({modes, d.featureCount()}, p.coefficients());
-    a.arrays["polynomial_exponents"] =
-        NpyArray::fromDoubles({d.featureCount(), d.coordinateDimension}, e);
-    a.arrays["state_center"] = NpyArray::fromDoubles({d.coordinateDimension}, d.center);
-    a.arrays["state_scale"] = NpyArray::fromDoubles({d.coordinateDimension}, d.scale);
+    const auto modes = p.outputCount();
+    a.arrays["coefficients"] = NpyArray::fromComplex({modes, p.dictionary().size()}, p.coefficients());
+    if (p.monomial()) {  // established polynomial arrays, read by older consumers
+        const auto &d = p.monomialTable();
+        std::vector<double> e;
+        for (auto n : d.exponents)
+            e.push_back(double(n));
+        a.arrays["polynomial_exponents"] =
+            NpyArray::fromDoubles({d.featureCount(), d.coordinateDimension}, e);
+        a.arrays["state_center"] = NpyArray::fromDoubles({d.coordinateDimension}, d.center);
+        a.arrays["state_scale"] = NpyArray::fromDoubles({d.coordinateDimension}, d.scale);
+        a.arrays.erase("expansion_dictionary_json");
+    } else {
+        a.arrays["expansion_dictionary_json"] = NpyArray::fromString(json::dump(p.dictionary().describe()));
+        for (const char *legacy : {"polynomial_exponents", "state_center", "state_scale"}) a.arrays.erase(legacy);
+    }
     a.arrays["spectrum_values"] = NpyArray::fromComplex({modes}, s.values());
     std::vector<std::complex<double>> rates;
     for (std::size_t j = 0; j < modes; ++j)
@@ -119,11 +134,11 @@ void writePolynomialContract(NpzRecord &a, const KoopmanModel &model,const std::
     }
     a.arrays["eigenvalue_origin"]=NpyArray::fromString(s.domain()==EigenvalueDomain::discreteTime?"discrete-time":"continuous-time");
     const auto &q = p.coordinates();
-    if (q.physicalStateDimension)
-        a.arrays["dynamical_state_dimension"] =
-            NpyArray::fromDoubles({1}, {double(*q.physicalStateDimension)});
-    if (!q.expressionDefinition.empty())
-        a.arrays["coordinate_observable_json"] = NpyArray::fromString(q.expressionDefinition);
+    const auto physical = q.stateMap ? std::optional<std::size_t>(q.stateMap->stateDimension()) : q.physicalStateDimension;
+    if (physical)
+        a.arrays["dynamical_state_dimension"] = NpyArray::fromDoubles({1}, {double(*physical)});
+    if (const auto definition = q.stateMapDefinition(); !definition.empty())
+        a.arrays["coordinate_observable_json"] = NpyArray::fromString(definition);
     if (!q.names.empty()) {
         std::string names;
         for (const auto &n : q.names) {
@@ -135,7 +150,7 @@ void writePolynomialContract(NpzRecord &a, const KoopmanModel &model,const std::
     }
     if (q.requiresExternalValues())
         a.arrays["coordinate_provider"] = NpyArray::fromString(
-            q.kind == EigenfunctionCoordinateKind::causalHistory ? "causal-history" : "measured");
+            q.computableFromMeasurements() ? "causal-history" : "measured");
     if (!fit.residualRms.empty())
         a.arrays["training_residual_rms"] =
             NpyArray::fromDoubles({fit.residualRms.size()}, fit.residualRms);
@@ -143,8 +158,9 @@ void writePolynomialContract(NpzRecord &a, const KoopmanModel &model,const std::
         a.arrays["training_residual_maximum"] =
             NpyArray::fromDoubles({fit.residualMaximum.size()}, fit.residualMaximum);
     a.arrays[key] = NpyArray::fromString(json::dump(json::Value::Object{
-        {"schema", "dynsyslab.polynomial-eigenfunctions/v1"},
-        {"coordinates", eigenfunctionCoordinatesJson(q)},
+        {"schema", p.monomial() ? "dynsyslab.polynomial-eigenfunctions/v1" : "dynsyslab.eigenfunction-expansion/v1"},
+
+        {"coordinates", functionDomainJson(q)},
         {"spectrum_domain",
          s.domain() == EigenvalueDomain::discreteTime ? "discrete-time" : "continuous-time"},
         {"sample_interval", s.sampleInterval()},

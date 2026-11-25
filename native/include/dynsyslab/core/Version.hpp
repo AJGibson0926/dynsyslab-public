@@ -4,6 +4,6 @@
 
 namespace dynsyslab::core {
 
-inline constexpr std::string_view version{"0.8.1"};
+inline constexpr std::string_view version{"0.9.0"};
 
 }  // namespace dynsyslab::core

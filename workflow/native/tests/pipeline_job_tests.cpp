@@ -228,7 +228,11 @@ int main() {
                 "mode_selection":{"rule":"observable_energy","reconstructions":["position","velocity"],
                   "thresholds":[0.99,0.99],"caps":[6,6],"max_real_part":0,"exclude_constant":true},
                 "refit_reconstructions":{"observables":["state","position"],"intercept":true}}}]})");
-            extract.at("sources") = json::Value(json::Value::Array{json::Value(fitted.archives.back().generic_u8string())});
+            // H-DMD publishes eigenfunctions, then the reconstructions written over them.
+            const auto& eigenfunctions = fitted.archives.at(fitted.archives.size() - 2);
+            extract.at("sources") = json::Value(json::Value::Array{json::Value(eigenfunctions.generic_u8string())});
+            extract.at("methods").array()[0].at("settings").at("reconstructions") =
+                json::Value(fitted.archives.back().generic_u8string());
             const auto krom = executeJob(extract, root / "klqe").archives.back();
             const auto model = dynsyslab::core::loadKoopmanModel(krom);
             require(model.hasReconstruction("state") && model.reconstruction("state").offset.size() == 2,

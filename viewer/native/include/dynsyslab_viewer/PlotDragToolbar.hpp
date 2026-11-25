@@ -11,7 +11,7 @@ public:
     HWND handle() const { return window_; }
     void setMode(PlotBackgroundDragMode mode);
     void updateCoordinates();
-    int rowCount() const { return canvas_ && canvas_->isKrom() ? 3 : 2; }
+    int rowCount() const { return canvas_ && (canvas_->isKrom() || !canvas_->complexDisplay().empty()) ? 3 : 2; }
 
 private:
     HWND window_ = nullptr;
@@ -22,6 +22,12 @@ private:
     HWND allModes_ = nullptr, noModes_ = nullptr;
     HWND dimensional_ = nullptr;
     HWND dimensionless_ = nullptr;
+    // Animation controls (shown for animated payloads) and the frame timer.
+    HWND first_ = nullptr, back_ = nullptr, play_ = nullptr, forward_ = nullptr, stop_ = nullptr;
+    bool playing_ = false;
+    const Payload* animated_ = nullptr;
+    void setPlaying(bool playing);
+    void advanceFrame();
     PlotCanvas* canvas_ = nullptr;
     const theme::Fonts* fonts_ = nullptr;
 

@@ -1,8 +1,9 @@
 # Release gate: DynSysLab ships settings, parameters, schemas and instructions, never solver output.
 #   -Tracked       checks the public export (tracked files minus export-ignore in .gitattributes)
 #   -PackagePath   checks a release ZIP
-# Fails on: archives/(solutions|derived|campaigns|hierarchies)/ paths; .npz .npy .mat .h5 .parquet;
-# PNG/JPG outside native_ui/assets and resources/assets; .jsonl; and (tracked) text that names an
+# Fails on: archives/(solutions|derived|objects|campaigns|hierarchies)/ paths; .npz .npy .mat .h5 .parquet;
+# PNG/JPG outside native_ui/assets, resources/assets and docs/diagrams (architecture diagrams, each
+# rendered from a tracked .diagram.json spec); .jsonl; and (tracked) text that names an
 # archived run outside test code that creates its own temporary archives.
 [CmdletBinding()]
 param([switch]$Tracked, [string]$PackagePath)
@@ -12,8 +13,10 @@ $sourceRoot = Split-Path -Parent $PSScriptRoot
 
 function Get-Violation([string]$path) {
     $p = $path.Replace('\', '/')
-    if ($p -match '(^|/)archives/(solutions|derived|campaigns|hierarchies)/') { return 'archive path' }
+    if ($p -match '(^|/)archives/(solutions|derived|objects|campaigns|hierarchies)/') { return 'archive path' }
     if ($p -match '\.(npz|npy|mat|h5|parquet)$') { return 'numerical data file' }
+    # Architecture diagrams are documentation rendered from a tracked spec (docs/diagrams/<name>.diagram.json).
+    if ($p -match '(^|/)docs/diagrams/[^/]+\.png$') { return $null }
     if ($p -match '\.(png|jpe?g)$' -and $p -notmatch '(^|/)(native_ui|resources)/assets/') { return 'image of results' }
     if ($p -match '\.jsonl$') { return 'JSON-lines record' }
     # Data packs are instructions only: job files, a manifest, checksums and a README.
@@ -38,7 +41,7 @@ if ($Tracked) {
         $text = $published | Where-Object { $_ -match '\.(json|md|html|txt|py|ps1|toml|ya?ml)$' -and
             $_ -notmatch '(^|/)(tests?|tester)/' }
         foreach ($file in $text) {
-            if (Select-String -LiteralPath $file -Pattern 'archives/(solutions|derived)/[^" ]+\.npz' -Quiet) {
+            if (Select-String -LiteralPath $file -Pattern 'archives/(solutions|derived|objects)/[^" ]+\.npz' -Quiet) {
                 $failures.Add("tracked file names an archived run: $file")
             }
         }

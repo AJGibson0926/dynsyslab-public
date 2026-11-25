@@ -55,7 +55,12 @@ jobs:
         shell: pwsh
         run: |
           $cli = (Resolve-Path build/native-suite-fast/bin/dynsyslab-cli.exe).Path
-          foreach ($pack in Get-ChildItem data-packs -Directory) {
+          # Only packs pinned to this release ship with it; others stay with the release they name.
+          $version = ([regex]::Match((Get-Content -Raw CMakeLists.txt), 'VERSION (\d+\.\d+\.\d+)')).Groups[1].Value
+          $packs = if (Test-Path data-packs) { @(Get-ChildItem data-packs -Directory) } else { @() }
+          foreach ($pack in $packs) {
+            $pinned = (Get-Content -Raw (Join-Path $pack.FullName 'pack.json') | ConvertFrom-Json).release.version
+            if ($pinned -ne $version) { Write-Host "Skipping $($pack.Name): pinned to $pinned"; continue }
             & $cli datapack validate $pack.FullName
             if ($LASTEXITCODE -ne 0) { throw "Data pack failed validation: $($pack.Name)" }
           }

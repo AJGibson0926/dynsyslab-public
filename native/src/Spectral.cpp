@@ -139,6 +139,7 @@ DMDResult dmdPair(const RMatrix& x,const RMatrix& y,double deltaTime,
     result.modes=modes.values;
     result.operatorMatrix=complexValues(reduced).values;
     if(coordinates) {
+        result.eigenvectors=eigenvectors.values;
         // For projected DMD, U is orthonormal: (U W)^+ H = W^+ U^T H.
         // Solve in rank dimensions instead of factoring the tall complex modes.
         if(options.exactModes)result.coordinates=transpose(solve(modes,complexValues(x))).values;
@@ -171,6 +172,12 @@ void reorder(HankelDMDResult& result,const std::vector<std::size_t>& order) {
         for(std::size_t column=0;column<result.rank;++column)
             result.modes[row*result.rank+column]=
                 modes[row*result.rank+order[column]];
+    if(!result.eigenvectors.empty()) {
+        const auto vectors=result.eigenvectors;
+        for(std::size_t row=0;row<result.rank;++row)
+            for(std::size_t column=0;column<result.rank;++column)
+                result.eigenvectors[row*result.rank+column]=vectors[row*result.rank+order[column]];
+    }
     const auto coordinates=result.coordinates;
     for(std::size_t row=0;row<result.samples;++row)
         for(std::size_t col=0;col<result.rank;++col)
@@ -242,6 +249,13 @@ HankelDMDResult fitHankelDMD(HankelMatrix h,const std::vector<std::string>& name
     result.samples=columns+1;
     result.coordinateSampleOffsets=options.alignToWindowEnd?std::move(h.ends):std::move(h.starts);
     result.coordinateSampleOffsets.push_back(result.coordinateSampleOffsets.back()+h.window.sampleStride);
+    {   // G = W^H W
+        const std::size_t r=result.rank;
+        std::vector<std::complex<double>> adjoint(r*r);
+        for(std::size_t a=0;a<r;++a)for(std::size_t b=0;b<r;++b)
+            adjoint[a*r+b]=std::conj(result.eigenvectors[b*r+a]);
+        result.modeGram=numerics::multiply(adjoint,r,r,result.eigenvectors,r);
+    }
     result.reconstructionMatrix.resize(channels*result.rank);
     for(std::size_t channel=0;channel<channels;++channel)
         for(std::size_t mode=0;mode<result.rank;++mode)

@@ -41,7 +41,7 @@ std::filesystem::path publish(c::NpzRecord record, const std::filesystem::path& 
     metadata.at("source_krom") = json::Value(source.generic_u8string());
     metadata.at("krom_edit") = std::move(provenance);
     record.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(metadata));
-    const auto directory = root / L"derived" / c::wide(folder);
+    const auto directory = objectFolder(root, folder);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(source.stem().u8string() + suffix + timestamp()) + ".npz");
     c::writeNpzAtomicNew(path, record);

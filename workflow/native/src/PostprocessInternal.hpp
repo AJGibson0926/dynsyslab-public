@@ -5,6 +5,7 @@
 #include <dynsyslab/core/Json.hpp>
 #include <dynsyslab/core/System.hpp>
 #include <dynsyslab/core/SINDy.hpp>
+#include "ObjectPublishing.hpp"
 
 #include <filesystem>
 #include <string>
@@ -34,6 +35,8 @@ void atomicProgress(const std::filesystem::path& path, double fraction,
                     const std::string& message);
 SourceData loadSource(const std::filesystem::path& path);
 void normalizeSourceCoordinates(SourceData& source);
+// True when the record is stored in dimensional units and loadSource rescales it.
+bool storedInDimensionalUnits(const json::Value& metadata);
 double uniformDeltaTime(const SourceData& source);
 std::string metadata(const SourceData& source, const std::string& method,
                      const std::string& label, const std::string& details);
@@ -53,6 +56,9 @@ std::filesystem::path runLinearSystems(const std::filesystem::path& source,
     const json::Value& settings,const std::filesystem::path& root,const std::string& label);
 std::filesystem::path runEmpiricalObservability(const std::filesystem::path& source,
     const json::Value& settings,const std::filesystem::path& root,const std::string& label);
+// The input a coordinate change reads: a measured window integral reads its measurement array,
+// every other change the source trajectory (CoordinateTransformPostprocess.cpp).
+SourceData loadCoordinateInput(const std::filesystem::path& path, const dynsyslab::core::json::Value& settings);
 std::filesystem::path runCoordinateTransform(const SourceData& source,
     const json::Value& settings,const std::filesystem::path& root,const std::string& label);
 std::filesystem::path runSindyDynamics(const SourceData& source,
@@ -74,6 +80,14 @@ std::filesystem::path runExtensionPostprocess(
     const std::filesystem::path& root, const std::string& label,
     const std::string& method, const std::string& extension);
 
+std::filesystem::path runEigenfunctionErrors(const std::filesystem::path& sourcePath,
+    const json::Value& settings, const std::filesystem::path& root, const std::string& label);
+std::filesystem::path runEigenfunctionExpansion(const std::filesystem::path& sourcePath,
+    const json::Value& settings, const std::filesystem::path& root, const std::string& label);
+std::filesystem::path runDomainField(const std::filesystem::path& sourcePath,
+    const json::Value& settings, const std::filesystem::path& root, const std::string& label);
+std::filesystem::path runHankelSvd(const std::string& method, const SourceData& source,
+    const json::Value& settings, const std::filesystem::path& root, const std::string& label);
 std::filesystem::path runPcaPostprocess(
     const std::string& method, const SourceData& source,
     const json::Value& settings, const std::filesystem::path& root,
@@ -115,9 +129,11 @@ std::filesystem::path runControlTarget(
     const std::vector<std::filesystem::path>& sources, const json::Value& settings, \
     const std::filesystem::path& root, const std::string& label)
 DYNSYSLAB_POOLED_METHOD(runKromRecenter);
+DYNSYSLAB_POOLED_METHOD(runAnimation);
 DYNSYSLAB_POOLED_METHOD(runKromReadout);
 DYNSYSLAB_POOLED_METHOD(runReferenceSignal);
 DYNSYSLAB_POOLED_METHOD(runControlScore);
+DYNSYSLAB_POOLED_METHOD(runIoDelayModel);
 DYNSYSLAB_POOLED_METHOD(runFigureDataset);
 #undef DYNSYSLAB_POOLED_METHOD
 std::filesystem::path runKromExtraction(

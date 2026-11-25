@@ -55,6 +55,7 @@ private:
     Backend backend_;
     Catalog catalog_;
     theme::Fonts fonts_;
+    theme::Fonts plotFonts_{defaultPlotFontScale};  // plots only; controls keep fonts_
     NavigationPane navigation_;
     InspectorPane inspector_;
     PlotCanvas plots_;

@@ -40,7 +40,7 @@ std::string fingerprint(const Figure& figure) {
 std::vector<std::string> panelSourceViews(const CatalogItem& item) {
     static const std::vector<std::string> preferred{
         "time", "phase", "three_d", "fourier", "control_fourier", "estimator",
-        "observable_time", "observable_heatmap", "field", "lattice",
+        "observable_time", "observable_heatmap", "observable_phase", "domain_field", "animation", "field", "lattice",
         "ensemble_control", "ensemble_time", "ensemble_phase",
         "campaign_summary", "campaign_bifurcation",
         "koopman_spectrum", "mode_weights", "krom_dashboard", "control_map_error",

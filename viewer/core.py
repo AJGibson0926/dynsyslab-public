@@ -448,7 +448,7 @@ class Viewer(AnalysisRenderMixin, KoopmanRenderMixin, CampaignRenderMixin, Seria
         if not source_id: raise KeyError("Derived Koopman archive contains neither eigenvalues nor an eigenvalue-source link.")
         if source_id in identifiers: raise ValueError(f"Cyclic Koopman eigenvalue spectrum link detected for spectrum '{source_id}'.")
         identifiers.add(source_id)
-        for candidate in VIEWER_ARCHIVE.iter_paths("derived"):
+        for candidate in (path for section in ("objects", "derived") for path in VIEWER_ARCHIVE.iter_paths(section)):
             with VIEWER_ARCHIVE.open_read(candidate) as data:
                 if "metadata_json" not in data.files: continue
                 candidate_metadata=json.loads(str(data["metadata_json"]))

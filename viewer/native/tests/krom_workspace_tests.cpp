@@ -80,12 +80,11 @@ int main(int argc,char** argv) {
         const auto root=argc>1 ? std::filesystem::path(argv[1]) : std::filesystem::temp_directory_path()/"dynsyslab-krom-workspace-test";
         std::filesystem::create_directories(root);
         SystemConfiguration system; system.identifier="duffing"; system.preset="canonical";
-        ScatteredEigenfunctionData data;
+        InterpolationData data;
         data.samples=4; data.stateDimension=2; data.neighbors=4;
         data.trainingStates={-1,-1,1,-1,-1,1,1,1};
-        data.continuousEigenvalues={{-.1,1},{-.1,-1}};
         data.trainingValues={{-1,-1},{-1,1},{1,-1},{1,1},{-1,1},{-1,-1},{1,1},{1,-1}};
-        KoopmanModel model(data,system);
+        KoopmanModel model(data,Spectrum::fromContinuousRates({{-.1,1},{-.1,-1}}),system);
         const auto source=root/"scattered.npz";
         saveKoopmanModel(source,model,R"({"label":"Scattered fixture","delta_t":0.1})",
             {{"training_time",NpyArray::fromDoubles({4},{0,.1,0,.1})}});

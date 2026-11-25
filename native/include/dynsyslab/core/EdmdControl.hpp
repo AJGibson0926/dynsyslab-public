@@ -28,8 +28,8 @@ struct EdmdControlResult {
     // Explicit export to the existing polynomial eigenfunction class, using
     // principal log(mu)/dt rates. Throws for zero multipliers or an unusable
     // eigenbasis. This does NOT convert the discrete input map to continuous B.
-    [[nodiscard]] PolynomialEigenfunctionSet eigenfunctionSet() const;
-    [[nodiscard]] KoopmanSINDyResult polynomialEigenfunctions() const;
+    [[nodiscard]] EigenfunctionFitResult eigenfunctionSet() const;
+    [[nodiscard]] KoopmanSINDyResult expansion() const;
 };
 
 // Pure measured-data API. No derivatives, EOM, history construction, or sparse

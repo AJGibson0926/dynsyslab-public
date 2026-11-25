@@ -13,7 +13,7 @@ are unchanged. The MATLAB suite is unchanged.
 | `PolynomialEigenfunctionSet` | Immutable shared dictionary, coefficients, spectrum and coordinate contract |
 | `PolynomialEigenfunctionView` | One mode; shares the bank's storage and owns its lifetime |
 | `EigenfunctionCoordinates` | What the polynomial variables mean; optional physical dimension and frozen-provider pointer |
-| `EigenfunctionSpectrum` | Primary continuous rates or discrete multipliers, sample interval and logarithm branches |
+| `Spectrum` | Primary continuous rates or discrete multipliers, sample interval and logarithm branches |
 | `EigenfunctionFitResult` | A polynomial bank plus separate fitting diagnostics |
 | `EigenfunctionValidationResult` | Errors measured along a particular supplied trajectory |
 | `KoopmanModel` | The bank, optional physical-system adapter, input maps, reconstructions and dataset pointers |
@@ -70,7 +70,7 @@ coordinates.providerArtifact = "frozen-echo-projector.npz";
 c::PolynomialEigenfunctionSet bank(
     {2, {0,0, 1,0, 0,1}, {}, {}},
     {2.0, 1.0, {0.0,1.0}},
-    c::EigenfunctionSpectrum::fromDiscreteMultipliers({{0.99,0.06}}, 0.01),
+    c::Spectrum::fromDiscreteMultipliers({{0.99,0.06}}, 0.01),
     coordinates);
 c::KoopmanModel model(bank, 1); // one input; no invented physical state
 const double q[] = {0.3, -0.2};

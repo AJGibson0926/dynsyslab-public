@@ -79,10 +79,10 @@ int main(){try{
     const auto hiddenAssessment=assessEstimationSubset(hiddenModel,t,exactPsi,exactX,firstChannel,selection);
     const double hiddenPrior=.5*(1+std::exp(-.4)+std::exp(-.8))/3*std::exp(-.8);
     check(hiddenAssessment.posteriorStateNoiseMse>=hiddenPrior*(1-1e-10),"hidden state uncertainty disappeared through Gramian pseudoinverse");
-    ScatteredEigenfunctionData paired;paired.samples=3;paired.stateDimension=2;
-    paired.trainingStates={1,0,0,1,-1,0};paired.continuousEigenvalues={{-1,2},{-1,-2}};
+    InterpolationData paired;paired.samples=3;paired.stateDimension=2;
+    paired.trainingStates={1,0,0,1,-1,0};
     paired.trainingValues={{1,0},{0,2},{0,1},{2,0},{-1,0},{0,-2}};
-    KoopmanModel pairModel(paired,config);
+    KoopmanModel pairModel(paired,Spectrum::fromContinuousRates({{-1,2},{-1,-2}}),config);
     pairModel.setReconstruction("y",{{{2,3},{-1,4}},1,2});
     const auto realModel=makeRealModalRealization(pairModel,{0});
     check(realModel.model.splitDimension()==2,"conjugate pair double counted");
@@ -90,10 +90,10 @@ int main(){try{
     const auto after=reconstructObservable(realModel.model.reconstruction("y"),
         realModel.model.scatteredEigenfunctions()->trainingValues,3);
     for(std::size_t k=0;k<3;++k)check(std::abs(before[k].real()-after[k].real())<1e-12,"real modal reconstruction changed");
-    ScatteredEigenfunctionData nominal;nominal.samples=3;nominal.stateDimension=2;
-    nominal.trainingStates=paired.trainingStates;nominal.continuousEigenvalues={{-0.01,-1e-9}};
+    InterpolationData nominal;nominal.samples=3;nominal.stateDimension=2;
+    nominal.trainingStates=paired.trainingStates;
     nominal.trainingValues={{0,1},{0,2},{0,3}};
-    KoopmanModel nominalModel(nominal,config);nominalModel.setReconstruction("y",{{{0,-2}},1,1});
+    KoopmanModel nominalModel(nominal,Spectrum::fromContinuousRates({{-0.01,-1e-9}}),config);nominalModel.setReconstruction("y",{{{0,-2}},1,1});
     const auto snapped=makeRealModalRealization(nominalModel,{0},1e-6,1e-8);
     check(snapped.model.splitDimension()==1,"nominal real mode not corrected within tolerance");
     const auto snappedValues=reconstructObservable(snapped.model.reconstruction("y"),snapped.model.scatteredEigenfunctions()->trainingValues,3);

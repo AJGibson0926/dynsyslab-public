@@ -40,7 +40,12 @@ HistoryProjection projectHistory(const std::vector<double>& observations,
 CausalHistoryProjector::CausalHistoryProjector(PooledHankelBasis basis)
     :CausalHistoryProjector(FrozenHistoryTransform(std::move(basis),0)) {}
 CausalHistoryProjector::CausalHistoryProjector(FrozenHistoryTransform transform)
-    :transform_(std::move(transform)),ring_(basis().delays) {}
+    :transform_(std::move(transform)),ring_(basis().delays) {
+    const auto& b=basis();const auto& selected=transform_.retainedCoordinates();
+    weights_.reserve(selected.size()*b.delays);
+    for(const auto mode:selected)for(std::size_t delay=0;delay<b.delays;++delay)
+        weights_.push_back(b.leftSingularVectors[delay*b.rank+mode]);
+}
 
 std::optional<std::vector<double>> CausalHistoryProjector::push(double observation) {
     append(observation);
@@ -74,12 +79,16 @@ std::optional<std::vector<double>> CausalHistoryProjector::projectLatest() const
     if (samplesSeen_ < ring_.size()) return std::nullopt;
     const auto& b=basis();const auto& selected=transform_.retainedCoordinates();
     std::vector<double> result(selected.size());
+    // Oldest to newest: the ring's two contiguous segments, in the original summation order.
+    const std::size_t tail = b.delays - writeIndex_;
     for (std::size_t axis = 0; axis < selected.size(); ++axis) {
-        const auto mode=selected[axis];
-        for (std::size_t delay = 0; delay < b.delays; ++delay)
-            result[axis] += ring_[(writeIndex_ + delay) % ring_.size()]
-                * b.leftSingularVectors[delay * b.rank + mode];
-        result[axis] /= b.singularValues[mode];
+        const double* weight = weights_.data() + axis * b.delays;
+        const double* older = ring_.data() + writeIndex_;
+        const double* newer = ring_.data();
+        double sum = 0.0;
+        for (std::size_t j = 0; j < tail; ++j) sum += older[j] * weight[j];
+        for (std::size_t j = 0; j < writeIndex_; ++j) sum += newer[j] * weight[tail + j];
+        result[axis] = sum / b.singularValues[selected[axis]];
     }
     return result;
 }

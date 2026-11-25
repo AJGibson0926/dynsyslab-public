@@ -3,18 +3,22 @@
 #include <stdexcept>
 
 namespace dynsyslab::workflow::postprocess_detail {
-void normalizeSourceCoordinates(SourceData& source) {
-    if(source.metadataJson.empty())return;
-    auto meta=json::parse(source.metadataJson);
+bool storedInDimensionalUnits(const json::Value& meta) {
     if(meta.at("value_space").string()=="history-coordinates"||
-        meta.at("coordinate_provider").string()=="measured")return;
+        meta.at("coordinate_provider").string()=="measured")return false;
     const auto identifier=meta.at("system").string();
-    if(identifier!="rpe"&&identifier!="rayleigh-plesset"&&identifier!="marmottant")return;
+    if(identifier!="rpe"&&identifier!="rayleigh-plesset"&&identifier!="marmottant")return false;
     const auto stored=meta.at("archive_coordinate_system").string(
         meta.at("stored_coordinate_system").string());
     const bool legacy=meta.at("execution_backend").at("name").string()=="python-reference"
         ||meta.at("time_series_format").string()=="dynsyslab.TimeSeries/v1";
-    if(stored!="dimensional"&&!(stored.empty()&&legacy))return;
+    return stored=="dimensional"||(stored.empty()&&legacy);
+}
+
+void normalizeSourceCoordinates(SourceData& source) {
+    if(source.metadataJson.empty())return;
+    auto meta=json::parse(source.metadataJson);
+    if(!storedInDimensionalUnits(meta))return;
     if(source.dimension!=2)throw std::invalid_argument("bubble archive conversion requires two state components");
     const auto configuration=systemConfiguration(source);
     const auto system=dynsyslab::core::createSystem(configuration);

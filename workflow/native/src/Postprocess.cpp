@@ -1,3 +1,6 @@
+#include "TimeSeriesSource.hpp"
+#include <dynsyslab/core/EigenfunctionFit.hpp>
+#include <dynsyslab/core/EigenfunctionArchive.hpp>
 #include <dynsyslab/workflow/Postprocess.hpp>
 #include <dynsyslab/workflow/EstimationPostprocess.hpp>
 #include <dynsyslab/workflow/DecompositionPostprocess.hpp>
@@ -112,8 +115,8 @@ std::filesystem::path runControlRegression(
     std::vector<std::size_t> selected;
     for (const auto value : settings.at("selected_modes").array())
         selected.push_back(static_cast<std::size_t>(value.number()));
-    auto model = dynsyslab::core::loadKoopmanModel(
-            dynsyslab::core::wide(kromPath), systemConfiguration(source), selected);
+    auto model = dynsyslab::core::loadKoopmanModel(   // readouts may be separate reconstructions objects
+            dynsyslab::core::wide(kromPath), systemConfiguration(source), selected, composedBinding(settings));
     std::vector<SourceData> sources{source};
     const auto referenceConfiguration=systemConfiguration(source);
     const auto referenceFingerprint=dynsyslab::core::equationsFingerprint(
@@ -222,7 +225,7 @@ std::filesystem::path runControlRegression(
     extra["constant_relative_error"] = dynsyslab::core::NpyArray::fromDoubles({rows,columns}, constantError.relativeError);
     extra["bilinear_absolute_error"] = dynsyslab::core::NpyArray::fromDoubles({rows,columns}, bilinearError.absoluteError);
     extra["bilinear_relative_error"] = dynsyslab::core::NpyArray::fromDoubles({rows,columns}, bilinearError.relativeError);
-    const auto directory = root / L"derived" / L"koopman-control-regression";
+    const auto directory = objectFolder(root, "koopman-control-regression");
     const auto path = directory / dynsyslab::core::wide(safeName(source.path.stem().u8string()
         + "__control-regression__" + timestamp()) + ".npz");
     const std::string details = "\"source_krom\":\"" + escaped(kromPath)
@@ -247,7 +250,7 @@ bool pooledMethod(const std::string& name) {
     return name == "echo_history_koopman" || name == "history_basis" || name == "history_control_regression"
         || name == "input_map" || name == "bilinear_certificate" || name == "control_target" || name == "derivative_benchmark"
         || name == "mode_selection" || name == "krom_recenter" || name == "krom_readout"
-        || name == "reference_signal" || name == "control_score" || name == "figure_dataset";
+        || name == "reference_signal" || name == "control_score" || name == "figure_dataset" || name == "io_delay_model" || name == "animation";
 }
 // SINDy fits on the rows it is given. "sample_stride" and "time_window" select
 // those rows explicitly so the fit can use the same clock as the H-DMD stage
@@ -334,7 +337,6 @@ std::filesystem::path runSindy(const SourceData& givenSource, const json::Value&
         : (!coordinateName.empty() && catalog.coordinatePresets().count(coordinateName)
             ? catalog.coordinatePreset(coordinateName)
             : catalog.at(coordinateName.empty() ? "state" : coordinateName));
-    const auto trainingCoordinates=coordinates.evaluateRealBatch(source.values,source.samples);
     const auto result = dynsyslab::core::fitKoopmanEigenfunctionsInCoordinates(
         source.values, source.samples, source.dimension, source.time, continuous,
         coordinates, velocities, options);
@@ -344,57 +346,44 @@ std::filesystem::path runSindy(const SourceData& givenSource, const json::Value&
     const bool archiveDerivatives=settings.at("archive_coordinate_derivatives").boolean(false);
     if (archiveDerivatives && (velocities.empty() || !coordinates.hasAnalyticJacobian()))
         throw std::invalid_argument("coordinate derivative evidence requires system_rhs and an analytic coordinate Jacobian");
-    std::vector<double> exponentValues;
-    for (const auto value : result.exponents) exponentValues.push_back(static_cast<double>(value));
-    dynsyslab::core::NpzRecord archive;
-    archive.arrays["eigenvalues"] = dynsyslab::core::NpyArray::fromComplex({discrete.size()}, discrete);
-    archive.arrays["discrete_eigenvalues"] = archive.arrays["eigenvalues"];
-    archive.arrays["continuous_eigenvalues"] = dynsyslab::core::NpyArray::fromComplex({continuous.size()}, continuous);
-    archive.arrays["coefficients"] = dynsyslab::core::NpyArray::fromComplex(
-        {continuous.size(), result.featureCount}, result.coefficients);
-    archive.arrays["polynomial_exponents"] = dynsyslab::core::NpyArray::fromDoubles(
-        {result.featureCount, result.stateDimension}, exponentValues);
-    archive.arrays["state_center"] = dynsyslab::core::NpyArray::fromDoubles({result.stateDimension}, result.center);
-    archive.arrays["state_scale"] = dynsyslab::core::NpyArray::fromDoubles({result.stateDimension}, result.scale);
-    archive.arrays["training_states"] = dynsyslab::core::NpyArray::fromDoubles(
-        {source.samples, source.dimension}, source.values);
-    archive.arrays["training_time"] = dynsyslab::core::NpyArray::fromDoubles(
-        {source.samples}, source.time);
-    archive.arrays["training_coordinates"] = dynsyslab::core::NpyArray::fromDoubles(
-        {source.samples,result.stateDimension},trainingCoordinates);
-    if (archiveDerivatives) {
-        archive.arrays["training_coordinate_velocities"]=dynsyslab::core::NpyArray::fromDoubles(
+    // SINDy publishes data objects only: its eigenfunctions (spectrum + one polynomial expansion,
+    // each eigenfunction's coefficients its own row) and the reconstructions written over them. The
+    // training series is referenced by its origin, never copied.
+    namespace c = dynsyslab::core;
+    c::NpzRecord archive, readouts;
+    c::DataOrigin origin{"sindy", settings, {dataReference(fullSource.path, "time_series")}};
+    origin.inputs.push_back(dataReference(activeSpectrum, "spectrum"));
+    auto fit = c::polynomialEigenfunctionsFromLegacy(result);
+    c::EigenfunctionSamples samples;
+    samples.modes = continuous.size();
+    if (!result.trainingValues.empty()) {
+        samples.values = result.trainingValues;
+        for (std::size_t k = 0; k < source.samples; ++k) {  // rows of the input series, matched by time
+            const auto found = std::lower_bound(fullSource.time.begin(), fullSource.time.end(), source.time[k] - 1e-12);
+            samples.sampleIndices.push_back(std::size_t(found - fullSource.time.begin()));
+            samples.time.push_back(source.time[k]);
+        }
+    }
+    const c::EigenfunctionSet set(c::Spectrum::fromDiscrete(discrete, continuous, dt, origin), samples, origin,
+        {std::make_shared<c::SharedRepresentation>(std::make_shared<const c::FunctionExpansion>(fit.functions))});
+    auto objects = c::writeEigenfunctionSet(archive, set, timeSeriesRecord(fullSource).channels);
+    archive.arrays["sample_interval"] = c::NpyArray::fromDoubles({1}, {dt});
+    archive.arrays["training_residual_rms"] = c::NpyArray::fromDoubles({continuous.size()}, result.residualRms);
+    archive.arrays["training_residual_maximum"] = c::NpyArray::fromDoubles({continuous.size()}, result.residualMaximum);
+    if (archiveDerivatives) {  // requested evidence: the coordinates' exact rates and Jacobians at the samples
+        archive.arrays["training_coordinate_velocities"]=c::NpyArray::fromDoubles(
             {source.samples,result.stateDimension},
             coordinates.pushForwardRealBatch(source.values,velocities,source.samples,
-                dynsyslab::core::ObservableJacobianBackend::analytic));
+                c::ObservableJacobianBackend::analytic));
         std::vector<double> gradients;
         gradients.reserve(source.samples*result.stateDimension*source.dimension);
         for (std::size_t row=0;row<source.samples;++row)
             for (const auto value:coordinates.jacobian(source.values.data()+row*source.dimension,
-                    dynsyslab::core::ObservableJacobianBackend::analytic))
+                    c::ObservableJacobianBackend::analytic))
                 gradients.push_back(value.real());
-        archive.arrays["training_coordinate_jacobians"]=dynsyslab::core::NpyArray::fromDoubles(
+        archive.arrays["training_coordinate_jacobians"]=c::NpyArray::fromDoubles(
             {source.samples,result.stateDimension,source.dimension},gradients);
     }
-    archive.arrays["dynamical_state_dimension"] = dynsyslab::core::NpyArray::fromDoubles(
-        {1},{static_cast<double>(source.dimension)});
-    std::string coordinateList;
-    for (std::size_t index=0;index<result.coordinateObservableNames.size();++index) {
-        if (index) coordinateList.push_back('\n');
-        coordinateList+=result.coordinateObservableNames[index];
-    }
-    if (!result.coordinateObservableDefinition.empty())
-        archive.arrays["coordinate_observable_json"]=dynsyslab::core::NpyArray::fromString(
-            result.coordinateObservableDefinition);
-    archive.arrays["coordinate_observable_names"] =
-        dynsyslab::core::NpyArray::fromString(coordinateList);
-    archive.arrays["training_residual_rms"] = dynsyslab::core::NpyArray::fromDoubles(
-        {continuous.size()}, result.residualRms);
-    archive.arrays["training_residual_maximum"] = dynsyslab::core::NpyArray::fromDoubles(
-        {continuous.size()}, result.residualMaximum);
-    if (!result.trainingValues.empty())
-        archive.arrays["eigenfunction_values"] = dynsyslab::core::NpyArray::fromComplex(
-            {source.samples, continuous.size()}, result.trainingValues);
     dynsyslab::core::KoopmanModel fittedModel(result,systemConfiguration(source));
     std::vector<std::string> reconstructionNames;
     for (const auto& value : settings.at("reconstruction_observables").array())
@@ -411,17 +400,17 @@ std::filesystem::path runSindy(const SourceData& givenSource, const json::Value&
         const auto projection=dynsyslab::core::fitObservableReconstruction(
             fittedModel,source.values,source.samples,catalog.at(name),
             settings.at("reconstruction_ridge").number(0.0));
-        archive.arrays["reconstruction__"+safeArrayKey(name)]=
+        readouts.arrays["reconstruction__"+safeArrayKey(name)]=
             dynsyslab::core::NpyArray::fromComplex(
                 {projection.outputs,projection.modes},projection.matrix);
         if (!encodedReconstructions.empty()) encodedReconstructions.push_back('\n');
         encodedReconstructions+=name;
     }
-    archive.arrays["reconstruction_names"]=
-        dynsyslab::core::NpyArray::fromString(encodedReconstructions);
+    if (!encodedReconstructions.empty())
+        readouts.arrays["reconstruction_names"]=dynsyslab::core::NpyArray::fromString(encodedReconstructions);
     const std::string gamma = velocities.empty() ? "finite_difference" : "system_rhs";
     const std::vector<double> multipliers(result.stateDimension, 1.0);
-    archive.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(metadata(source,
+    auto sindyMeta = json::parse(metadata(source,
         "koopman-with-sindy", label, "\"eigenvalue_domain\":\"discrete-time\","
         "\"generator_eigenvalue_domain\":\"continuous-time\",\"generator_conversion\":"
         "\"lambda=log(mu)/delta_t\",\"delta_t\":" + std::to_string(dt)
@@ -443,7 +432,18 @@ std::filesystem::path runSindy(const SourceData& givenSource, const json::Value&
         "\"coordinate_gradient_backend\":\"" + (coordinates.hasAnalyticJacobian()?"analytic":"finite-difference") + "\","
         "\"analytic_gradient_available\":" + (coordinates.hasAnalyticJacobian()?"true":"false") + ",\"direct_eigenvalue_fits\":"
         + std::to_string(result.directFits)));
-    return publish(root, source, "koopman-with-sindy", label, std::move(archive));
+    sindyMeta.object()["eigenfunction_objects"] = std::move(objects);
+    sindyMeta.object()["object_properties"] = json::Value::Object{
+        {"per_eigenfunction", json::Value::Array{"training_residual_rms", "training_residual_maximum"}}};
+    archive.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(json::dump(sindyMeta));
+    const auto eigenfunctions = publish(root, source, "sindy-eigenfunctions", label, std::move(archive));
+    if (readouts.contains("reconstruction_names")) {
+        auto readoutMeta = json::parse(metadata(source, "sindy-reconstructions", label, ""));
+        readoutMeta.object()["reconstructions"] = c::reconstructionsBlock(eigenfunctions, continuous.size());
+        readouts.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(readoutMeta));
+        registerAdditionalObject(publish(root, source, "reconstructions", label, std::move(readouts)));
+    }
+    return eigenfunctions;
 }
 
 }  // namespace postprocess_detail
@@ -457,6 +457,16 @@ std::wstring PostprocessResult::summary() const {
     for (const auto& path : archives) out << L"\r\n" << path.wstring();
     return out.str();
 }
+
+namespace {
+// A step's objects, primary first, each with its data-object envelope.
+void addStepObjects(PostprocessResult& result, const std::filesystem::path& primary, const std::string& method) {
+    for (const auto& path : postprocess_detail::collectStepObjects(primary, method)) {
+        result.archives.push_back(path);
+        result.methods.push_back(method);
+    }
+}
+}  // namespace
 
 PostprocessResult executePostprocess(const json::Value& submitted,
     const std::filesystem::path& archiveRoot, const std::filesystem::path& progressPath,
@@ -486,6 +496,7 @@ PostprocessResult executePostprocess(const json::Value& submitted,
         for (const auto& path : sources) requireTrainingDataRole(name, path, stage->at("settings"));
         const std::string label = job.at("label").string("native-postprocess")
             + " / " + name;
+        const StageScope scope(name, stage->at("settings"));
         const auto output = name=="history_basis"?runHistoryBasis(sources,stage->at("settings"),archiveRoot,label):
             name=="history_control_regression"?runHistoryControlRegression(sources,stage->at("settings"),archiveRoot,label):
             name=="input_map"?runInputMap(sources,stage->at("settings"),archiveRoot,label):
@@ -498,9 +509,10 @@ PostprocessResult executePostprocess(const json::Value& submitted,
             name=="reference_signal"?runReferenceSignal(sources,stage->at("settings"),archiveRoot,label):
             name=="control_score"?runControlScore(sources,stage->at("settings"),archiveRoot,label):
             name=="figure_dataset"?runFigureDataset(sources,stage->at("settings"),archiveRoot,label):
+            name=="animation"?runAnimation(sources,stage->at("settings"),archiveRoot,label):
+            name=="io_delay_model"?runIoDelayModel(sources,stage->at("settings"),archiveRoot,label):
             runEchoHistoryKoopman(sources, stage->at("settings"), archiveRoot, label);
-        result.archives.push_back(output);
-        result.methods.push_back(name);
+        addStepObjects(result, output, name);
         ++complete;
         atomicProgress(progressPath, static_cast<double>(complete) / planned,
             complete, planned, "Completed "+name);
@@ -536,10 +548,14 @@ PostprocessResult executePostprocess(const json::Value& submitted,
             requireTrainingDataRole(method, previous ? precedingCoordinates : sourcePath, settings);
         }
         const std::string label = job.at("label").string("native-postprocess") + " / " + method;
+        const StageScope scope(method, settings);
         std::filesystem::path output;
-        if (method == "linear_analysis" || method == "linear_systems" || method == "controllability" || method == "observable_reconstruction" || method == "krom_extract" || method == "dmdc" || method == "edmdc" || method=="history_projection"
+        if (method == "linear_analysis" || method == "linear_systems" || method == "controllability" || method == "observable_reconstruction" || method == "krom_extract" || method == "dmdc" || method == "edmdc" || method=="history_projection" || method=="eigenfunction_expansion" || method=="eigenfunction_errors" || method=="domain_field"
             || method=="klqe" || method=="observability" || method=="empirical_observability") {
             if(method=="history_projection")output=runHistoryProjection(sourcePath,settings,archiveRoot,label);
+            else if(method=="eigenfunction_expansion")output=runEigenfunctionExpansion(sourcePath,settings,archiveRoot,label);
+            else if(method=="domain_field")output=runDomainField(sourcePath,settings,archiveRoot,label);
+            else if(method=="eigenfunction_errors")output=runEigenfunctionErrors(sourcePath,settings,archiveRoot,label);
             else if(method=="linear_analysis"||method=="controllability")output=runLinearAnalysis(sourcePath,settings,archiveRoot,label);
             else if(method=="linear_systems")output=runLinearSystems(sourcePath,settings,archiveRoot,label);
             else if(method=="empirical_observability")output=runEmpiricalObservability(sourcePath,settings,archiveRoot,label);
@@ -548,7 +564,7 @@ PostprocessResult executePostprocess(const json::Value& submitted,
             else output = method != "krom_extract"
                 ? runDmdControl(sourcePath, settings, archiveRoot, label, method == "edmdc")
                 : runKromExtraction(sourcePath, settings, archiveRoot, label);
-            result.archives.push_back(output); result.methods.push_back(method); ++complete;
+            addStepObjects(result, output, method); ++complete;
             atomicProgress(progressPath, static_cast<double>(complete) / planned, complete, planned,
                            "Completed " + method);
             if (execution) execution->report({"postprocess", "Completed " + method,
@@ -560,16 +576,12 @@ PostprocessResult executePostprocess(const json::Value& submitted,
             if(previous&&precedingCoordinates.empty())
                 throw std::invalid_argument("No preceding coordinate dataset to consume");
             const auto path=previous?precedingCoordinates:sourcePath;
-            const bool measuredIntegral=method=="coordinate_transform" && settings.at("kind").string()=="window_integral"
-                && settings.at("observable").isNull() && settings.at("definition").isNull();
-            const auto input=measuredIntegral
-                ? loadObservationSource(path,settings.at("measurement_array").string("values"))
-                : loadSource(path);
+            const auto input=method=="coordinate_transform"?loadCoordinateInput(path,settings):loadSource(path);
             output=method=="coordinate_transform"?runCoordinateTransform(input,settings,archiveRoot,label):
                 method=="dynamics_validation"?runDynamicsValidation(input,settings,archiveRoot,label):
                 runSindyDynamics(input,settings,archiveRoot,label);
             if(method=="coordinate_transform")precedingCoordinates=output;
-            result.archives.push_back(output);result.methods.push_back(method);++complete;
+            addStepObjects(result, output, method);++complete;
             atomicProgress(progressPath,double(complete)/planned,complete,planned,"Completed "+method);
             if(execution)execution->report({"postprocess","Completed "+method,double(complete)/planned,complete,planned});
             continue;
@@ -608,9 +620,10 @@ PostprocessResult executePostprocess(const json::Value& submitted,
         else if (method == "edmd" || method == "havok")
             output = runDecompositionPostprocess(
                 method, source.path, settings, archiveRoot, label);
+        else if (method == "hankel_pod" || method == "hankel_svd")
+            output = runHankelSvd(method, source, settings, archiveRoot, label);
         else if (method == "svd" || method == "pca" || method == "pod"
-                 || method == "bagged_pca" || method == "robust_pca"
-                 || method == "hankel_pod" || method == "hankel_svd")
+                 || method == "bagged_pca" || method == "robust_pca")
             output = runPcaPostprocess(method, source, settings, archiveRoot, label);
         else {
             const std::string extension = stage->at("extension").string();
@@ -620,10 +633,10 @@ PostprocessResult executePostprocess(const json::Value& submitted,
             output = runExtensionPostprocess(
                 source, settings, archiveRoot, label, method, extension);
         }
-        result.archives.push_back(output);
+        addStepObjects(result, output, method);
         if (method == "dmd" || method == "hdmd" || method == "hankel_dmd"
             || method == "eigenvalue_optimization") precedingSpectrum = output;
-        result.methods.push_back(method); ++complete;
+        ++complete;
         atomicProgress(progressPath, static_cast<double>(complete) / planned, complete, planned,
                        "Completed " + method);
         if (execution) execution->report({"postprocess", "Completed " + method,

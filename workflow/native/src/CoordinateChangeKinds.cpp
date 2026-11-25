@@ -1,4 +1,5 @@
 #include "CoordinateChangeKinds.hpp"
+#include "ObjectPublishing.hpp"
 #include "CoordinateChannels.hpp"
 #include "KromDatasetSupport.hpp"
 #include "ObservationSource.hpp"
@@ -185,7 +186,7 @@ FittedHistory fitHistoryCoordinates(const SourceData& source, const J& settings,
     auto meta = json::parse(metadata(first, "history-transform", label, ""));
     meta.object()["dataset_references"] = c::koopmanDatasetReferencesJson(references);
     meta.object()["history_decimation"] = double(stride);
-    const auto directory = root / L"derived" / L"coordinate-transform";
+    const auto directory = objectFolder(root, "coordinate-transform");
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(source.path.stem().u8string() + "__history-transform__" + timestamp()) + ".npz");
     c::saveFrozenHistoryTransform(path, transform, json::dump(meta));

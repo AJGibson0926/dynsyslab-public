@@ -5,6 +5,7 @@
     "pipelines/rpe-coordinate-dynamics/study.json",
     "pipelines/rpe-echo-jet-klqr-rediscovery/20kpa.json",
     "pipelines/rpe-klqe/echo-to-state.json",
+    "pipelines/rpe-viscous-klqr-multisine/base-r-eigenfunction-views.json",
     "pipelines/rpe-viscous-klqr-multisine/base-r.json",
     "pipelines/rpe-viscous-klqr-multisine/echo-jet.json",
     "pipelines/rpe-viscous-klqr-multisine/xi4-history-exact.json",

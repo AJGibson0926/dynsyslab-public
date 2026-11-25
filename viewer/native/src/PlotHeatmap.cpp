@@ -8,6 +8,7 @@ namespace dsl {
 namespace {
 std::pair<double,double> colorRange(const Trace& trace, const ValueScale& scale = {}) {
     if (trace.encoding == "domain-color") return {-3.141592653589793,3.141592653589793};
+    if (trace.colorLimits && trace.colorLimits->second > trace.colorLimits->first) return *trace.colorLimits;
     double low = std::numeric_limits<double>::infinity(), high = -low;
     for (const auto value : trace.z) if (std::isfinite(value)) {
         low = std::min(low,value); high = std::max(high,value);
@@ -45,7 +46,7 @@ void drawScalarHeatmap(Gdiplus::Graphics& graphics, const Trace& trace, const Pl
 }
 void drawScalarColorbar(Gdiplus::Graphics& graphics, const Figure& figure,
     const Gdiplus::RectF& plot, const theme::Fonts& fonts) {
-    if (figure.traces.empty() || (figure.kind != "observable_heatmap" && figure.kind != "krom_heatmap"
+    if (figure.traces.empty() || (figure.kind != "observable_heatmap" && figure.kind != "krom_heatmap" && figure.kind != "domain_field"
         && figure.traces.front().encoding != "domain-color")) return;
     const bool domain = figure.traces.front().encoding == "domain-color";
     const auto [low,high] = colorRange(figure.traces.front(),resolveValueScale(figure));

@@ -85,9 +85,9 @@ Gdiplus::RectF plotArea(const Figure& figure, const Gdiplus::RectF& card, const 
     const bool redundantTitle = figure.title == "Phase space" ||
         figure.title == "Control history" ||
         (figure.kind == "time" && figure.title.find(" versus time") != std::string::npos);
-    const float top = (figure.kind == "observable_heatmap" || figure.kind == "krom_heatmap" || figure.kind == "krom_time" && !figure.colorLabel.empty()) ? 70.0f : !figure.colorLabel.empty() ? 36.0f : (redundantTitle ? 10.0f : 44.0f);
+    const float top = (figure.kind == "observable_heatmap" || figure.kind == "krom_heatmap" || figure.kind == "domain_field" || figure.kind == "krom_time" && !figure.colorLabel.empty()) ? 70.0f : !figure.colorLabel.empty() ? 36.0f : (redundantTitle ? 10.0f : 44.0f);
     Gdiplus::RectF plot(card.X + 90*scale, card.Y + top*scale,
-        std::max(1.0f, card.Width - 130*scale), std::max(1.0f, card.Height - (top+62)*scale));
+        std::max(1.0f, card.Width - (figure.rightAxis ? 192 : 130)*scale), std::max(1.0f, card.Height - (top+62)*scale));
     return figure.square && figure.kind != "phase" ? squareInside(plot) : plot;
 }
 
@@ -151,7 +151,16 @@ void grid(Gdiplus::Graphics& graphics, const Gdiplus::RectF& area,
         swprintf_s(label, L"%.3g", y / std::pow(10., yExponent));
         drawMathText(graphics, label, {area.X - 64*scale, area.Y + fraction * area.Height - 10*scale,
             58*scale, 20*scale}, fonts.body, theme::plotMuted, Gdiplus::StringAlignmentFar);
+        if (figure.rightAxis) {
+            wchar_t right[40]{};
+            swprintf_s(right, L"%.3g", (y - figure.rightAxis->offset) / figure.rightAxis->scale);
+            drawMathText(graphics, right, {area.GetRight() + 6*scale, area.Y + fraction * area.Height - 10*scale,
+                62*scale, 20*scale}, fonts.body, theme::plotMuted, Gdiplus::StringAlignmentNear);
+        }
     }
+    if (figure.rightAxis)
+        drawVerticalText(graphics, wide(scientificMathLabel(figure.rightAxis->label)),
+            {area.GetRight() + 68*scale, area.Y, 32*scale, area.Height}, fonts.body, theme::plotMuted);
     drawMathText(graphics, axisLabel(figure.xLabel, xExponent), {area.X, area.GetBottom() + 23*scale,
         area.Width, 34*scale}, fonts.body, theme::plotMuted, Gdiplus::StringAlignmentCenter);
     drawVerticalText(graphics, axisLabel(figure.yLabel + (valueScale.kind == ValueScaleKind::linear ? "" : " [" + valueScale.name() + "]"), yExponent), {area.X - 89*scale, area.Y,
@@ -444,7 +453,7 @@ void figureCard(Gdiplus::Graphics& graphics, const Figure& figure,
             const bool coloredPhase = figure.kind == "phase" && trace.encoding == "time";
             const int layer = trace.role.rfind("phase_",0)==0 ? 0 : coloredPhase ? 2 : 1;
             if (layer != pass) continue;
-            if (trace.heatmap && (figure.kind == "observable_heatmap" || figure.kind == "krom_heatmap")) drawScalarHeatmap(graphics,trace,transform,resolveValueScale(figure));
+            if (trace.heatmap && (figure.kind == "observable_heatmap" || figure.kind == "krom_heatmap" || figure.kind == "domain_field")) drawScalarHeatmap(graphics,trace,transform,resolveValueScale(figure));
             else if (trace.heatmap) heatmap(graphics, trace, transform, automaticAxisLimits(figure));
             else drawPlotSeries(graphics, trace, index, transform, trajectoryTimeRange(figure));
         }

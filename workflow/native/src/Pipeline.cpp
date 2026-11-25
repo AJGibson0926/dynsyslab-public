@@ -1,3 +1,6 @@
+#include <dynsyslab/core/LongPath.hpp>
+#include <dynsyslab/core/DataObject.hpp>
+#include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/workflow/Pipeline.hpp>
 #include <dynsyslab/core/OutputPath.hpp>
 
@@ -247,10 +250,12 @@ json::Value expandDepth(const json::Value& job, std::size_t depth) {
     return result;
 }
 
-// ${id.archive} | ${id.archives[N]} | ${id.output:METHOD} | ${id.manifest}
+// ${id.archive} | ${id.archives[N]} | ${id.output:METHOD} | ${id.object:KIND} | ${id.manifest}
+// A method may publish several data objects; its first is its primary output, which ${id.archive}
+// and ${id.output:METHOD} name. ${id.object:KIND} names the one object of that kind.
 const std::regex& referencePattern() {
     static const std::regex pattern(
-        R"(\$\{([A-Za-z][A-Za-z0-9_-]*)\.(archive|manifest|archives\[([0-9]+)\]|output:([A-Za-z0-9_]+))\})");
+        R"(\$\{([A-Za-z][A-Za-z0-9_-]*)\.(archive|manifest|archives\[([0-9]+)\]|output:([A-Za-z0-9_]+)|object:([A-Za-z0-9_]+))\})");
     return pattern;
 }
 
@@ -274,9 +279,10 @@ std::string resolveOne(const std::smatch& match, const std::map<std::string, Sta
         // A method that reads observables gets an automatic coordinate change first; that
         // intermediate archive is not the stage's result, so ${id.archive} names the one other.
         if (run.archives.size() > 1 && run.methods.size() == run.archives.size()) {
-            std::vector<std::filesystem::path> results;
+            std::vector<std::filesystem::path> results;  // each method's primary object
             for (std::size_t k = 0; k < run.archives.size(); ++k)
-                if (run.methods[k] != "coordinate_transform") results.push_back(run.archives[k]);
+                if (run.methods[k] != "coordinate_transform" && (k == 0 || run.methods[k] != run.methods[k - 1]))
+                    results.push_back(run.archives[k]);
             if (results.size() == 1) return text(results.front());
         }
         if (run.archives.size() != 1)
@@ -290,10 +296,22 @@ std::string resolveOne(const std::smatch& match, const std::map<std::string, Sta
             throw std::invalid_argument("stage '" + id + "' has no archive " + match[3].str());
         return text(run.archives[index]);
     }
+    if (match[5].matched) {
+        const auto kind = match[5].str();
+        std::vector<std::filesystem::path> objects;
+        for (const auto& path : run.archives)
+            if (dynsyslab::core::dataObjectKind(dynsyslab::core::readNpzIndex(path).metadataJson) == kind)
+                objects.push_back(path);
+        if (objects.size() != 1)
+            throw std::invalid_argument("stage '" + id + "' produced " + std::to_string(objects.size())
+                + " objects of kind " + kind);
+        return text(objects.front());
+    }
     const auto method = match[4].str();
     std::vector<std::filesystem::path> matches;
     for (std::size_t k = 0; k < run.methods.size() && k < run.archives.size(); ++k)
-        if (run.methods[k] == method) matches.push_back(run.archives[k]);
+        if (run.methods[k] == method && (k == 0 || run.methods[k - 1] != method))  // its primary object
+            matches.push_back(run.archives[k]);
     if (matches.size() != 1)
         throw std::invalid_argument("stage '" + id + "' produced " + std::to_string(matches.size())
             + " archives for method " + method);
@@ -343,7 +361,7 @@ RunResult archiveStage(const json::Value& job) {
     RunResult run{"archive", L"Existing archives", {}, {}, {}};
     for (const auto& item : job.at("archives").array()) {
         const auto path = std::filesystem::u8path(item.string());
-        if (!std::filesystem::is_regular_file(path))
+        if (!std::filesystem::is_regular_file(dynsyslab::core::extendedLengthPath(path)))
             throw std::invalid_argument("archive stage names a missing file: " + item.string());
         run.archives.push_back(path);
         run.methods.push_back("archive");
@@ -389,7 +407,7 @@ std::optional<RunResult> reusableStage(const std::filesystem::path& archiveRoot,
             bool present = true;
             for (const auto& item : stage.at("archives").array()) {
                 run.archives.push_back(std::filesystem::u8path(item.string()));
-                present = present && std::filesystem::is_regular_file(run.archives.back());
+                present = present && std::filesystem::is_regular_file(dynsyslab::core::extendedLengthPath(run.archives.back()));
             }
             for (const auto& item : stage.at("methods").array()) run.methods.push_back(item.string());
             run.manifest = std::filesystem::u8path(stage.at("manifest").string());

@@ -1,7 +1,9 @@
 #include "dynsyslab_viewer/KromWorkspace.hpp"
 #include "dynsyslab_viewer/NativePayload.hpp"
 #include "dynsyslab_viewer/PlotPresentation.hpp"
+#include "ComplexHeatmap.hpp"
 #include "KromTraining.hpp"
+#include <dynsyslab/core/DomainGrid.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <algorithm>
 #include <cmath>
@@ -57,17 +59,15 @@ void coordinates(Figure& f, const KromTraining& training, bool map, bool fixed =
     axes.colorLabel = f.colorLabel; f.alternateCoordinates = axes;
 }
 double component(std::complex<double> value, const std::string& display, unsigned part) {
-    return display == "real-imaginary" ? (part ? value.imag() : value.real()) :
-        (part ? std::arg(value) : std::abs(value));
+    return complexComponent(value, display, part);
 }
 std::string componentLabel(const std::string& psi, const std::string& display, unsigned part) {
-    if (display == "real-imaginary") return std::string(part ? "Im(" : "Re(") + psi + ")";
-    return part ? "arg(" + psi + ") (rad)" : "|" + psi + "|";
+    return complexComponentLabel(psi, display, part);
 }
 }
 Payload buildKromWorkspace(const std::filesystem::path& source, const KromWorkspaceOptions& options) {
     const auto& display = options.complexDisplay;
-    if (display != "real-imaginary" && display != "magnitude-phase" && display != "domain-coloring")
+    if (!validComplexDisplay(display))
         throw std::invalid_argument("complex-display must be real-imaginary, magnitude-phase, or domain-coloring");
     const auto archive = dynsyslab::core::readNpz(source);
     const auto metadata = json::parse(archive.metadataJson());
@@ -137,20 +137,19 @@ Payload buildKromWorkspace(const std::filesystem::path& source, const KromWorksp
                 source,"phase",record,training.metadata).figures.front();
             bounds = automaticAxisLimits(phase);
         }
-        constexpr int n = 101;
-        for (int i = 0; i < n; ++i) {
-            x.push_back(bounds.xMin+(bounds.xMax-bounds.xMin)*i/(n-1));
-            y.push_back(bounds.yMin+(bounds.yMax-bounds.yMin)*i/(n-1));
-        }
-        std::size_t invalid = 0;
-        for (const auto yi : y) for (const auto xi : x) {
-            const double point[] = {xi,yi};
-            std::vector<std::complex<double>> v;
-            try { v = selected.requiresExternalCoordinates()
-                ? selected.evaluateCoordinates(point) : selected.evaluate(point); }
-            catch (const std::exception&) { const auto nan = std::numeric_limits<double>::quiet_NaN(); v.assign(modes.size(),{nan,nan}); ++invalid; }
-            for (std::size_t i = 0; i < modes.size(); ++i) grid[i].push_back(v[i]);
-        }
+        // The plotted domain: the physical state, or the K-ROM's own coordinates q when they
+        // cannot be computed from the state.
+        const auto external = selected.requiresExternalCoordinates();
+        auto domainGrid = dynsyslab::core::DomainGrid::box(
+            external ? dynsyslab::core::FunctionDomain::supplied(2) : dynsyslab::core::FunctionDomain::physicalState(2),
+            {bounds.xMin,bounds.yMin},{bounds.xMax,bounds.yMax},101);
+        const auto field = dynsyslab::core::evaluateOnGrid([&](const double* point) {
+            return external ? selected.evaluateCoordinates(point) : selected.evaluate(point);
+        },modes.size(),domainGrid);
+        x = field.grid.axisValues(0); y = field.grid.axisValues(1);
+        for (std::size_t k = 0; k < field.grid.size(); ++k)
+            for (std::size_t i = 0; i < modes.size(); ++i) grid[i].push_back(field.value(k,i));
+        const auto invalid = field.count(dynsyslab::core::GridStatus::undefined);
         if (invalid) result.warnings.push_back(std::to_string(invalid)+" grid points could not be evaluated and are left blank.");
     } else result.warnings.push_back("Phase-space heat maps require a two-state system; training time series are shown.");
     std::vector<double> magnitudeScale(modes.size(),0);

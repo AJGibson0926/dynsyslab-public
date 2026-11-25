@@ -1,3 +1,5 @@
+#include "../src/AnimationPlayer.hpp"
+#include <iterator>
 #include "dynsyslab_viewer/ViewerSession.hpp"
 #include "dynsyslab_viewer/TimeSeriesOverlay.hpp"
 #include "dynsyslab_viewer/RuntimePaths.hpp"
@@ -44,12 +46,13 @@ Options parse(int argc,wchar_t** argv) {
     const std::set<std::wstring> keys{L"--project",L"--archives",L"--cache",L"--catalog",L"--focus",
         L"--id",L"--source",L"--view",L"--coordinates",L"--search",L"--parent",L"--output",
         L"--mode",L"--options",L"--width",L"--height",L"--page",L"--figure",L"--workspace",L"--modes",L"--complex-display",L"--scale",L"--scroll-y",L"--benchmark-scroll",
-        L"--panel",L"--start",L"--stop",L"--title",L"--x-range",L"--y-range"};
+        L"--panel",L"--start",L"--stop",L"--title",L"--x-range",L"--y-range",L"--every"};
     Options result;
     const bool series=std::wstring(argv[1])==L"time-series";
     const std::set<std::wstring> seriesKeys{L"--source",L"--output",L"--width",L"--height",L"--page",
         L"--title",L"--time-key",L"--time-label",L"--start",L"--stop",L"--columns",L"--value-label",L"--font-scale",L"--x-label",
-        L"--frequency-scale",L"--scale",L"--x-range",L"--y-range",L"--stem-baseline"};
+        L"--frequency-scale",L"--scale",L"--x-range",L"--y-range",L"--stem-baseline",
+        L"--right-axis-label",L"--right-axis-scale",L"--right-axis-offset"};
     for (int i = 2; i < argc; ++i) {
         const std::wstring key = argv[i];
         if (series && key==L"--line-width") {
@@ -67,8 +70,8 @@ Options parse(int argc,wchar_t** argv) {
                 throw std::runtime_error("Use --line-style after a --curve");
             const auto style=dsl::narrow(argv[i]);
             if (style!="solid" && style!="dash" && style!="time-dash" && style!="sparse-dash"
-                && style!="dot" && style!="dash-dot" && style!="stem")
-                throw std::runtime_error("Expected solid, dash, time-dash, sparse-dash, dot, dash-dot, or stem");
+                && style!="dot" && style!="dash-dot" && style!="stem" && style!="markers" && style!="open-markers")
+                throw std::runtime_error("Expected solid, dash, time-dash, sparse-dash, dot, dash-dot, stem, markers, or open-markers");
             result.overlay.curves.back().lineStyle=style;
             continue;
         }
@@ -133,6 +136,8 @@ void viewerSessionUsage() {
         << "         [--start t --stop t] [--coordinates dimensional|dimensionless] [--scale auto|linear|log|symlog]\n"
         << "         [--compare-source path | --compare-id id ...] [--label text ...] [--color #RRGGBB ...]\n"
         << "         [--title text] [--x-range low:high] [--y-range low:high] [--width 1100 --height 760] [--page 0 | --figure 0]\n"
+        << "  animate (--id id | --source path) --output player.html [--view route] [--every n] [--width 1100 --height 620]\n"
+        << "         every page (animation frame) in one self-contained HTML player with play/pause/step/stop\n"
         << "  inspect: same selection as render, JSON instead of PNG [--samples]\n"
         << "      Views: time, phase, fourier, control_fourier, estimator, ... or a label from panels.\n"
         << "      --start/--stop: archive clock units; windows every route (spectra too).\n"
@@ -186,6 +191,19 @@ int viewerSessionCommand(int argc,wchar_t** argv) {
                 request.stemBaseline=std::stod(text,&used);
                 if (used!=text.size() || !std::isfinite(*request.stemBaseline)) throw std::invalid_argument("Invalid stem baseline: "+dsl::narrow(text));
             }
+            if (args.values.count(L"--right-axis-label")) {
+                dsl::Figure::RightAxis axis; axis.label=args.text(L"--right-axis-label");
+                const auto parsed=[&](const wchar_t* key,double fallback) {
+                    if (!args.values.count(key)) return fallback;
+                    const auto text=args.get(key); std::size_t used=0; const double value=std::stod(text,&used);
+                    if (used!=text.size() || !std::isfinite(value)) throw std::invalid_argument("Invalid right-axis value: "+dsl::narrow(text));
+                    return value;
+                };
+                axis.scale=parsed(L"--right-axis-scale",1.0); axis.offset=parsed(L"--right-axis-offset",0.0);
+                if (axis.scale==0.0) throw std::invalid_argument("--right-axis-scale must be nonzero");
+                request.rightAxis=axis;
+            } else if (args.values.count(L"--right-axis-scale") || args.values.count(L"--right-axis-offset"))
+                throw std::runtime_error("--right-axis-scale and --right-axis-offset require --right-axis-label");
             request.logBaseline=args.values.count(L"--scale") && args.text(L"--scale")=="log";
             dsl::PlotRenderOptions options;
             options.width=args.number(L"--width",1100); options.height=args.number(L"--height",760);
@@ -273,7 +291,37 @@ int viewerSessionCommand(int argc,wchar_t** argv) {
                         figure.title = payload.figures.size() == 1 ? args.text(L"--title")
                                                                      : args.text(L"--title") + " | " + figure.title;
                 if (args.values.count(L"--scale")) dsl::setValueScale(payload,args.text(L"--scale"));
-                if (command == L"render") {
+                if (command == L"animate") {
+                    // Every page (frame) rendered by the Viewer canvas into one HTML player.
+                    const auto output = args.get(L"--output");
+                    if (output.empty()) throw std::runtime_error("animate requires --output player.html");
+                    const auto path = dynsyslab::core::prepareOutputFile(output,"--output");
+                    dsl::PlotRenderOptions options;
+                    options.width = args.number(L"--width",1100); options.height = args.number(L"--height",620);
+                    options.toolbar = false;
+                    const int every = std::max(1,static_cast<int>(args.number(L"--every",1)));
+                    const auto frameFile = path.parent_path() / (path.stem().wstring() + L".frame.png");
+                    std::vector<dsl::AnimationPlayerFrame> frames;
+                    int pages = 1;
+                    for (int page = 0; page < pages; page += every) {
+                        options.page = page;
+                        const auto rendered = dsl::renderPlotPng(payload, frameFile, options);
+                        pages = static_cast<int>(rendered.at("page_count").number(1));
+                        std::ifstream png(frameFile, std::ios::binary);
+                        std::string bytes((std::istreambuf_iterator<char>(png)), std::istreambuf_iterator<char>());
+                        frames.push_back({std::move(bytes),
+                            page < static_cast<int>(payload.pageLabels.size()) ? payload.pageLabels[page] : std::string()});
+                    }
+                    std::filesystem::remove(frameFile);
+                    const auto animation = payload.animation.value_or(dsl::Payload::Animation{});
+                    std::ofstream html(path, std::ios::binary);
+                    html << dsl::animationPlayerHtml(payload.tileName.empty() ? "Animation" : payload.tileName, frames,
+                                                     animation.frameSeconds * every, animation.loop, animation.autoplay);
+                    if (!html) throw std::runtime_error("Unable to write the animation player");
+                    result = dsl::json::Value::Object{{"schema","dynsyslab.viewer.animation-player/v1"},
+                        {"output",path.u8string()},{"frames",static_cast<double>(frames.size())},
+                        {"page_count",static_cast<double>(pages)},{"frame_seconds",animation.frameSeconds * every}};
+                } else if (command == L"render") {
                     if (args.get(L"--output").empty()) throw std::runtime_error("render requires --output plot.png");
                     dsl::PlotRenderOptions options;
                     options.width = args.number(L"--width",1100); options.height = args.number(L"--height",760);
@@ -295,7 +343,7 @@ int viewerSessionCommand(int argc,wchar_t** argv) {
             }
         }
         const auto encoded = dsl::json::dump(result);
-        if (command != L"render" && !args.get(L"--output").empty()) {
+        if (command != L"render" && command != L"animate" && !args.get(L"--output").empty()) {
             std::ofstream output(dynsyslab::core::prepareOutputFile(args.get(L"--output"),"--output"),std::ios::binary);
             output << encoded << '\n';
             if (!output) throw std::runtime_error("Unable to write JSON output");

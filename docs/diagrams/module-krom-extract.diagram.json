@@ -1,0 +1,44 @@
+{
+ "schema": "dynsyslab.architecture-diagram/v1",
+ "title": "Module: K-ROM extraction (postprocess method krom_extract)",
+ "description": "Inside workflow/native/src/KromPostprocess.cpp and loadKoopmanModel (native/src/KoopmanArchive.cpp). Settings are those of the echo jobs s06 and s18. Red cards are audit findings.",
+ "root": {
+  "id": "page", "kind": "group", "layout": "row", "gap": 70,
+  "children": [
+   {"id": "pools", "kind": "group", "layout": "column", "gap": 40,
+    "children": [
+     {"id": "sindy-pool", "kind": "data", "label": "SINDy archive", "icon": "archive",
+      "notes": ["polynomial ψ_j(q) for all λ_j"]},
+     {"id": "hdmd-pool", "kind": "data", "label": "H-DMD archive (alternative)", "icon": "archive",
+      "notes": ["ψ_j on training windows"]}
+    ]},
+   {"id": "extract", "kind": "module", "label": "krom_extract", "icon": "krom", "layout": "row", "gap": 60,
+    "children": [
+     {"id": "load", "kind": "module", "label": "Load candidate pool", "icon": "monitor",
+      "notes": ["loadKoopmanModel(parent)", "coefficients → polynomial ψ(q)", "else → 8-neighbour interpolant",
+                "   on training_states, or on", "   training_coordinates if bound"]},
+     {"id": "select", "kind": "module", "label": "Select modes", "icon": "spectrum",
+      "notes": ["rule: oscillatory_pairs", "count: 1 pair", "order: parent's stored order",
+                "other rules: selected_modes, leading,", "  observable_energy, max_real_part"],
+      "flags": ["picks the first oscillatory pair in", "H-DMD energy order; the SINDy pass", "does not change the choice"]},
+     {"id": "reduce", "kind": "module", "label": "Extract and refit", "icon": "heatmap",
+      "notes": ["keep ψ_j, λ_j of chosen modes", "refit_reconstructions: optional C", "lattice check: report only",
+                "copy training arrays from parent"]}
+    ]},
+   {"id": "output", "kind": "data", "label": "K-ROM archive", "icon": "krom",
+    "notes": ["continuous_eigenvalues (one pair)", "coefficients or training values", "source_mode_indices",
+              "training_states, training_coordinates"],
+    "flags": ["no B_ψ yet: Λ and ψ only"]},
+   {"id": "next", "kind": "module", "label": "input_map (next module)", "icon": "matrix",
+    "notes": ["regresses B_ψ from forced runs"]}
+  ]
+ },
+ "edges": [
+  {"from": "sindy-pool", "to": "extract"},
+  {"from": "hdmd-pool", "to": "extract", "style": "dashed"},
+  {"from": "load", "to": "select"},
+  {"from": "select", "to": "reduce"},
+  {"from": "extract", "to": "output"},
+  {"from": "output", "to": "next"}
+ ]
+}

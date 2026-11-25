@@ -40,7 +40,7 @@ int main(){
             "boundary regression did not recover exact modal dynamics");
         core::SystemConfiguration system;
         system.identifier="duffing";system.preset="double_well_reference";
-        core::KoopmanModel model(fit.eigenfunctions,std::move(system));
+        core::KoopmanModel model(fit.eigenfunctions,core::Spectrum::fromContinuousRates(fit.continuousEigenvalues),std::move(system));
         model.setReconstruction("x",fit.observableReconstruction);
         const auto reconstructed=model.reconstruct("x",ensemble.states.data());
         require(std::abs(reconstructed[0].real()-ensemble.states[0])<1.0e-11,

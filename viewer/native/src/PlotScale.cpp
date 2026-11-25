@@ -21,7 +21,7 @@ std::string ValueScale::name() const {
     return kind == ValueScaleKind::linear ? "linear" : kind == ValueScaleKind::logarithmic ? "log" : "symlog";
 }
 bool scalesColorValues(const Figure& figure) {
-    return figure.kind == "observable_heatmap" || figure.kind == "krom_heatmap";
+    return figure.kind == "observable_heatmap" || figure.kind == "krom_heatmap" || figure.kind == "domain_field";
 }
 bool supportsValueScale(const Figure& figure) {
     if (scalesColorValues(figure))

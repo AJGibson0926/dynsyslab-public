@@ -10,9 +10,8 @@ void close(double a,double b){check(std::abs(a-b)<1e-12,"Runtime adapter changed
 template<class F> void rejects(F f){try{f();}catch(const std::logic_error&){return;}throw std::runtime_error("Invalid runtime input accepted");}
 }
 int main(){try{
-    c::EigenfunctionCoordinates q;q.dimension=2;q.kind=c::EigenfunctionCoordinateKind::causalHistory;
-    c::PolynomialEigenfunctionSet bank({2,{1,0,0,1},{0,0},{1,1}},
-        {1.,0.,0.,1.},c::EigenfunctionSpectrum::fromContinuousRates({-1.,-2.}),q);
+    c::FunctionDomain q;q.dimension=2;
+    c::EigenfunctionFitResult bank{c::FunctionExpansion({2,{1,0,0,1},{0,0},{1,1}}, {1.,0.,0.,1.}, q), c::Spectrum::fromContinuousRates({-1.,-2.}), {}};
     auto model=std::make_shared<c::KoopmanModel>(bank,1);
     model->setControlMap("constant",c::ConstantControlMap{{1.,.5},2,1,"regression"});
     const std::vector<double> Q{2,0,0,3},R{.2};
@@ -46,8 +45,8 @@ int main(){try{
     auto permuted=model->extract({1,0});
     rejects([&]{(void)c::runKoopmanLQEFromLifted(permuted,design,time,measurement,{0,0});});
     c::SystemConfiguration s;s.identifier="duffing";s.preset="double_well_reference";
-    auto stateCoordinates=q;stateCoordinates.kind=c::EigenfunctionCoordinateKind::physicalState;
-    auto stateModel=std::make_shared<c::KoopmanModel>(bank.withCoordinates(stateCoordinates),s);
+    auto stateCoordinates=c::FunctionDomain::physicalState(q.dimension);
+    auto stateModel=std::make_shared<c::KoopmanModel>(bank.functions.withCoordinates(stateCoordinates),bank.spectrum,s);
     stateModel->setControlMap("constant",c::ConstantControlMap{{1.,.5},2,1,"regression"});
     c::KoopmanLQRController oldAdapter(stateModel,Q,R,{},"constant");
     close(oldAdapter.value(0,coordinates)[0],oldAdapter.valueFromCoordinates(0,coordinates)[0]);

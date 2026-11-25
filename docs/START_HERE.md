@@ -186,4 +186,5 @@ wrapper or adaptation. Do not infer permission to copy legacy behavior.
 - [Documentation map](README.md)
 - [AI context and package contracts](AI_CONTEXT.md)
 - [Native Viewer architecture](architecture/VIEWER_CPP_WORKBENCH.md)
+- [Functions on their domains and coordinate maps](architecture/DOMAIN_FIELDS.md)
 - [Native Solver/Post-processor architecture](architecture/SOLVER_POSTPROCESSOR_CPP_WORKBENCH.md)

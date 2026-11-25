@@ -24,17 +24,14 @@ KnownEigenfunctionResult knownPolynomialEigenfunctions(const ODESystem& system) 
         result.reason = "Eigenfunction coefficients or rates exceed finite numeric range";
         return result;
     }
-    EigenfunctionCoordinates coordinates;
-    coordinates.kind = EigenfunctionCoordinateKind::physicalState;
-    coordinates.dimension = 2;
-    coordinates.physicalStateDimension = 2;
+    auto coordinates = FunctionDomain::physicalState(2);
     coordinates.names = {"x_1", "x_2"};
     // Brunton et al. (2016), eqs. 25-27; Kaiser et al. (2021), eqs. 50-52.
     // Native family x1'=a*x1, x2'=b*x2+c*x1^2; eta=x2+k*x1^2.
-    result.eigenfunctions.emplace(
-        PolynomialDictionary{2, {0,0, 1,0, 2,0, 0,1}, {}, {}},
-        std::vector<std::complex<double>>{1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,k,1},
-        EigenfunctionSpectrum::fromContinuousRates({0.,a,2*a,b}), coordinates);
+    result.eigenfunctions.emplace(EigenfunctionFitResult{
+        FunctionExpansion(PolynomialDictionary{2, {0,0, 1,0, 2,0, 0,1}, {}, {}},
+                          std::vector<std::complex<double>>{1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,k,1}, coordinates),
+        Spectrum::fromContinuousRates({0.,a,2*a,b}), {}});
     result.names = {"one", "x_1", "x_1_squared", "eta"};
     result.derivativeOperators = {
         0,0,0,0, 1,0,0,0, 0,2,0,0, 0,2*k,0,0,
@@ -66,18 +63,19 @@ json::Value knownEigenfunctionsJson(const KnownEigenfunctionResult& r) {
         {"id",r.identifier},{"status",r.status},{"reason",r.reason},
         {"conditions",r.conditions},{"references",strings(r.references)}};
     if (!r.eigenfunctions) return out;
-    const auto& bank = *r.eigenfunctions;
-    const auto& dictionary = bank.dictionary();
+    const auto& bank = r.eigenfunctions->functions;
+    const auto& spectrum = r.eigenfunctions->spectrum;
+    const auto& dictionary = bank.monomialTable();
     out["names"] = strings(r.names);
-    out["coordinates"] = eigenfunctionCoordinatesJson(bank.coordinates());
+    out["coordinates"] = functionDomainJson(bank.coordinates());
     out["coordinate_dimension"] = double(bank.coordinateDimension());
-    out["mode_count"] = double(bank.eigenfunctionCount());
+    out["mode_count"] = double(bank.outputCount());
     out["feature_count"] = double(dictionary.featureCount());
     out["exponents"] = numbers(dictionary.exponents);
     out["center"] = numbers(dictionary.center);
     out["scale"] = numbers(dictionary.scale);
     out["coefficients"] = complex(bank.coefficients());
-    out["continuous_rates"] = complex(bank.spectrum().continuousRates());
+    out["continuous_rates"] = complex(spectrum.continuousRates());
     out["derivative_operators"] = numbers(r.derivativeOperators);
     out["state_readout"] = numbers(r.stateReadout);
     out["array_layout"] = "row-major; coefficients mode x feature; complex values [real,imag]; "

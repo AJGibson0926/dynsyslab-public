@@ -144,13 +144,14 @@ DynSysLabViewerCli time-series --source run.npz --output comparison.png `
 | Option | Meaning |
 |---|---|
 | `--curve key[=label]`, `--curve xkey,ykey[=label]` | a time curve, or a phase curve (y against x) |
-| `--color`, `--line-width`, `--line-style` | per curve, after its `--curve` (`solid`, `dash`, `time-dash`, `sparse-dash`, `dot`, `dash-dot`, `stem`) |
+| `--color`, `--line-width`, `--line-style` | per curve, after its `--curve` (`solid`, `dash`, `time-dash`, `sparse-dash`, `dot`, `dash-dot`, `stem`, `markers`, `open-markers`). A curve label of `_` omits it from the legend |
 | `--integer-x-ticks` | ticks and grid at integer abscissas, for an index axis (singular-value index, mode number) |
 | `--stem-baseline v` | baseline of `stem` curves: a vertical stem from it to every sample, with a tip marker. Default 0; with `--scale log`, one decade below the smallest positive stem value, shared by the figure |
 | `--axis`, `--value-label`, `--x-label`, `--columns` | panel labels and tiling |
 | `--time-key`, `--time-label`, `--start`, `--stop` | clock array, abscissa label, window |
+| `--right-axis-label`, `--right-axis-scale s`, `--right-axis-offset c` | right ordinate for a curve stored as `c + s * value`; its ticks show `(plotted - c) / s`. In a `viewer_figure` job: `"right_axis":{"label":...,"scale":s,"offset":c}` |
 | `--spectrum [--frequency-scale k]` | replace each time curve by its one-sided amplitude spectrum over the window (mean removed, Hann; the archive convention). Frequency is cycles per clock unit × k, without the zero bin. Use `--time-label` for the frequency label. |
-| `--scale`, `--x-range`, `--y-range`, `--title`, `--font-scale`, `--width`, `--height`, `--page` | as for archives |
+| `--scale`, `--x-range`, `--y-range`, `--title`, `--font-scale`, `--width`, `--height`, `--page` | as for archives. Plot text defaults to `--font-scale 2.3`; curves without `--line-width` use the Viewer default pens (3.6 pt curves, 3.0 pt targets) |
 
 Arrays on different clocks of one archive can be plotted directly by naming the clock,
 for example `--source RUN.npz --time-key estimator_time --curve applied_input=drive`.

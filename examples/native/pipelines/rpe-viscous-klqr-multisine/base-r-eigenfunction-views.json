@@ -1,0 +1,42 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "pipeline",
+  "extends": "examples/native/pipelines/rpe-viscous-klqr-multisine/base-r.json",
+  "label": "rpe-viscous-klqr-multisine-r-eigenfunction-views",
+  "description": "base-r (training solve -> identity coordinates (r, r') -> H-DMD -> SINDy eigenfunctions of (r, r') -> K-ROM -> KLQR control), plus views of the eigenfunction the controller uses: psi on its (r, r') domain, its Koopman action psi o Phi^t (which should follow exp(lambda t) psi), and an animation pairing that action with the controlled response. Identical stages are reused from an earlier base-r run.",
+  "stages": [
+    {
+      "id": "psi_field",
+      "job": {
+        "kind": "postprocess", "sources": ["${train.archive}"],
+        "methods": [{"name": "domain_field", "settings": {
+          "function": {"krom": "${artefact.archive}", "modes": [0]},
+          "domain": {"lower": [0.6, -3.0], "upper": [2.4, 3.0], "points": 121}}}],
+        "archive": {"enabled": true}
+      }
+    },
+    {
+      "id": "psi_action",
+      "job": {
+        "kind": "postprocess", "sources": ["${train.archive}"],
+        "methods": [{"name": "domain_field", "settings": {
+          "function": {"krom": "${artefact.archive}", "modes": [0]},
+          "domain": {"lower": [0.6, -3.0], "upper": [2.4, 3.0], "points": 101},
+          "operation": "koopman_action", "time_step": 0.25, "steps": 24, "maximum_step": 0.001,
+          "animation": {"frame_seconds": 0.3}}}],
+        "archive": {"enabled": true}
+      }
+    },
+    {
+      "id": "control_movie",
+      "job": {
+        "kind": "postprocess", "sources": ["${psi_action.archive}", "${control.archive}"],
+        "methods": [{"name": "animation", "settings": {
+          "title": "RPE K-ROM eigenfunction on (r, r') under the flow, beside the controlled response",
+          "frame_seconds": 0.3, "columns": 2,
+          "panels": [{"view": "domain_field", "label": "U^t psi"}, {"view": "time", "label": "KLQR"}]}}],
+        "archive": {"enabled": true}
+      }
+    }
+  ]
+}

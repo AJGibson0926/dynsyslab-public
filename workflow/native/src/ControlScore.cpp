@@ -127,7 +127,7 @@ std::filesystem::path runControlScore(const std::vector<std::filesystem::path>& 
     for (const auto& window : windows) windowNames.emplace_back(window.name);
     meta["windows"] = json::Value(std::move(windowNames));
     record.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(json::Value(std::move(meta))));
-    const auto directory = root / L"derived" / L"control-score";
+    const auto directory = objectFolder(root, "control-score");
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(label + "__" + timestamp()) + ".npz");
     c::writeNpzAtomicNew(path, record);

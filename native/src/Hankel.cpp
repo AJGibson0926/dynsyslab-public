@@ -72,4 +72,60 @@ HankelMatrix buildHankelMatrix(const std::vector<double>& values, std::size_t sa
     }
     return h;
 }
+
+std::vector<double> HankelWindowLayout::window_at(const TimeSeries& record, std::size_t label) const {
+    if (label < labelOffset) throw std::out_of_range("Hankel window starts before the record");
+    const std::size_t start = label - labelOffset, s = window.sampleStride, channelsCount = channels.size();
+    std::vector<double> h(rows());
+    for (std::size_t d = 0; d < window.delays; ++d)
+        for (std::size_t c = 0; c < channelsCount; ++c) {
+            const auto& channel = channels[c];
+            const auto offset = static_cast<std::ptrdiff_t>(s * d * window.delayStride)
+                              - static_cast<std::ptrdiff_t>(s * channel.lag);
+            const auto row = static_cast<std::ptrdiff_t>(start) + offset;
+            if (row < 0 || std::size_t(row) >= record.sampleCount() || channel.input >= record.componentCount())
+                throw std::out_of_range("Hankel window extends past the record");
+            h[d * channelsCount + c] = record.value(std::size_t(row), channel.input);
+        }
+    return h;
+}
+
+bool HankelWindowLayout::complete(std::size_t samples, std::size_t label) const noexcept {
+    if (label < labelOffset || !window.delays) return false;
+    const auto start = static_cast<std::ptrdiff_t>(label - labelOffset), s = static_cast<std::ptrdiff_t>(window.sampleStride);
+    for (const auto& channel : channels) {
+        const auto first = start - s * static_cast<std::ptrdiff_t>(channel.lag);
+        const auto last = first + s * static_cast<std::ptrdiff_t>((window.delays - 1) * window.delayStride);
+        if (first < 0 || last >= static_cast<std::ptrdiff_t>(samples)) return false;
+    }
+    return true;
+}
+
+json::Value hankelWindowLayoutJson(const HankelWindowLayout& layout) {
+    json::Value::Array channels;
+    for (std::size_t c = 0; c < layout.channels.size(); ++c)
+        channels.emplace_back(json::Value::Object{{"column", double(layout.channels[c].input)},
+            {"lag", double(layout.channels[c].lag)}, {"scale", layout.channels[c].scale},
+            {"observable", c < layout.channelObservables.size() ? layout.channelObservables[c] : ""}});
+    return json::Value::Object{{"causal", layout.alignEnd}, {"delays", double(layout.window.delays)},
+        {"sample_stride", double(layout.window.sampleStride)}, {"delay_stride", double(layout.window.delayStride)},
+        {"label_offset", double(layout.labelOffset)}, {"channels", channels}, {"rows", double(layout.rows())}};
+}
+
+HankelWindowLayout hankelWindowLayoutFromJson(const json::Value& value) {
+    HankelWindowLayout layout;
+    layout.window.delays = std::size_t(value.at("delays").number());
+    layout.window.sampleStride = std::size_t(value.at("sample_stride").number(1));
+    layout.window.delayStride = std::size_t(value.at("delay_stride").number(1));
+    layout.alignEnd = value.at("causal").boolean(false);
+    layout.labelOffset = std::size_t(value.at("label_offset").number(0));
+    for (const auto& channel : value.at("channels").array()) {
+        layout.channels.push_back({std::size_t(channel.at("column").number()), std::size_t(channel.at("lag").number()),
+                                   channel.at("scale").number(1.0)});
+        layout.channelObservables.push_back(channel.at("observable").string());
+    }
+    if (!layout.window.delays || layout.channels.empty())
+        throw std::invalid_argument("window layout needs delays and channels");
+    return layout;
+}
 } // namespace dynsyslab::core

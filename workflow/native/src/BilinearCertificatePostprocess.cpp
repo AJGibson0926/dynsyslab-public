@@ -5,6 +5,7 @@
 // IEEE TAC 67 (2022) 2715-2728; Bruder, Fu & Vasudevan, IEEE RA-L 6 (2021) 4369-4376;
 // Van Loan, IEEE TAC 23 (1978) 395-404; Boyd et al., LMIs in System and Control Theory,
 // SIAM 1994; Bernussou, Peres & Geromel, Syst. Control Lett. 13 (1989) 65-72.
+#include "MeasurementMap.hpp"
 #include "BilinearCertificateBinding.hpp"
 #include "HeldInputRecords.hpp"
 #include "PostprocessInternal.hpp"
@@ -110,12 +111,8 @@ std::filesystem::path runBilinearCertificate(const std::vector<std::filesystem::
         throw std::invalid_argument("operators fit needs target_input 0, because A_eff would depend on the fitted B_i");
 
     std::optional<c::FrozenHistoryTransform> transform;
-    if (model.coordinates().kind == c::EigenfunctionCoordinateKind::causalHistory) {
-        const auto transformPath = settings.at("history_transform").string(model.coordinates().providerArtifact.empty()
-            ? kromPath.u8string() : model.coordinates().providerArtifact);
-        transform = c::loadFrozenHistoryTransform(std::filesystem::u8path(transformPath));
-        if (transform->identity() != model.coordinates().providerIdentity)
-            throw std::invalid_argument("History transform differs from K-ROM training coordinates");
+    if (model.coordinates().computableFromMeasurements()) {
+        transform = loadMeasurementMap(model, kromPath, settings).transform;
     }
     const auto records = heldInputRecords(model, transform ? &*transform : nullptr, sources, settings, true);
     if (records.rows.empty()) throw std::invalid_argument("bilinear_certificate found no held-input pairs");
@@ -268,7 +265,7 @@ std::filesystem::path runBilinearCertificate(const std::vector<std::filesystem::
         {"bilinear_certificate", json::Value(std::move(certificate))}, {"independent_archive", json::Value(true)}};
     record.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(json::Value(std::move(meta))));
 
-    const auto directory = root / L"derived" / L"koopman-bilinear-certificate";
+    const auto directory = objectFolder(root, "koopman-bilinear-certificate");
     std::filesystem::create_directories(directory);
     const auto stem = safeName(kromPath.stem().u8string() + "__bilinear-certificate__" + timestamp());
     for (std::size_t suffix = 0; suffix < 10000; ++suffix) {

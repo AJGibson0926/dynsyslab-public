@@ -1,0 +1,57 @@
+{
+ "schema": "dynsyslab.architecture-diagram/v1",
+ "title": "Module: K-ROM controller (controller kind klqr)",
+ "description": "Inside ControlFactory.cpp (klqr branch) and KoopmanLQRController (native/src/LQR.cpp). Settings follow control-check-easy-online-R100. Red cards and arrows are audit findings.",
+ "root": {
+  "id": "page", "kind": "group", "layout": "row", "gap": 80,
+  "children": [
+   {"id": "inputs", "kind": "group", "layout": "column", "gap": 40,
+    "children": [
+     {"id": "krom", "kind": "data", "label": "K-ROM archive", "icon": "krom",
+      "notes": ["λ_j, ψ_j coefficients", "control_constant_matrix B_ψ", "bilinear operators (optional)"]},
+     {"id": "target", "kind": "data", "label": "Target", "icon": "time_series",
+      "notes": {"space": "observable", "kind": "from_state waveform"}},
+     {"id": "plant", "kind": "module", "label": "Simulated plant (Solver)", "icon": "monitor",
+      "notes": ["state x at every sample tick", "control_sample_time: 1e-3"]}
+    ]},
+   {"id": "klqr", "kind": "module", "label": "KLQR", "icon": "controller", "layout": "column", "align": "end", "gap": 70,
+    "notes": ["variants: online_measurement, causal history,", "LQI / PID correction, certified, balanced truncation"],
+    "flags": ["default lift is full-state feedback ψ(x)", "variants read x only to compute y = echo(x)"],
+    "children": [
+     {"id": "row-1", "kind": "group", "layout": "row", "gap": 60,
+      "children": [
+       {"id": "lift", "kind": "module", "label": "Lift state and target", "icon": "heatmap",
+        "notes": ["z = split ψ(x)", "z_ref = ψ(q_ref(t)), q_ref = echo(x_ref)", "online_measurement: ψ(y, ẏ),", "  y = echo(x), ẏ by backward2"]},
+       {"id": "map", "kind": "module", "label": "Input map B", "icon": "matrix",
+        "notes": {"control_representation": "constant", "constant": "stored B_ψ", "bilinear": "B₀ + Σ Bᵢ ψ",
+                  "exact (default)": "∇ψ · ∂q/∂x · g(x)"},
+        "flags": ["exact uses the RPE input map g(x)"]},
+       {"id": "gain", "kind": "module", "label": "Gain K", "icon": "svd",
+        "notes": {"CARE": "(Λ, B), Q = 5000, R = 100", "re-solved": "unless B is constant"}}
+      ]},
+     {"id": "row-2", "kind": "group", "layout": "row", "gap": 60,
+      "children": [
+       {"id": "clamp", "kind": "module", "label": "Clamp and hold", "icon": "monitor",
+        "notes": {"control_limit": "null", "control_evaluation": "sampled", "active_time_window": "optional"}},
+       {"id": "law", "kind": "module", "label": "Feedback law", "icon": "controller",
+        "notes": ["u = −K (z − z_ref)", "warmup_input until history fills"]}
+      ]}
+    ]},
+   {"id": "output", "kind": "data", "label": "Solve archive", "icon": "archive",
+    "notes": ["values x(t)", "control_values u", "control_target_values", "control_observable_target_values",
+              "metadata: model_binding_evidence"]}
+  ]
+ },
+ "edges": [
+  {"from": "krom", "to": "klqr"},
+  {"from": "target", "to": "klqr"},
+  {"from": "plant", "to": "lift", "style": "flagged", "label": "x", "route": [{"x": "lift.left-40"}]},
+  {"from": "lift", "to": "map"},
+  {"from": "map", "to": "gain"},
+  {"from": "gain", "to": "law", "from_side": "bottom", "to_side": "top"},
+  {"from": "law", "to": "clamp", "from_side": "left", "to_side": "right"},
+  {"from": "clamp", "to": "plant", "from_side": "left", "to_side": "bottom", "label": "u",
+   "route": [{"x": "clamp.left-24"}, {"y": "plant.bottom+34"}]},
+  {"from": "klqr", "to": "output"}
+ ]
+}

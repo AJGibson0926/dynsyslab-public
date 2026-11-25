@@ -73,11 +73,10 @@ int main(){std::filesystem::path root;try{
     check(!fitModel.hasPhysicalSystem()&&!fitModel.physicalStateDimension(),"Echo-only fitting invented an ODE or state");
     check(fitModel.coordinates().providerIdentity==c::loadFrozenHistoryTransform(composed.archives[0]).identity(),"KROM lost frozen basis binding");
     check(fitModel.datasetReferences().size()==2,"KROM lost pooled training pointers");
-    c::EigenfunctionCoordinates q;q.dimension=2;q.kind=c::EigenfunctionCoordinateKind::causalHistory;
+    c::FunctionDomain q;q.dimension=2;
     c::FrozenHistoryTransform simulatorTransform(transform.basis(),.01,{0,1},"x");
     q.providerIdentity=simulatorTransform.identity();
-    c::PolynomialEigenfunctionSet bank({2,{1,0,0,1},{0,0},{1,1}},
-        {1.,{0,1}},c::EigenfunctionSpectrum::fromContinuousRates({{-1,5}},.01),q);
+    c::EigenfunctionFitResult bank{c::FunctionExpansion({2,{1,0,0,1},{0,0},{1,1}}, {1.,{0,1}}, q), c::Spectrum::fromContinuousRates({{-1,5}},.01), {}};
     c::SystemConfiguration systemConfig;systemConfig.identifier="duffing";systemConfig.preset="double_well_reference";
     auto system=c::createSystem(systemConfig);
     c::KoopmanModel physical(bank,systemConfig);physical.setControlMap("constant",c::ConstantControlMap{{.1},1,1,"test"});

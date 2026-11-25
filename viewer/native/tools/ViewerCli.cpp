@@ -174,7 +174,7 @@ int wmain(int argc, wchar_t** argv) {
     if (command == L"verify-interactions")
         return verifyInteractions(argc > 2 && std::wstring(argv[2]) == L"--json");
     if (command == L"parse-math") return parseMath(argc, argv);
-    if (command == L"time-series" || command == L"tree" || command == L"inspect" || command == L"panels" || command == L"render" || command == L"phase-space")
+    if (command == L"time-series" || command == L"tree" || command == L"inspect" || command == L"panels" || command == L"render" || command == L"animate" || command == L"phase-space")
         return viewerSessionCommand(argc, argv);
     usage(); return 2;
 }

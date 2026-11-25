@@ -44,8 +44,8 @@ std::pair<double,double> timeRange(const std::vector<double>& values) {
 float plotSeriesWidthPoints(const Trace& trace) {
     if (std::isfinite(trace.lineWidthPoints) && trace.lineWidthPoints>0.)
         return static_cast<float>(std::min(32.,trace.lineWidthPoints));
-    if (trace.role == "phase_vector_field") return .65f;
-    if (trace.role.rfind("phase_",0)==0) return 1.05f;
+    if (trace.role == "phase_vector_field") return 1.3f;
+    if (trace.role.rfind("phase_",0)==0) return 2.1f;
     return trace.role == "control_target" ? targetLineWidthPoints
         : trace.encoding == "time" ? phaseLineWidthPoints : curveLineWidthPoints;
 }
@@ -170,6 +170,13 @@ void drawPlotSeries(Gdiplus::Graphics& g,const Trace& trace,std::size_t traceInd
             } else if (trace.markerShape == "open-circle") {
                 Gdiplus::Pen ring(plotSeriesColor(trace,traceIndex),1.3f);
                 g.DrawEllipse(&ring,point.X-4.5f,point.Y-4.5f,9.f,9.f);
+            } else if (trace.markerShape == "large-circle") {
+                g.FillEllipse(&brush,point.X-9.f,point.Y-9.f,18.f,18.f);
+                Gdiplus::Pen edge(theme::color(theme::plotText),1.6f);
+                g.DrawEllipse(&edge,point.X-9.f,point.Y-9.f,18.f,18.f);
+            } else if (trace.markerShape == "large-open-circle") {
+                Gdiplus::Pen ring(plotSeriesColor(trace,traceIndex),4.f);
+                g.DrawEllipse(&ring,point.X-9.f,point.Y-9.f,18.f,18.f);
             } else g.FillEllipse(&brush,point.X-2.2f,point.Y-2.2f,4.4f,4.4f);
         }
         previousExact=exact;

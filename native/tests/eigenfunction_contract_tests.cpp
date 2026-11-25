@@ -21,37 +21,38 @@ template <class F> void rejects(F f) {
     }
     require(caught, "Invalid contract accepted");
 }
-c::PolynomialEigenfunctionSet polynomial() {
-    c::EigenfunctionCoordinates q;
+c::EigenfunctionFitResult polynomial() {
+    c::FunctionDomain q;
     q.dimension = 2;
-    q.kind = c::EigenfunctionCoordinateKind::causalHistory;
     q.names = {"xi_1", "xi_2"};
     q.providerArtifact = "frozen-projector.npz";
     q.providerIdentity = "causal-pod/v1";
-    return {{2, {0, 0, 1, 0, 0, 1}, {1, 2}, {2, 3}},
-            {2., 1., {0, 1}, 0., 3., 0.},
-            c::EigenfunctionSpectrum::fromDiscreteMultipliers({{.9, .2}, 0.}, .1),
-            q};
+    return {c::FunctionExpansion({2, {0, 0, 1, 0, 0, 1}, {1, 2}, {2, 3}}, {2., 1., {0, 1}, 0., 3., 0.}, q),
+            c::Spectrum::fromDiscreteMultipliers({{.9, .2}, 0.}, .1), {}};
 }
 } // namespace
 int main() {
     std::filesystem::path path;
     try {
-        auto bank = polynomial();
+        const auto fit = polynomial();
+        const auto& bank = fit.functions;
         const double q[]{5, 8};
         require(bank.evaluate(0, q) == std::complex<double>(4, 2), "Normalized polynomial value");
         require(bank.gradient(0, q) == std::vector<std::complex<double>>({.5, {0, 1. / 3}}),
                 "Normalized polynomial gradient");
-        auto view = polynomial().eigenfunction(0);
-        require(view.evaluate(q) == bank.evaluate(0, q), "View failed to retain storage");
-        require(!bank.spectrum().continuousRate(1), "Zero mu acquired a generator");
-        require(bank.spectrum().discreteMultipliers()[1] == std::complex<double>{},
+        // An Eigenfunction object (Observable + Eigenvalue) shares the expansion's storage.
+        const auto psi = c::KoopmanModel(polynomial(), 1).eigenfunction(0);
+        require(psi.evaluate(q).front() == bank.evaluate(0, q), "Eigenfunction failed to retain storage");
+        require(psi.representationKind() == "expansion", "Eigenfunction representation property");
+        require(std::abs(psi.eigenvalue().discrete - std::complex<double>(.9, .2)) < 1e-15, "Eigenfunction eigenvalue");
+        require(!fit.spectrum.continuousRate(1), "Zero mu acquired a generator");
+        require(fit.spectrum.discreteMultipliers()[1] == std::complex<double>{},
                 "Zero multiplier changed");
-        rejects([&] { (void)bank.spectrum().continuousRates(); });
-        rejects([&] { (void)bank.spectrum().transition(1, .05); });
-        rejects([&] { (void)bank.extract({0, 0}); });
-        rejects([&] { (void)bank.extract({2}); });
-        c::KoopmanModel model(bank, 1);
+        rejects([&] { (void)fit.spectrum.continuousRates(); });
+        rejects([&] { (void)fit.spectrum.transition(1, .05); });
+        rejects([&] { (void)c::KoopmanModel(polynomial(), 1).extract({0, 0}); });
+        rejects([&] { (void)bank.select({2}); });
+        c::KoopmanModel model(fit, 1);
         require(!model.hasPhysicalSystem() && !model.physicalStateDimension(),
                 "Invented physical system/dimension");
         require(model.eigenfunctionCount() == 2 && model.realLiftedDimension() == 3,
@@ -98,15 +99,15 @@ int main() {
                 "Archive lost discrete map");
         require(loaded.hasControlMap("regressed-a"), "Archive lost named continuous map");
         require(loaded.datasetReferences().size() == 2, "Archive lost dataset refs");
-        auto zero = bank.extract({1});
+        const auto zero = bank.select({1});
         const auto validation =
-            c::validateEigenfunctions(zero, {0, .1, .2, .3}, {5, 8, 1, 8, 1, 8, 1, 8}, {.1, .2});
+            c::validateEigenfunctions(zero, fit.spectrum.extract({1}), {0, .1, .2, .3}, {5, 8, 1, 8, 1, 8, 1, 8}, {.1, .2});
         require(validation.modes[0].oneStep.absoluteRms == 0 &&
                     !validation.modes[0].generatorAvailable,
                 "Discrete zero mode defect/generator availability");
-        auto nonzero = bank.extract({0});
-        const auto old = c::legacyPolynomialEigenfunctions(nonzero);
-        const auto modern = c::polynomialEigenfunctionsFromLegacy(old);
+        const auto nonzero = bank.select({0});
+        const auto old = c::legacyPolynomialEigenfunctions(nonzero, fit.spectrum.extract({0}));
+        const auto modern = c::polynomialEigenfunctionsFromLegacy(old).functions;
         require(modern.evaluate(q) == nonzero.evaluate(q), "Legacy polynomial evaluation changed");
         require(c::gradientPolynomialEigenfunction(old, 0, q) == modern.gradient(0, q),
                 "Legacy gradient changed");
@@ -118,7 +119,7 @@ int main() {
         dmd.hasEigenfunctions = true;
         dmd.discreteEigenvalues = {.8, 0.};
         dmd.eigenfunctionCoefficients = {1., 0., 0., 1.};
-        require(dmd.eigenfunctionSet().spectrum().values() == dmd.discreteEigenvalues,
+        require(dmd.eigenfunctionSet().spectrum.values() == dmd.discreteEigenvalues,
                 "DMDc spectrum export");
         c::EdmdControlResult edmd;
         edmd.dictionary.dimension = 2;
@@ -128,9 +129,9 @@ int main() {
         edmd.dictionary.center = {0, 0};
         edmd.dictionary.scale = {1, 1};
         edmd.lifted = dmd;
-        require(edmd.eigenfunctionSet().spectrum().values() == dmd.discreteEigenvalues,
+        require(edmd.eigenfunctionSet().spectrum.values() == dmd.discreteEigenvalues,
                 "EDMDc spectrum export");
-        c::EigenfunctionCoordinates measured;
+        c::FunctionDomain measured;
         measured.dimension = 1;
         std::vector<double> t, x, dx;
         for (std::size_t k = 0; k < 100; ++k) {
@@ -142,17 +143,17 @@ int main() {
         options.polynomialDegree = 1;
         options.normalizeStates = false;
         options.includeConstant = false;
-        const auto fit = c::fitSindyEigenfunctions(x, x.size(), t, {-1.}, measured, dx, options);
-        require(fit.diagnostics.algorithm == "sindy-generator" &&
-                    fit.diagnostics.sampleCount == 100,
+        const auto sindyFit = c::fitSindyEigenfunctions(x, x.size(), t, {-1.}, measured, dx, options);
+        require(sindyFit.diagnostics.algorithm == "sindy-generator" &&
+                    sindyFit.diagnostics.sampleCount == 100,
                 "SINDy fit evidence separated");
-        require(fit.diagnostics.residualRms[0] < 1e-10, "SINDy wrapper changed mathematics");
-        const auto high=c::EigenfunctionSpectrum::fromStoredRates({{-.2,80}},.1,c::EigenvalueDomain::discreteTime);
+        require(sindyFit.diagnostics.residualRms[0] < 1e-10, "SINDy wrapper changed mathematics");
+        const auto high=c::Spectrum::fromStoredRates({{-.2,80}},.1,c::EigenvalueDomain::discreteTime);
         require(high.logarithmBranches()[0]==1,"Legacy high-frequency branch was not recovered");
-        const auto highCopy=c::EigenfunctionSpectrum::fromStoredDiscrete(high.values(),.1,
+        const auto highCopy=c::Spectrum::fromStoredDiscrete(high.values(),.1,
             high.logarithmBranches(),high.continuousRates());
         require(highCopy.continuousRates()==high.continuousRates(),"Archived high-frequency rate changed");
-        rejects([&]{(void)c::EigenfunctionSpectrum::fromStoredDiscrete(high.values(),.1,{0},high.continuousRates());});
+        rejects([&]{(void)c::Spectrum::fromStoredDiscrete(high.values(),.1,{0},high.continuousRates());});
         std::filesystem::remove(path);
         std::cout
             << "Eigenfunction contracts, compatibility, archives and discrete validation passed\n";

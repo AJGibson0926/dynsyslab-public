@@ -45,6 +45,15 @@ struct FourierTransform {
 
 class FourierSidecar;
 
+// Resampling (TimeSeriesOperations.hpp): linear or cubic Hermite; outside the source span an
+// error, the end value held, or NaN.
+enum class Interpolation { linear, cubic };
+enum class Extrapolation { error, hold, nan };
+struct ResampleOptions {
+    Interpolation method{Interpolation::linear};
+    Extrapolation outside{Extrapolation::error};
+};
+
 // Immutable numerical samples. Owning instances keep their buffers alive;
 // view instances add no sample-sized allocation and require their source
 // buffers to outlive the TimeSeries.
@@ -66,6 +75,16 @@ public:
     [[nodiscard]] double time(std::size_t sample) const;
     [[nodiscard]] double value(std::size_t sample, std::size_t component) const;
     [[nodiscard]] FourierSidecar fourier() const;
+
+    // Operations returning new series (TimeSeriesOperations.hpp holds them and the window history).
+    [[nodiscard]] TimeSeries crop(std::size_t first, std::size_t count) const;
+    [[nodiscard]] TimeSeries cropTime(double start, double stop) const;
+    [[nodiscard]] TimeSeries resample(const std::vector<double>& times, ResampleOptions options = {}) const;
+    [[nodiscard]] TimeSeries resampleOnto(const TimeSeries& reference, ResampleOptions options = {}) const;
+    [[nodiscard]] std::shared_ptr<const FourierTransform> spectrum(FourierOptions options = {}) const;
+    [[nodiscard]] static TimeSeries fromSpectrum(const FourierTransform& transform, double startTime = 0);
+    // WindowHistory(window, shift).apply(*this): one sample per window of `window` samples.
+    [[nodiscard]] TimeSeries history(std::size_t window, std::size_t shift = 1) const;
 
 private:
     struct FourierCache;

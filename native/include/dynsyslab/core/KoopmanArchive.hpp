@@ -9,6 +9,10 @@
 #include <vector>
 
 namespace dynsyslab::core {
+// Scattered eigenfunction objects bound on a named interpolation domain ("state", "input", ...).
+[[nodiscard]] KoopmanModel loadKoopmanModelOnDomain(const std::filesystem::path& path,
+                                                    const std::string& domain, const json::Value& method = {});
+
 
 // Loads either an analytic-polynomial or scattered-interpolation KROM. This is
 // the normal runtime boundary for controllers, validation, and Viewer.
@@ -19,6 +23,9 @@ namespace dynsyslab::core {
 [[nodiscard]] KoopmanModel loadKoopmanModel(
     const std::filesystem::path& path,
     const std::vector<std::size_t>& selectedModes = {});
+
+// The archive's own system, with binding options (e.g. reconstructions objects to attach).
+[[nodiscard]] KoopmanModel loadKoopmanModel(const std::filesystem::path& path, const ModelBindingOptions& binding);
 
 // Evaluator-only import preserving every explicitly stored legacy conjugate mode.
 // Control loaders continue to retain the independent split-real realization.
@@ -61,6 +68,17 @@ void savePolynomialKoopmanModel(const std::filesystem::path& path,
 // Canonical encoding for workflow publishers that allocate immutable destinations.
 [[nodiscard]] NpzRecord makeKoopmanArchive(const KoopmanModel& model,
     const std::string& metadataJson = {}, std::map<std::string,NpyArray> extraArrays = {});
+
+// A reconstructions object (core/DataObject.hpp kind "reconstructions"): observables written over one
+// eigenfunctions object, g ~ C psi (+ offset). Arrays: reconstruction_names (one per line),
+// reconstruction__<key> (outputs x modes), optional reconstruction_offset__<key> and
+// reconstruction_error__<key> (rms, max, relative). metadata_json["reconstructions"] names the
+// basis: {"basis": {"path", "sha256"}, "modes"}.
+[[nodiscard]] json::Value reconstructionsBlock(const std::filesystem::path& eigenfunctions, std::size_t modes);
+// Adds the reconstructions' arrays to an in-memory archive of the eigenfunctions they are written over,
+// after checking that `eigenfunctionsPath` is their basis (by SHA-256) and the mode count agrees.
+void mergeReconstructions(NpzRecord& eigenfunctions, const std::filesystem::path& eigenfunctionsPath,
+                          const NpzRecord& reconstructions);
 
 void saveKoopmanModel(const std::filesystem::path& path,
                       const KoopmanModel& model,

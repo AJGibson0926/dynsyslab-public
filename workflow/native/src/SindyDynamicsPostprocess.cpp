@@ -2,6 +2,7 @@
 #include "ObservationSource.hpp"
 #include "KromDatasetSupport.hpp"
 #include "CoordinateInverse.hpp"
+#include <dynsyslab/core/TimeSeriesOperations.hpp>
 #include <dynsyslab/core/CoordinateTransform.hpp>
 #include <dynsyslab/core/SindyDynamics.hpp>
 #include <dynsyslab/core/DynamicsLibrary.hpp>
@@ -41,13 +42,13 @@ Dataset dataset(const SourceData& s) {
         throw std::invalid_argument("Autonomous dynamics SINDy requires confirmed unforced records");
     const auto series=c::TimeSeries::view(s.time,s.values.data(),s.samples,s.dimension);
     const auto rates=c::differentiateTimeSeries(series);
-    Dataset d{s,c::trimTimeSeries(series,2,s.samples-4),rates,{}};
+    Dataset d{s,c::cropSamples(series,2,s.samples-4),rates,{}};
     const auto a=c::readNpz(s.path);
     if(a.contains("coordinate_derivatives")) {
         const auto& v=a.at("coordinate_derivatives");
         if(v.shape!=std::vector<std::size_t>{s.samples,s.dimension})
             throw std::invalid_argument("Stored derivatives must align with coordinate samples");
-        d.reference=c::trimTimeSeries(c::TimeSeries(s.time,v.doubles(),s.dimension),2,s.samples-4);
+        d.reference=c::cropSamples(c::TimeSeries(s.time,v.doubles(),s.dimension),2,s.samples-4);
     }
     return d;
 }
@@ -123,8 +124,8 @@ json::Value evaluate(const c::SindyDynamicsModel& model,const Dataset& d,
         const auto first=std::lower_bound(begin,end,start)-begin,last=std::upper_bound(begin,end,stop)-begin;
         if(last<=first)continue;
         regions.emplace_back(json::Value::Object{{"start",start},{"stop",stop},{"error",
-            c::dynamicsError(c::trimTimeSeries(d.reference?*d.reference:d.numeric,first,last-first),
-                c::trimTimeSeries(prediction,first,last-first)).toJson()}});
+            c::dynamicsError(c::cropSamples(d.reference?*d.reference:d.numeric,first,last-first),
+                c::cropSamples(prediction,first,last-first)).toJson()}});
     }
     result["regions"]=regions;
     json::Value::Array rollouts;std::size_t index=0;
@@ -145,7 +146,7 @@ json::Value evaluate(const c::SindyDynamicsModel& model,const Dataset& d,
             // from the previous end state, so a law that diverges keeps the valid
             // part of its trajectory instead of losing all of it.
             const std::size_t width=d.source.dimension;
-            const auto full=c::trimTimeSeries(d.q,k,count);
+            const auto full=c::cropSamples(d.q,k,count);
             const auto segment=std::max<std::size_t>(2,std::size_t(std::llround(
                 settings.at("rollout_segment").number(0.5)/d.q.deltaTime())));
             std::vector<double> state(full.valuesData(),full.valuesData()+width),values=state;
@@ -176,7 +177,7 @@ json::Value evaluate(const c::SindyDynamicsModel& model,const Dataset& d,
                 }
             }
             if(valid<2)throw std::runtime_error(reason.empty()?"rollout produced no samples":reason);
-            const auto actual=c::trimTimeSeries(d.q,k,valid);
+            const auto actual=c::cropSamples(d.q,k,valid);
             const auto predicted=c::TimeSeries({actual.timeData(),actual.timeData()+valid},std::move(values),width);
             record["error"]=c::dynamicsError(actual,predicted).toJson();
             record["status"]=valid==count?"complete":"diverged";

@@ -29,9 +29,8 @@ c::KoopmanModel fixture(const c::SystemConfiguration& system) {
     return model;
 }
 void measurementOnly() {
-    c::EigenfunctionCoordinates q;q.dimension=2;q.kind=c::EigenfunctionCoordinateKind::causalHistory;
-    c::PolynomialEigenfunctionSet bank({2,{1,0,0,1},{0,0},{1,1}},{1.,0.,0.,1.},
-        c::EigenfunctionSpectrum::fromContinuousRates({1.,-2.}),q);
+    c::FunctionDomain q;q.dimension=2;
+    c::EigenfunctionFitResult bank{c::FunctionExpansion({2,{1,0,0,1},{0,0},{1,1}}, {1.,0.,0.,1.}, q), c::Spectrum::fromContinuousRates({1.,-2.}), {}};
     c::KoopmanModel model(bank,1);
     model.setReconstruction("sensor",{{1./3,-1./3},1,2,0,0,0});
     model.setControlMap("fit",c::ConstantControlMap{{1.,1.},2,1,"fixture"});

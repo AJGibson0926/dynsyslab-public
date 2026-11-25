@@ -1,0 +1,36 @@
+{
+ "schema": "dynsyslab.architecture-diagram/v1",
+ "title": "Module: TimeSeries operations and window histories",
+ "description": "native/include/dynsyslab/core/TimeSeries.hpp, TimeSeriesOperations.hpp, Fourier.cpp, HistoryProjection.cpp. Every operation returns a new TimeSeries; the window history is repeated cropping.",
+ "root": {
+  "id": "page", "kind": "group", "layout": "row", "gap": 60,
+  "children": [
+   {"id": "series", "kind": "data", "label": "TimeSeries", "icon": "time_series", "notes": ["time (N), values (N x M)"]},
+   {"id": "operations", "kind": "module", "label": "Operations", "icon": "monitor", "layout": "column", "gap": 22,
+    "children": [
+     {"id": "crop", "kind": "module", "label": "crop / cropTime", "icon": "time_series", "notes": ["samples [first, first + count)"]},
+     {"id": "resample", "kind": "module", "label": "resample / resampleOnto", "icon": "time_series", "notes": ["linear or cubic Hermite", "outside: error, hold or NaN"]},
+     {"id": "fourier", "kind": "module", "label": "spectrum / fromSpectrum", "icon": "spectrum", "notes": ["time domain <-> frequency domain"]}
+    ]},
+   {"id": "history", "kind": "module", "label": "WindowHistory(window, shift)", "icon": "svd", "layout": "column", "gap": 22,
+    "notes": ["fixed before any data"],
+    "children": [
+     {"id": "windows", "kind": "data", "label": "k-th window = crop(k shift, window)", "icon": "matrix",
+      "notes": ["n < window: none", "n = window: one", "n > window: (n - window)/shift + 1"]}
+    ]},
+   {"id": "outputs", "kind": "group", "layout": "column", "gap": 36,
+    "children": [
+     {"id": "history-series", "kind": "data", "label": "History series", "icon": "time_series", "notes": ["window x M coordinates", "a TimeSeries again"]},
+     {"id": "hankel", "kind": "module", "label": "Hankel projection", "icon": "svd", "notes": ["(U^T h)/σ per window", "fast FFT path, same result"]}
+    ]}
+  ]
+ },
+ "edges": [
+  {"from": "series", "to": "operations"},
+  {"from": "operations", "to": "history", "label": "crop"},
+  {"from": "history", "to": "history-series"},
+  {"from": "history-series", "to": "hankel", "from_side": "bottom", "to_side": "top"},
+  {"from": "history-series", "to": "series", "from_side": "right", "to_side": "bottom", "style": "dashed", "label": "history of histories",
+   "route": [{"x": "page.right+30"}, {"y": "page.bottom+40"}, {"x": "series.cx"}]}
+ ]
+}

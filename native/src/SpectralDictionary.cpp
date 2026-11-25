@@ -1,4 +1,5 @@
 #include <dynsyslab/core/SpectralKROM.hpp>
+#include <dynsyslab/core/ExpansionDictionary.hpp>
 #include <dynsyslab/core/FileDigest.hpp>
 #include <algorithm>
 #include <set>
@@ -120,4 +121,33 @@ std::vector<double> SpectralKROM::reconstruct(const std::string& name,const std:
         for(std::size_t k=0;k<n;++k)out[i*r.outputs+j]+=p[i*n+k]*r.coefficients[k*r.outputs+j];
     return out;
 }
+// The spectral dictionary as dictionary terms (kept here, with SpectralDictionary).
+ExpansionDictionary ExpansionDictionary::fromSpectral(const SpectralDictionary& s) {
+    s.validate();
+    const auto d = s.dimension;
+    std::vector<DictionaryTerm> terms;
+    auto base = [&](const std::string& kind) { DictionaryTerm t; t.kind = kind; t.center = s.center; t.scale = s.scale; return t; };
+    if (s.kind == "linear") {
+        if (s.constant) { auto t = base("monomial"); t.orders.assign(d, 0); terms.push_back(t); }
+        for (std::size_t i = 0; i < d; ++i) { auto t = base("monomial"); t.orders.assign(d, 0); t.orders[i] = 1; terms.push_back(t); }
+    } else if (basis::isProduct(s.kind)) {
+        for (std::size_t j = 0; j < s.exponents.size() / d; ++j) {
+            auto t = base(s.kind == "polynomial" ? "monomial" : s.kind);
+            t.orders.assign(s.exponents.begin() + std::ptrdiff_t(j * d), s.exponents.begin() + std::ptrdiff_t((j + 1) * d));
+            terms.push_back(std::move(t));
+        }
+    } else {
+        for (std::size_t j = 0; j < s.nodes.size() / d; ++j) {
+            auto t = base(s.kind);
+            if (s.kind == "partition") { t.nodes = s.nodes; t.index = j; }
+            else {
+                t.vector.assign(s.nodes.begin() + std::ptrdiff_t(j * d), s.nodes.begin() + std::ptrdiff_t((j + 1) * d));
+                t.width = s.bandwidth; t.smoothness = s.smoothness; t.amplitude = s.amplitude;
+            }
+            terms.push_back(std::move(t));
+        }
+    }
+    return ExpansionDictionary(d, std::move(terms));
+}
+
 } // namespace dynsyslab::core

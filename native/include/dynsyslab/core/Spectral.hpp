@@ -35,6 +35,7 @@ struct DMDResult {
     std::vector<std::complex<double>> modes;       // featureDimension x rank
     std::vector<std::complex<double>> coordinates; // samples x rank
     std::vector<std::complex<double>> operatorMatrix;
+    std::vector<std::complex<double>> eigenvectors; // rank x rank W (projected DMD with coordinates)
     std::size_t featureDimension{};
     std::size_t samples{};
     std::size_t rank{};
@@ -67,6 +68,9 @@ struct HankelDMDResult : DMDResult {
     std::size_t delayCount{};
     std::size_t referenceDelay{};
     std::vector<std::size_t> coordinateSampleOffsets; // original source sample indices
+    // Phi^H Phi = W^H W (rank x rank, U orthonormal). With the modes it gives the exact
+    // window-to-eigenfunction map psi(h) = W^-1 U^T h = G^-1 Phi^H h.
+    std::vector<std::complex<double>> modeGram;
 };
 
 [[nodiscard]] SVDResult singularValueDecomposition(

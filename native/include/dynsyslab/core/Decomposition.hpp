@@ -32,6 +32,7 @@ struct EDMDResult {
     std::vector<std::complex<double>> eigenfunctionValues; // sample x mode
     std::vector<std::complex<double>> eigenfunctionCoefficients; // feature x mode
     std::vector<double> operatorMatrix; // feature x feature
+    std::vector<std::size_t> dictionaryExponents; // feature x state, polynomial dictionary only
     std::size_t samples{};
     std::size_t stateDimension{};
     std::size_t featureCount{};

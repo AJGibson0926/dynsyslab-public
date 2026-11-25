@@ -73,6 +73,7 @@ private:
     void appendValue(double observation);
     FrozenHistoryTransform transform_;
     std::vector<double> ring_;
+    std::vector<double> weights_;  // retained basis columns, axis-major, oldest delay first
     std::size_t writeIndex_{};
     std::size_t samplesSeen_{};
     std::optional<double> lastTime_;

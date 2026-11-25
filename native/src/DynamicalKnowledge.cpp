@@ -5,9 +5,17 @@ namespace dynsyslab::core::detail {
 namespace {
 constexpr double pi = 3.14159265358979323846;
 double p(const SystemConfiguration &c, const char *key) { return c.parameters.at(key); }
+DynamicalKnowledge builtInFacts(const SystemDescriptor &d, const SystemConfiguration &c);
 } // namespace
 DynamicalKnowledge builtInDynamicalKnowledge(const SystemDescriptor &d,
                                              const SystemConfiguration &c) {
+    auto result = builtInFacts(d, c);
+    auto library = builtInEigenfunctions(d, c);
+    result.eigenfunctions.insert(result.eigenfunctions.end(), library.begin(), library.end());
+    return result;
+}
+namespace {
+DynamicalKnowledge builtInFacts(const SystemDescriptor &d, const SystemConfiguration &c) {
     if (d.identifier == "quadratic_triangular") {
         auto result = triangularKnowledge(c);
         result.papers = d.research.papers;
@@ -220,4 +228,5 @@ DynamicalKnowledge builtInDynamicalKnowledge(const SystemDescriptor &d,
         };
     return result;
 }
+} // namespace
 } // namespace dynsyslab::core::detail

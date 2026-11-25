@@ -3,6 +3,8 @@
 #include "DisplayCoordinates.hpp"
 #include "dynsyslab_viewer/NativePayload.hpp"
 #include "dynsyslab_viewer/MathText.hpp"
+#include "ComplexHeatmap.hpp"
+#include <dynsyslab/core/DomainGrid.hpp>
 
 #include <dynsyslab/core/Observable.hpp>
 #include <dynsyslab/core/System.hpp>
@@ -175,16 +177,13 @@ Payload heatmapPayload(const std::filesystem::path& source,
     const double xScale = display.stateMultipliers[0] / current.stateMultipliers[0];
     const double yScale = display.stateMultipliers[1] / current.stateMultipliers[1];
     constexpr std::size_t count = 101;
-    std::vector<double> x(count), y(count), grid;
-    for (std::size_t i = 0; i < count; ++i) {
-        x[i] = (domain.bounds.xMin + (domain.bounds.xMax-domain.bounds.xMin)*i/(count-1)) / xScale;
-        y[i] = (domain.bounds.yMin + (domain.bounds.yMax-domain.bounds.yMin)*i/(count-1)) / yScale;
-    }
-    for (const auto yi : y) for (const auto xi : x) {
-        // Store the grid in archive coordinates, exactly as the time-series evaluator expects.
-        grid.push_back(xi / current.stateMultipliers[0]);
-        grid.push_back(yi / current.stateMultipliers[1]);
-    }
+    // The grid in the current display coordinates; the evaluator reads archive coordinates.
+    const auto displayGrid = dynsyslab::core::DomainGrid::box(dynsyslab::core::FunctionDomain::physicalState(2),
+        {domain.bounds.xMin / xScale, domain.bounds.yMin / yScale},
+        {domain.bounds.xMax / xScale, domain.bounds.yMax / yScale}, count);
+    const auto x = displayGrid.axisValues(0), y = displayGrid.axisValues(1);
+    auto grid = displayGrid.points();
+    for (std::size_t k = 0; k < grid.size(); ++k) grid[k] /= current.stateMultipliers[k % 2];
     NpzRecord gridRecord;
     gridRecord.arrays["values"] = NpyArray::fromDoubles({count*count, 2}, grid);
     auto payload = timePayload(source, "observable_heatmap", gridRecord, metadata, system, true);
@@ -206,6 +205,30 @@ Payload heatmapPayload(const std::filesystem::path& source,
             axes.xLabel = alternate.stateLabels[0]; axes.yLabel = alternate.stateLabels[1];
         }
         changeDisplayCoordinates(figure, display.coordinates);
+    }
+    // Complex observables arrive as (real, imaginary) panels: keep the values on both so the
+    // complex display can switch in place, and encode them with domain coloring by default.
+    for (std::size_t i = 0; i + 1 < payload.figures.size(); ++i) {
+        auto& first = payload.figures[i];
+        auto& second = payload.figures[i + 1];
+        const auto& id = first.observableIdentity;
+        if (id.size() < 2 || id.substr(id.size() - 2) != ":0"
+            || second.observableIdentity != id.substr(0, id.size() - 1) + "1") continue;
+        const auto& re = first.traces.front().z;
+        const auto& im = second.traces.front().z;
+        std::vector<std::complex<double>> values(re.size());
+        for (std::size_t k = 0; k < re.size(); ++k) values[k] = {re[k], im[k]};
+        auto name = first.title;
+        const std::string realSuffix = " — real";
+        if (name.size() > realSuffix.size() && name.compare(name.size() - realSuffix.size(), realSuffix.size(), realSuffix) == 0)
+            name.resize(name.size() - realSuffix.size());
+        for (unsigned part = 0; part < 2; ++part) {
+            auto& trace = payload.figures[i + part].traces.front();
+            trace.complexValues = values; trace.complexPart = static_cast<int>(part); trace.complexName = name;
+            encodeComplexHeatmap(payload.figures[i + part], kDefaultComplexDisplay);
+        }
+        payload.complexDisplay = kDefaultComplexDisplay;
+        ++i;
     }
     return payload;
 }

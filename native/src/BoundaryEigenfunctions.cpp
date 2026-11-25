@@ -125,8 +125,7 @@ BoundaryEigenfunctionResult fitBoundaryEigenfunctions(
                         *boundary[local*ensemble.trajectories+trajectory];
         }
     }
-    ScatteredEigenfunctionData functions;
-    functions.continuousEigenvalues=continuousEigenvalues;
+    InterpolationData functions;
     functions.trainingStates=std::move(states);
     functions.trainingValues=std::move(functionValues);
     functions.samples=flattened;functions.stateDimension=ensemble.stateDimension;
@@ -134,7 +133,7 @@ BoundaryEigenfunctionResult fitBoundaryEigenfunctions(
     functions.finiteDifferenceRelativeStep=options.gradientRelativeStep;
     functions.provenance="fitted boundary values with scattered state interpolation";
     reconstruction.relativeResidual=*std::max_element(residuals.begin(),residuals.end());
-    return {std::move(functions),std::move(reconstruction),std::move(residuals),
+    return {std::move(functions),continuousEigenvalues,std::move(reconstruction),std::move(residuals),
         modeGroups};
 }
 

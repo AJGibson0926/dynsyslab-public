@@ -61,7 +61,7 @@ std::filesystem::path indexedSourcePath(
     std::filesystem::path archiveRelative;
     for (const auto& part : reference) {
         const auto name = part.generic_u8string();
-        if (!copy && (name == "solutions" || name == "derived")) copy = true;
+        if (!copy && (name == "solutions" || name == "derived" || name == "objects")) copy = true;
         if (copy) archiveRelative /= part;
     }
     if (!archiveRelative.empty()) candidates.push_back(archiveRoot / archiveRelative);

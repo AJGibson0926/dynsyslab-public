@@ -152,10 +152,14 @@ foreach ($file in Get-ChildItem -LiteralPath $examplesRoot -Recurse -Filter *.js
 }
 Write-Host "Fresh install: $planned compute jobs validated and planned; $ran examples run from an empty archive folder."
 if (Select-String -Quiet -LiteralPath (Join-Path $sandbox '.claude\settings.json') -SimpleMatch 'hub --hook') { throw 'agent-setup --remove left the hook.' }
-# Tracked data packs validate and plan under the release they pin (no pack is run here).
+# Tracked data packs pinned to this release validate and plan under it (no pack is run here). A
+# pack pinned to another release belongs to that release and is refused by this one, by design.
 $packRoot = Join-Path $sourceRoot 'data-packs'
+$releaseVersion = ([regex]::Match((Get-Content -Raw -LiteralPath (Join-Path $sourceRoot 'CMakeLists.txt')), 'VERSION (\d+\.\d+\.\d+)')).Groups[1].Value
 if (Test-Path -LiteralPath $packRoot) {
     foreach ($pack in Get-ChildItem -LiteralPath $packRoot -Directory) {
+        $pinned = (Get-Content -Raw -LiteralPath (Join-Path $pack.FullName 'pack.json') | ConvertFrom-Json).release.version
+        if ($pinned -ne $releaseVersion) { Write-Host "Data pack $($pack.Name) is pinned to $pinned; skipped for $releaseVersion."; continue }
         foreach ($action in @('validate', 'plan')) {
             & $cli datapack $action $pack.FullName | Out-Null
             if ($LASTEXITCODE -ne 0) { throw "Data pack $action failed: $($pack.Name)" }

@@ -1,15 +1,20 @@
 #pragma once
 
+#include <dynsyslab/core/TimeSeries.hpp>
 #include <dynsyslab/core/AnalyticExpression.hpp>
 #include <complex>
 #include <cstddef>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace dynsyslab::core {
+
+class FunctionRepresentation;
+class ObservableCatalog;
 
 enum class ObservableJacobianBackend { automatic, analytic, finiteDifference };
 
@@ -48,7 +53,9 @@ public:
     // Custom evaluators remain unknown, regardless of names or sampled values.
     [[nodiscard]] std::optional<std::size_t> stateComponentIndex(std::size_t output) const;
     [[nodiscard]] bool hasAnalyticJacobian() const noexcept;
-    [[nodiscard]] const std::vector<AnalyticExpression>& expressions() const noexcept { return expressions_; }
+    // The closed form, one real expression per output: from the expansion representation (on the
+    // physical state, every term with a closed form) or from state components; empty otherwise.
+    [[nodiscard]] std::vector<AnalyticExpression> expressions() const;
     [[nodiscard]] Observable partialDerivative(std::size_t axis) const;
     [[nodiscard]] Observable flowDerivative(const std::vector<AnalyticExpression>& field,
                                            std::size_t order = 1) const;
@@ -64,6 +71,11 @@ public:
     [[nodiscard]] json::Value expressionDefinition() const;
     [[nodiscard]] static Observable fromExpressionDefinition(const json::Value& value);
     [[nodiscard]] Values evaluate(const double* state) const;
+    // The observable along a time series, as another time series: at each sample's state, or, when
+    // its domain is a series window (FunctionDomain::window), at the window cut at each sample;
+    // samples without a complete window are skipped. A complex-valued observable gives a real and an
+    // imaginary column per output. Eigenfunctions inherit this.
+    [[nodiscard]] TimeSeries evaluate(const TimeSeries& series) const;
     [[nodiscard]] Values jacobian(const double* state,
         ObservableJacobianBackend backend = ObservableJacobianBackend::automatic,
         double relativeStep = 1.0e-6) const;
@@ -76,6 +88,19 @@ public:
         const std::vector<double>& states, const std::vector<double>& velocities,
         std::size_t samples,
         ObservableJacobianBackend backend = ObservableJacobianBackend::automatic) const;
+
+    // g(q(x)) from a representation (expansion or interpolation) on its domain q, through the
+    // domain's state map q(x); a function of q itself when the domain has none. `catalog` binds a
+    // catalog map that is known by name only. The Jacobian is the exact chain rule when the
+    // representation and the map are exact.
+    [[nodiscard]] static Observable fromRepresentation(ObservableDescriptor descriptor,
+        std::shared_ptr<const FunctionRepresentation> representation,
+        const ObservableCatalog* catalog = nullptr);
+    // The representation property: an expansion (formulas included: fromExpressions writes each
+    // formula as a dictionary term) or an interpolation; null for evaluator observables.
+    [[nodiscard]] const std::shared_ptr<const FunctionRepresentation>& representation() const noexcept { return representation_; }
+    // "expansion", "interpolation" or "evaluator".
+    [[nodiscard]] std::string representationKind() const;
 
     [[nodiscard]] static Observable stateComponent(
         std::size_t stateDimension, std::size_t index,
@@ -92,10 +117,10 @@ private:
     ObservableDescriptor descriptor_;
     std::size_t stateDimension_{};
     std::size_t outputDimension_{};
-    std::vector<AnalyticExpression> expressions_;
     Evaluator evaluator_;
     Jacobian analyticJacobian_;
     std::vector<std::optional<std::size_t>> stateComponents_;
+    std::shared_ptr<const FunctionRepresentation> representation_;
 };
 
 // Named first derivative on the system's native clock. Some formulas are

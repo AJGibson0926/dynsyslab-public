@@ -55,6 +55,7 @@ native/*.egg-info/
 /archives/IsingModel/
 /archives/job_manager/
 /archives/mackey-glass/
+/archives/objects/
 /archives/management/
 /archives/solutions/
 /archives/solver_logs/

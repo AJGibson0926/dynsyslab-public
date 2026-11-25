@@ -1,3 +1,9 @@
+#include "ObservablePhasePayload.hpp"
+#include "PayloadSampling.hpp"
+#include <dynsyslab/core/DataObject.hpp>
+#include <dynsyslab/core/KoopmanArchive.hpp>
+#include "AnimationPayload.hpp"
+#include "DomainFieldPayload.hpp"
 #include <dynsyslab/core/PathSimplification.hpp>
 #include "dynsyslab_viewer/NativePayload.hpp"
 #include "KromPayload.hpp"
@@ -37,66 +43,6 @@ namespace {
 
 using dynsyslab::core::NpyArray;
 using dynsyslab::core::NpzRecord;
-
-constexpr std::size_t kDisplaySamples = 2400;
-
-const NpyArray* select(const NpzRecord& record,
-                       std::initializer_list<const char*> names,
-                       std::size_t dimensions = 0) {
-    for (const char* name : names) {
-        const auto found = record.arrays.find(name);
-        if (found != record.arrays.end() && (!dimensions || found->second.shape.size() == dimensions))
-            return &found->second;
-    }
-    return nullptr;
-}
-
-std::vector<std::size_t> displayIndices(std::size_t count, std::size_t maximum = kDisplaySamples) {
-    if (count <= maximum) {
-        std::vector<std::size_t> result(count);
-        for (std::size_t index = 0; index < count; ++index) result[index] = index;
-        return result;
-    }
-    std::vector<std::size_t> result;
-    result.reserve(maximum);
-    for (std::size_t index = 0; index < maximum; ++index)
-        result.push_back(index * (count - 1) / (maximum - 1));
-    return result;
-}
-
-// Error-bounded display subset of a long trajectory (core PathSimplification,
-// after the trajectory-resolution side-car): fast excursions keep their
-// vertices, smooth stretches are thinned; scientific data is untouched.
-std::vector<std::size_t> trajectoryDisplayIndices(const NpyArray& states, std::size_t maximum) {
-    const std::size_t count = states.shape[0], width = states.shape.size() > 1 ? states.shape[1] : 1;
-    if (count <= maximum || width == 0) return displayIndices(count, maximum);
-    return dynsyslab::core::simplifiedPathIndices(states.doubles(), count, width, maximum);
-}
-
-std::vector<double> sampledVector(const NpyArray* array, std::size_t count,
-                                  const std::vector<std::size_t>& indices) {
-    std::vector<double> values;
-    if (array) values = array->doubles();
-    if (values.size() < count) {
-        values.resize(count);
-        for (std::size_t index = 0; index < count; ++index) values[index] = static_cast<double>(index);
-    }
-    std::vector<double> result;
-    result.reserve(indices.size());
-    for (const auto index : indices) result.push_back(values[index]);
-    return result;
-}
-
-std::vector<double> sampledColumn(const NpyArray& array, std::size_t column,
-                                  const std::vector<std::size_t>& indices) {
-    if (array.shape.size() != 2 || column >= array.shape[1]) return {};
-    const auto values = array.doubles();
-    const std::size_t columns = array.shape[1];
-    std::vector<double> result;
-    result.reserve(indices.size());
-    for (const auto row : indices) result.push_back(values[row * columns + column]);
-    return result;
-}
 
 std::string metadataString(const json::Value& metadata, const char* key,
                            const std::string& fallback = {}) {
@@ -444,6 +390,9 @@ Payload estimatorPayload(const std::filesystem::path& source, const std::string&
 
 Payload buildNativePayload(const std::filesystem::path& source, const std::string& view,
                            const NpzRecord& record, const json::Value& metadata) {
+    if (view == "domain_field") return buildDomainFieldPayload(source, record);
+    if (view == "observable_phase") return buildObservablePhasePayload(source, record, metadata);
+    if (view == "animation") return buildAnimationPayload(source, record);
     if (view == "estimator") return estimatorPayload(source, view, record, metadata);
     if(view=="sindy_dynamics"||view=="sindy_dynamics_transient")
         return buildSindyDynamicsPayload(source,view,record,metadata);
@@ -489,8 +438,40 @@ Payload buildNativePayload(const std::filesystem::path& source, const std::strin
     return trajectoryPayload(source, view, record, metadata);
 }
 
+namespace {
+// Data objects are shown composed: a reconstructions object on the eigenfunctions it is written over
+// (by its basis reference), and an eigenfunctions object with the reconstructions written over it
+// (found among the archive root's reconstructions objects).
+NpzRecord composedObject(const std::filesystem::path& source, NpzRecord record) {
+    namespace c = dynsyslab::core;
+    const auto kind = c::dataObjectKind(record.metadataJson());
+    try {
+        if (kind == c::object_kind::reconstructions) {
+            const auto basis = std::filesystem::u8path(
+                json::parse(record.metadataJson()).at("reconstructions").at("basis").at("path").string());
+            auto composed = c::readNpz(basis);
+            c::mergeReconstructions(composed, basis, record);
+            return composed;
+        }
+        if (kind == c::object_kind::eigenfunctions) {
+            const auto folder = source.parent_path().parent_path() / L"reconstructions";
+            const auto self = std::filesystem::weakly_canonical(source);
+            if (std::filesystem::is_directory(folder))
+                for (const auto& entry : std::filesystem::directory_iterator(folder)) {
+                    if (entry.path().extension() != L".npz") continue;
+                    const auto index = c::readNpzIndex(entry.path());
+                    const auto basis = json::parse(index.metadataJson).at("reconstructions").at("basis").at("path").string();
+                    if (basis.empty() || std::filesystem::weakly_canonical(std::filesystem::u8path(basis)) != self) continue;
+                    c::mergeReconstructions(record, source, c::readNpz(entry.path()));
+                }
+        }
+    } catch (const std::exception&) {}  // shown as stored when a referenced object is missing
+    return record;
+}
+}  // namespace
+
 Payload buildNativePayload(const std::filesystem::path& source, const std::string& view) {
-    const NpzRecord record = dynsyslab::core::readNpz(source);
+    const NpzRecord record = composedObject(source, dynsyslab::core::readNpz(source));
     json::Value metadata;
     if (!record.metadataJson().empty()) metadata = json::parse(record.metadataJson());
     return buildNativePayload(source, view, record, metadata);

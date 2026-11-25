@@ -18,6 +18,7 @@
 //   measurement_observable  history KROMs: observable sampled along the target (default:
 //                 the frozen transform's measurement).
 // Output arrays: time, values (coordinate target), state_target_values.
+#include "MeasurementMap.hpp"
 #include "PostprocessInternal.hpp"
 #include "HistoryControl.hpp"
 
@@ -40,7 +41,7 @@ std::filesystem::path runControlTarget(const std::vector<std::filesystem::path>&
     if (requested.empty() && sources.empty()) throw std::invalid_argument("control_target needs a KROM");
     const auto kromPath = requested.empty() ? sources.front() : std::filesystem::u8path(requested);
     const auto model = c::loadKoopmanModel(kromPath);
-    const bool history = model.coordinates().kind == c::EigenfunctionCoordinateKind::causalHistory;
+    const bool history = model.coordinates().computableFromMeasurements();
     const auto system = c::createSystem(model.systemConfiguration());
     const auto stateDimension = system->initialState().size();
     if (settings.at("state_target").isNull()) throw std::invalid_argument("control_target needs a state_target");
@@ -50,11 +51,9 @@ std::filesystem::path runControlTarget(const std::vector<std::filesystem::path>&
     std::string transformPath;
     c::StateTargetFunction coordinateTarget;
     if (history) {
-        transformPath = settings.at("history_transform").string(model.coordinates().providerArtifact.empty()
-            ? kromPath.u8string() : model.coordinates().providerArtifact);
-        transform = c::loadFrozenHistoryTransform(std::filesystem::u8path(transformPath));
-        if (transform->identity() != model.coordinates().providerIdentity)
-            throw std::invalid_argument("History transform differs from KROM training coordinates");
+        auto map = loadMeasurementMap(model, kromPath, settings);
+        transformPath = map.path;
+        transform = std::move(map.transform);
         const auto name = settings.at("measurement_observable").string(transform->measurement());
         coordinateTarget = detail::historyCoordinateTarget(stateTarget, *transform,
                                                            system->observableCatalog().at(name));
@@ -106,7 +105,7 @@ std::filesystem::path runControlTarget(const std::vector<std::filesystem::path>&
     record.arrays["values"] = c::NpyArray::fromDoubles({count, width}, values);
     record.arrays["state_target_values"] = c::NpyArray::fromDoubles({count, stateDimension}, states);
     record.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(json::Value(std::move(meta))));
-    const auto directory = root / L"derived" / L"control-target";
+    const auto directory = objectFolder(root, "control-target");
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(kromPath.stem().u8string() + "__control-target__" + timestamp()) + ".npz");
     c::writeNpzAtomic(path, record);

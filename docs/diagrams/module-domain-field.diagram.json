@@ -1,0 +1,41 @@
+{
+ "schema": "dynsyslab.architecture-diagram/v1",
+ "title": "Module: domain_field and animation",
+ "description": "workflow/native/src/DomainFieldPostprocess.cpp, AnimationManifest.cpp; native/src/DomainGrid.cpp, CoordinateMaps.cpp, GridFieldArchive.cpp; viewer/native/src/DomainFieldPayload.cpp, AnimationPayload.cpp, AnimationPlayer.cpp. Settings are those of examples/native/animations/koopman-action-demos.json.",
+ "root": {
+  "id": "page", "kind": "group", "layout": "row", "gap": 60,
+  "children": [
+   {"id": "inputs", "kind": "group", "layout": "column", "gap": 36,
+    "children": [
+     {"id": "solve", "kind": "data", "label": "Solve archive", "icon": "archive", "notes": ["the system and its parameters"]},
+     {"id": "function", "kind": "data", "label": "Function g", "icon": "heatmap",
+      "notes": ["observable, expression, library eigenfunction or K-ROM modes"]}
+    ]},
+   {"id": "job", "kind": "module", "label": "domain_field", "icon": "monitor", "layout": "column", "gap": 26,
+    "children": [
+     {"id": "grid", "kind": "module", "label": "DomainGrid", "icon": "matrix", "notes": {"points": "121 x 121", "bounds": "given or trajectory + 4%"}},
+     {"id": "operations", "kind": "module", "label": "Operation", "icon": "heatmap",
+      "notes": ["evaluate", "koopman_action: g o Φ^(k dt)", "push_forward / pull_back through h", "round_trip, fold_set"]}
+    ]},
+   {"id": "field", "kind": "data", "label": "Grid-field archive", "icon": "archive",
+    "notes": ["frames x points x outputs", "status: valid, undefined, conflict, no preimage", "fibre spread and counts"]},
+   {"id": "presentation", "kind": "group", "layout": "column", "gap": 36,
+    "children": [
+     {"id": "animation", "kind": "module", "label": "animation job", "icon": "monitor", "notes": ["panels: any views of any archives", "frame k = page k of each panel"]},
+     {"id": "viewer", "kind": "module", "label": "Viewer", "icon": "monitor",
+      "notes": ["heat maps, domain coloring", "3-D: translucent slices", "play, pause, step, stop"]},
+     {"id": "player", "kind": "data", "label": "HTML player", "icon": "time_series", "notes": ["DynSysLabViewerCli animate"]}
+    ]}
+  ]
+ },
+ "edges": [
+  {"from": "solve", "to": "job"},
+  {"from": "function", "to": "job"},
+  {"from": "grid", "to": "operations", "from_side": "bottom", "to_side": "top"},
+  {"from": "job", "to": "field"},
+  {"from": "field", "to": "animation"},
+  {"from": "field", "to": "viewer"},
+  {"from": "animation", "to": "viewer", "from_side": "bottom", "to_side": "top"},
+  {"from": "viewer", "to": "player", "from_side": "bottom", "to_side": "top", "label": "same frames"}
+ ]
+}

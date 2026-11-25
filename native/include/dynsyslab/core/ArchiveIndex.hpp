@@ -9,7 +9,7 @@
 
 namespace dynsyslab::core {
 
-inline constexpr std::uint32_t kArchiveSummaryVersion = 4;
+inline constexpr std::uint32_t kArchiveSummaryVersion = 5;  // 5: value_space, eigenfunction, data_object.kind
 
 struct ArchiveIndexEntry {
     std::filesystem::path path;

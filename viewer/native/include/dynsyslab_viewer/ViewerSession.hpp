@@ -56,7 +56,7 @@ struct PlotRenderOptions {
     bool toolbar = true;
     int scrollY = 0;
     int benchmarkScrollSteps = 0;
-    double fontScale = 1.0;  // 0.5..4: scales every plot font (and the font-derived margins)
+    double fontScale = defaultPlotFontScale;  // 0.5..4: scales every plot font (and the font-derived margins)
     // Fixed axis ranges for every panel on the page. A missing range is fitted to the
     // data (the ordinate to the samples inside the abscissa range).
     std::optional<std::pair<double, double>> xRange, yRange;

@@ -88,7 +88,12 @@ void heatMaps() {
         for(std::size_t component=0;component<observable.outputDimension();++component)
             for(unsigned part=0;part<(observable.descriptor().complexValued?2u:1u);++part) {
                 const auto& time=paired.figures.at(output*2);const auto& map=paired.figures.at(output*2+1);
-                require(time.kind=="observable_time" && map.kind=="observable_heatmap" && time.title==map.title,"observable pairs out of order");
+                // Complex observables default to domain coloring: the map keeps the complex values
+                // and the function name; the time panel stays the real or imaginary part.
+                const bool complex=observable.descriptor().complexValued;
+                const auto stem=complex?time.title.substr(0,time.title.rfind(" — ")):time.title;
+                require(time.kind=="observable_time" && map.kind=="observable_heatmap"
+                    && (complex?map.traces.front().complexName==stem:time.title==map.title),"observable pairs out of order");
                 require(map.dashboardPage==time.dashboardPage,"observable pair split across pages");
                 require(map.references.empty(),"heat map has IC or equilibrium markers");
                 require(time.references.empty(),"observable time series has state reference points");
@@ -97,7 +102,8 @@ void heatMaps() {
                     &&closeEnough(actual.yMin,limits.yMin)&&closeEnough(actual.yMax,limits.yMax),"heat-map region differs from Main phase plot");
                 for(const auto row:{0u,37u,100u}) for(const auto col:{0u,63u,100u}) {
                     const double state[]{trace.x[col],trace.y[row]}; const auto expected=observable.evaluate(state)[component];
-                    require(closeEnough(trace.z[row*101+col],part?expected.imag():expected.real()),"heat-map cell differs from public observable evaluator");
+                    const double shown=complex?(part?trace.complexValues[row*101+col].imag():trace.complexValues[row*101+col].real()):trace.z[row*101+col];
+                    require(closeEnough(shown,part?expected.imag():expected.real()),"heat-map cell differs from public observable evaluator");
                 }
                 ++output;
             }

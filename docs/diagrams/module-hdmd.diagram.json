@@ -1,0 +1,58 @@
+{
+ "schema": "dynsyslab.architecture-diagram/v1",
+ "title": "Module: H-DMD (postprocess method hdmd)",
+ "description": "Inside workflow/native/src/HdmdPostprocess.cpp and core fitHankelDMD (native/src/Spectral.cpp). Settings are those of the echo job hdmd-long. Red cards and arrows are audit findings.",
+ "root": {
+  "id": "page", "kind": "group", "layout": "row", "gap": 70,
+  "children": [
+   {"id": "input", "kind": "data", "label": "Coordinate-transform archive", "icon": "archive",
+    "notes": ["time", "values = e(t)", "source_states = (r, ṙ)", "metadata_json"]},
+   {"id": "hdmd", "kind": "module", "label": "H-DMD", "icon": "matrix", "layout": "column", "gap": 70,
+    "flags": ["windows look forward: ψ_k uses e_k … e_k+m−1",
+              "T = W⁻¹Uᵀ is never applied to new windows",
+              "input is SourceData, not core::TimeSeries"],
+    "children": [
+     {"id": "row-1", "kind": "group", "layout": "row", "gap": 70,
+      "children": [
+       {"id": "load", "kind": "module", "label": "Load and crop", "icon": "time_series",
+        "notes": {"loadSource": "npz → SourceData", "time_window": "[50, 80]"}},
+       {"id": "hankel", "kind": "module", "label": "Hankel pair X, Y", "icon": "matrix",
+        "notes": {"window_alignment": "start (default)", "matrix_size": "2000 columns", "sampling_window": "20000",
+                  "sample_stride": "10", "Y": "X shifted one sample"}},
+       {"id": "svd", "kind": "module", "label": "Truncated SVD", "icon": "svd",
+        "notes": {"X": "U Σ Vᵀ", "svd_tolerance": "1e-10", "rank": "0 (numerical rank)"}}
+      ]},
+     {"id": "row-2", "kind": "group", "layout": "row", "gap": 70,
+      "children": [
+       {"id": "reconstruct", "kind": "module", "label": "Sort and reconstruct", "icon": "monitor",
+        "notes": {"mode_sort": "|ψ| on last window", "C": "row of Φ at reference delay", "e_k": "≈ C ψ_k"}},
+       {"id": "psi", "kind": "data", "label": "Eigenfunction values", "icon": "heatmap",
+        "notes": ["ψ_k = W⁻¹Uᵀ h_k", "training windows only"]},
+       {"id": "operator", "kind": "module", "label": "Projected operator", "icon": "spectrum",
+        "notes": ["Ã = Uᵀ Y V Σ⁻¹", "Ã W = W M,  Φ = U W", "λ = log μ / (Δt · stride)"]}
+      ]}
+    ]},
+   {"id": "output", "kind": "data", "label": "H-DMD archive", "icon": "archive",
+    "notes": ["discrete/continuous_eigenvalues", "modes Φ", "eigenfunction_values ψ_k",
+              "training_time", "training_coordinates = e_k", "reconstruction_matrix C",
+              "hankel_singular_values", "metadata: scattered-interpolation"],
+    "flags": ["training_states = (r, ṙ), not e"]},
+   {"id": "krom", "kind": "module", "label": "krom_extract (next module)", "icon": "krom",
+    "notes": ["builds the 8-neighbour interpolant", "selects oscillatory pairs"],
+    "flags": ["interpolates ψ on training_states", "unless interpolation_coordinate_", "observable is set"]}
+  ]
+ },
+ "edges": [
+  {"from": "input", "to": "hdmd", "label": "loadSource"},
+  {"from": "load", "to": "hankel"},
+  {"from": "hankel", "to": "svd"},
+  {"from": "svd", "to": "operator", "from_side": "bottom", "to_side": "top"},
+  {"from": "operator", "to": "psi", "from_side": "left", "to_side": "right"},
+  {"from": "psi", "to": "reconstruct", "from_side": "left", "to_side": "right"},
+  {"from": "hdmd", "to": "output"},
+  {"from": "output", "to": "krom"},
+  {"from": "input", "to": "output", "from_side": "bottom", "to_side": "bottom", "style": "flagged",
+   "label": "second readNpz: source_states → training_states (side channel)",
+   "route": [{"y": "hdmd.bottom+46"}]}
+ ]
+}

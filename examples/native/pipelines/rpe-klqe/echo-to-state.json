@@ -223,6 +223,7 @@
           {
             "name": "krom_extract",
             "settings": {
+              "reconstructions": "${hdmd.object:reconstructions}",
               "mode_selection": "${params.mode_selection}",
               "refit_reconstructions": {
                 "observables": [

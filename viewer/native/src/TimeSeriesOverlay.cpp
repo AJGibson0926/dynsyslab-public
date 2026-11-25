@@ -31,9 +31,14 @@ std::vector<Range> timeBins(const std::vector<double>& t,std::size_t count) {
 Trace timeTrace(const TimeSeriesCurve& curve,const std::vector<double>& t,const std::vector<double>& data,
                 std::size_t firstRow,std::size_t width,std::size_t component,const std::vector<Range>& bins) {
     Trace trace;
-    trace.label=curve.label.empty()?curve.key:curve.label;
+    // A label of "_" keeps the curve out of the legend.
+    trace.label=curve.label=="_"?std::string{}:curve.label.empty()?curve.key:curve.label;
     trace.color=component<curve.componentColors.size()?curve.componentColors[component]:curve.color;
     trace.lineStyle=curve.lineStyle;
+    if (curve.lineStyle=="markers" || curve.lineStyle=="open-markers") {
+        trace.marker=true; trace.lineStyle="none";
+        trace.markerShape=curve.lineStyle=="markers"?"large-circle":"large-open-circle";
+    }
     trace.lineWidthPoints=curve.lineWidthPoints;
     const auto value=[&](std::size_t i){return data[(i+firstRow)*width+component];};
     // Nonfinite samples (e.g. after a run was truncated on failure) are not drawn.
@@ -142,6 +147,7 @@ Payload timeSeriesOverlay(const std::filesystem::path& source,const TimeSeriesOv
                 Figure panel;
                 panel.kind="time"; panel.valueScale="linear"; panel.xLabel=req.timeLabel;
                 panel.integerXTicks=req.integerTicks;
+                panel.rightAxis=req.rightAxis;
                 panel.yLabel=req.componentLabels.empty()?"Component "+std::to_string(j+1):req.componentLabels[j];
                 panel.title=req.title.empty()?panel.yLabel:req.title+" | "+panel.yLabel;
                 if (!req.valueLabel.empty()) panel.yLabel=req.valueLabel;
@@ -189,7 +195,12 @@ Payload timeSeriesOverlay(const std::filesystem::path& source,const TimeSeriesOv
                 traces.push_back(std::move(stems)); traces.push_back(std::move(tips));
                 continue;
             }
-            if (!phase) { result.figures[j].traces.push_back(timeTrace(curve,t,values,first-times.begin(),width,j,bins)); continue; }
+            if (!phase) {
+                const bool points=curve.lineStyle=="markers" || curve.lineStyle=="open-markers";  // never binned
+                result.figures[j].traces.push_back(timeTrace(curve,t,values,first-times.begin(),width,j,
+                    points?std::vector<Range>{}:bins));
+                continue;
+            }
             // Phase curve: every vertex in the window (no time binning; the abscissa is not monotone).
             const auto row0=static_cast<std::size_t>(first-times.begin());
             Trace trace=timeTrace(curve,{},{},0,1,0,{});  // style only; points below

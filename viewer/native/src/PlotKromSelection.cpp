@@ -1,12 +1,17 @@
 #include "dynsyslab_viewer/PlotCanvas.hpp"
+#include "ComplexHeatmap.hpp"
 #include <algorithm>
 #include <cmath>
 namespace dsl {
 void PlotCanvas::setComplexDisplay(const std::string& display) {
-    if (!isKrom() || payload_->complexDisplay == display) return;
-    if (display != "real-imaginary" && display != "magnitude-phase" && display != "domain-coloring") return;
+    if (!payload_ || payload_->complexDisplay.empty() || payload_->complexDisplay == display) return;
+    if (!validComplexDisplay(display)) return;
     payload_->complexDisplay = display;
-    PostMessageW(GetParent(window_),kPlotKromChangedMessage,0,0);
+    if (isKrom()) { PostMessageW(GetParent(window_),kPlotKromChangedMessage,0,0); return; }
+    // Other complex heat maps keep their values: re-encode in place.
+    for (auto& figure : payload_->figures) encodeComplexHeatmap(figure, display);
+    rasterCache_.reset();
+    InvalidateRect(window_,nullptr,FALSE);
 }
 void PlotCanvas::selectKromModes(std::vector<std::size_t> modes) {
     if (!isKrom()) return;

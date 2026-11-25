@@ -5,6 +5,7 @@
 #include "CliAgentSetup.hpp"
 #include "CliQuickstart.hpp"
 #include "CliDataPack.hpp"
+#include "CliArchiveTools.hpp"
 #include <dynsyslab/workflow/JobGroup.hpp>
 #include <dynsyslab/math/Query.hpp>
 #include <dynsyslab/workflow/Run.hpp>
@@ -432,6 +433,11 @@ int wmain(int argc, wchar_t** argv) {
                 "observable-closure requires a query JSON file");
             std::cout << json::dump(dynsyslab::workflow::evaluateCoordinateClosureQuery(
                 json::parse(readText(args.positional[1])))) << '\n';
+        }
+        else if (command == L"materialize") {
+            if(args.positional.size()!=3)throw std::invalid_argument(
+                "materialize requires a recorded archive and an output NPZ");
+            dynsyslab::cli::materializeArchive(args.positional[1], args.positional[2]);
         }
         else if (command == L"coordinate-inverse") {
             if(args.positional.size()!=4)throw std::invalid_argument(

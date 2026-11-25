@@ -1,9 +1,13 @@
+#include "MeasurementMap.hpp"
 #include <dynsyslab/workflow/ControlFactory.hpp>
 #include "KlqrAugmentation.hpp"
 #include "ModelBindingOptions.hpp"
 #include "BalancedTruncationSettings.hpp"
 #include "BilinearCertificateBinding.hpp"
 #include "HistoryControl.hpp"
+#include "MeasuredJetControl.hpp"
+#include "IoDelayControl.hpp"
+#include "DerivativeSettings.hpp"
 #include "EstimatedControl.hpp"
 #include <dynsyslab/core/HistoryObservationArchive.hpp>
 
@@ -218,7 +222,7 @@ ControllerSetup buildController(
     if(targetSpace!="state"&&targetSpace!="observable")
         throw std::invalid_argument("control target space must be state or observable");
     const bool observableTarget=targetSpace=="observable";
-    if(observableTarget&&kind!="klqr"&&kind!="kmpc")
+    if(observableTarget&&kind!="klqr"&&kind!="kmpc"&&kind!="io_delay_lqr")
         throw std::invalid_argument("observable-coordinate targets require Koopman control");
     StateTargetFunction target = prescribedKind || observableTarget ? StateTargetFunction{}
         : resolveControlTarget(targetSpec, states);
@@ -322,6 +326,21 @@ ControllerSetup buildController(
                     Kp, Ki, Kd, states, 1, target, pid);
             });
         result.kind = kind; result.family = "state_space";
+    } else if (kind == "io_delay_lqr") {
+        // Echo-only ARX tracker: scalar measurement and own past commands online.
+        const auto clock = resolveClock(kind, solver, settings, detail::ioDelayModelSampleTime(settings), true);
+        auto io = detail::buildIoDelayControl(settings, targetSpec, system, trajectoryCount,
+                                              clock.sampleTime, controlCap(settings.at("control_limit")));
+        result.policy.value = std::move(io.law);
+        result.policy.evaluation = clock.mode; result.policy.sampleTime = clock.sampleTime;
+        result.evaluation = clock.label; result.sampleTime = clock.sampleTime;
+        historyClock = true;  // the clock is bound to the model and already resolved
+        result.target = std::move(io.stateTarget);
+        result.observableTarget = std::move(io.measuredTarget);
+        result.targetObservableNames = {io.observable};
+        result.targetSpace = "observable";
+        result.modelBindingEvidence = std::move(io.evidence);
+        result.kind = kind; result.family = "io_delay";
     } else if (kind == "klqr" || kind == "kmpc") {
         const std::string path = settings.at("krom").string();
         if (path.empty())
@@ -339,15 +358,10 @@ ControllerSetup buildController(
                 dynsyslab::core::wide(path), system.configuration(), selected, modelBindingOptions(settings)));
         result.modelBindingEvidence=json::parse(model->bindingEvidenceJson());
         std::optional<dynsyslab::core::FrozenHistoryTransform> history;
-        if(model->coordinates().kind==dynsyslab::core::EigenfunctionCoordinateKind::causalHistory) {
-            const auto transformPath=settings.at("history_transform").string(
-                model->coordinates().providerArtifact.empty()?path:model->coordinates().providerArtifact);
-            history=dynsyslab::core::loadFrozenHistoryTransform(dynsyslab::core::wide(transformPath));
-            const auto& identity=model->coordinates().providerIdentity;
-            if(identity.rfind("sha256:",0)==0) {
-                if(identity!=history->identity())throw std::invalid_argument("History transform differs from KROM training coordinates");
-            } else if(settings.at("unverified_transform_reason").string().empty())
-                throw std::invalid_argument("Legacy KROM has no frozen transform identity; provide unverified_transform_reason");
+        if(model->coordinates().computableFromMeasurements()) {
+            auto map=postprocess_detail::loadMeasurementMap(*model,dynsyslab::core::wide(path),settings);
+            const auto transformPath=map.path;
+            history=std::move(map.transform);
             if(history->retainedCoordinates().size()!=model->coordinateDimension())
                 throw std::invalid_argument("History coordinate count differs from KROM");
             if(history->timeUnits()!="model-time"&&history->timeUnits()!=system.coordinates().modelTimeUnits)
@@ -436,7 +450,19 @@ ControllerSetup buildController(
             if(certificate)controller->setCertifiedFeedback(certificate->feedback);
             if(controller->stateful())
                 result.modelBindingEvidence.object()["klqr_augmentations"]=klqrAugmentationEvidence(settings);
-            if(history)result.policy.value=detail::coordinateControllerBank(*controller,trajectoryCount);
+            if(const auto& online=settings.at("online_measurement");!online.isNull()) {
+                // Signal-only feedback: coordinates (y, y') from one sensor and a causal differentiator.
+                if(history||controller->stateful()||representation=="exact"||model->coordinateDimension()!=2)
+                    throw std::invalid_argument("online_measurement needs a two-coordinate KROM, a stored input map and a stateless KLQR");
+                const auto clock=resolveClock(kind,solver,settings,defaultSampleTime,true);
+                dynsyslab::core::DerivativeSpec derivative;derivative.method="backward2";
+                if(!online.at("derivative").isNull())derivative=parseDerivativeSpec(online.at("derivative"));
+                result.policy.value=detail::measuredJetControlLaw(*controller,
+                    system.observableCatalog().at(online.at("observable").string("far_field_acoustic_echo")),
+                    derivative,clock.sampleTime,trajectoryCount,
+                    static_cast<std::size_t>(online.at("warmup_samples").number(3)),settings.at("warmup_input").number(0));
+                result.modelBindingEvidence.object()["online_measurement"]=online;
+            } else if(history)result.policy.value=detail::coordinateControllerBank(*controller,trajectoryCount);
             else if(controller->stateful()) {
                 // Integral/PID states: one controller copy per trajectory, sampled clock (below).
                 auto bank=std::make_shared<std::vector<dynsyslab::core::KoopmanLQRController>>(
@@ -490,7 +516,8 @@ ControllerSetup buildController(
     }
 
     const bool sampledRequired = kind == "sdre" || kind == "pid" || (kind == "klqr"
-        && (klqrIsStateful(settings) || !settings.at("bilinear_certificate").isNull()));
+        && (klqrIsStateful(settings) || !settings.at("bilinear_certificate").isNull()
+            || !settings.at("online_measurement").isNull()));
     if (kind != "mpc" && kind != "kmpc" && !historyClock) {
         const auto clock = resolveClock(kind, solver, settings,
                                         defaultSampleTime, sampledRequired);

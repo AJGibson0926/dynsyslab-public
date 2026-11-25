@@ -30,7 +30,7 @@ void defaultsAndSharedRepresentation() {
     require(fit.snapshotOneStepRelativeError<1e-10,"degree-one snapshot decoder failed");
     require(fit.lifted.oneStepRelativeError>1e-5,"input-dependent lifting error was hidden");
     require(fit.lifted.hasEigenfunctions,"expected nondefective eigenbasis");
-    const auto polynomial=fit.polynomialEigenfunctions();
+    const auto polynomial=fit.expansion();
     const auto values=core::evaluateEdmdControlEigenfunctions(fit,x,count);
     require(polynomial.samples==0&&polynomial.residualRms.empty(),"fabricated SINDy fit diagnostics");
     for(std::size_t mode=0;mode<fit.lifted.rank;++mode) {

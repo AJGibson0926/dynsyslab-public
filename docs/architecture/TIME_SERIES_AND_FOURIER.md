@@ -51,6 +51,31 @@ result; requesting different options replaces the cache; `clear()` releases
 it. No work or memory is retained unless a client explicitly requests the
 analysis.
 
+## Operations (`core/TimeSeriesOperations.hpp`)
+
+Every operation returns a new `TimeSeries`; the series has member shortcuts to each, and the
+implementations live in one module.
+
+| Member | Free function | Result |
+|---|---|---|
+| `crop(first, count)` | `cropSamples` | Samples [first, first + count). Out of range throws. The one windowing primitive. |
+| `cropTime(start, stop)` | `cropTime` | Samples with start ≤ t ≤ stop. |
+| `resample(times, options)` | `resample` | Values at new times: linear or cubic Hermite with Catmull-Rom slopes (Fritsch and Carlson 1980). Outside the source span: an error (default), the end value held, or NaN. |
+| `resampleOnto(reference, options)` | `resampleOnto` | The same, on another series' time grid. |
+| `spectrum(options)` | `fourier().transform` | The Fourier transform above (cached). |
+| `TimeSeries::fromSpectrum(transform)` | `timeSeriesFromSpectrum` | Back to the time domain, exactly for a rectangular window (one- or two-sided). |
+| `history(window, shift)` | `WindowHistory(window, shift).apply` | The window-history transformation. |
+
+**Window history.** `WindowHistory` is fixed ahead of time by its window length (and shift), then
+applied to any series. Output sample k is `crop(k·shift, window)` flattened oldest sample first,
+labelled at the window's last time (Takens 1981 delay embedding). A series shorter than the
+window has no windows (`windowCount` is 0 and `apply` throws), one exactly the window length gives
+one sample, and a longer one gives (n − window)/shift + 1. The output is a `TimeSeries` with
+window × components coordinates, so a history of histories is just the transformation applied
+again. The frozen Hankel projection (`projectHistory`) is this window history followed by
+(Uᵀh)/σ; it keeps its FFT correlation because windows can be thousands of samples long, and a test
+checks that it equals the cropped-window definition.
+
 ## Archive boundary
 
 `storeTimeSeries` writes only authoritative time and value arrays.

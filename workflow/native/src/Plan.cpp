@@ -62,13 +62,24 @@ PlannedSystem plannedSystem(const json::Value& job,
 void validateController(const json::Value& job) {
     static const std::set<std::string> supported{
         "none", "waveform", "random_pulse", "pid", "lqr", "sdre",
-        "mpc", "klqr", "kmpc",
+        "mpc", "klqr", "kmpc", "io_delay_lqr",
     };
     const std::string kind = job.at("controller").at("kind").string("none");
     if(!job.at("controller").at("settings").at("estimator").isNull()&&kind!="klqr")
         throw std::invalid_argument("Online KLQE composition requires KLQR");
     if (!supported.count(kind))
         throw std::invalid_argument("unknown native controller kind: " + kind);
+    if (kind == "io_delay_lqr") {
+        const auto& controller = job.at("controller");
+        if (controller.at("settings").at("model").string().empty()
+            || controller.at("settings").at("final_time").isNull())
+            throw std::invalid_argument("io_delay_lqr needs settings.model and settings.final_time");
+        if (controller.at("target").at("space").string() != "observable"
+            || controller.at("target").at("kind").string() != "from_state")
+            throw std::invalid_argument("io_delay_lqr target must be an observable from_state target");
+        if (job.at("solver").at("control_evaluation").string("sampled") != "sampled")
+            throw std::invalid_argument("io_delay_lqr requires sampled control evaluation");
+    }
     if (!job.at("controller").at("settings").at("applied_controller").isNull()
         && (kind != "klqr" || (job.at("controller").at("settings").at("feedback").string() != "estimate"
                                && job.at("controller").at("settings").at("estimator").isNull())))
@@ -90,12 +101,12 @@ void validateController(const json::Value& job) {
 bool supportedMethod(const json::Value& stage) {
     static const std::set<std::string> supported{
         "svd", "pca", "pod", "bagged_pca", "robust_pca", "hankel_pod", "hankel_svd", "hankel_matrix",
-        "dmd", "dmdc", "edmdc", "hdmd", "hankel_dmd", "sindy", "edmd", "havok",
+        "dmd", "dmdc", "edmdc", "hdmd", "hankel_dmd", "sindy", "edmd", "havok", "eigenfunction_expansion", "eigenfunction_errors", "domain_field",
         "koopman_spectral", "resdmd", "mpedmd", "hermitian_dmd", "tlsdmd", "multdmd", "stochastic_resdmd", "specrkhs",
         "control_regression", "krom_extract", "koopman_validation", "observable_reconstruction",
         "echo_history_koopman", "history_basis", "history_projection", "history_control_regression", "input_map", "bilinear_certificate", "control_target", "derivative_benchmark", "mode_selection",
         "coordinate_transform", "sindy_dynamics", "dynamics_validation",
-        "krom_recenter", "krom_readout", "reference_signal", "control_score", "figure_dataset",
+        "krom_recenter", "krom_readout", "reference_signal", "control_score", "figure_dataset", "io_delay_model", "animation",
         "boundary_eigenfunctions", "eigenvalue_optimization",
         "observability", "klqe", "linear_analysis", "linear_systems", "controllability", "empirical_observability",
     };
@@ -249,7 +260,8 @@ json::Value postprocessPlan(const json::Value& job) {
     result["methods"] = json::Value(methods);
     const auto pooled = static_cast<std::size_t>(std::count_if(
         methods.begin(), methods.end(), [](const json::Value& method) {
-            return method.string() == "echo_history_koopman" || method.string() == "history_basis";
+            return method.string() == "echo_history_koopman" || method.string() == "history_basis"
+                || method.string() == "io_delay_model";
         }));
     result["stage_count"] = static_cast<double>(
         sources.size() * (methods.size() - pooled) + pooled);

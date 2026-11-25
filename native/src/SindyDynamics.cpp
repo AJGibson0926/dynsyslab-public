@@ -1,6 +1,6 @@
 #include <dynsyslab/core/SindyDynamics.hpp>
 #include <dynsyslab/core/SINDy.hpp>
-#include <dynsyslab/core/PolynomialEigenfunctions.hpp>
+#include <dynsyslab/core/FunctionExpansion.hpp>
 #include <dynsyslab/numerics/LeastSquares.hpp>
 #include <algorithm>
 #include <cmath>
@@ -41,14 +41,15 @@ TimeSeries SindyDynamicsModel::evaluate(const TimeSeries& q) const {
     return TimeSeries({q.timeData(),q.timeData()+q.sampleCount()},std::move(result),outputs_);
 }
 Observable SindyDynamicsModel::vectorField() const {
-    if(library_.expressions().empty())throw std::logic_error("Library has no portable expressions");
+    const auto library=library_.expressions();
+    if(library.empty())throw std::logic_error("Library has no portable expressions");
     if(!isVectorField())throw std::logic_error("A cross-coordinate rate law is not a closed vector field");
     std::vector<AnalyticExpression> rhs;
     for(std::size_t j=0;j<dimension();++j) {
         auto value=AnalyticExpression::constant(0,dimension());
         for(std::size_t f=0;f<library_.outputDimension();++f)
             if(coefficients_[f*dimension()+j]!=0)
-                value=value+library_.expressions()[f]*coefficients_[f*dimension()+j];
+                value=value+library[f]*coefficients_[f*dimension()+j];
         rhs.push_back(value);
     }
     return Observable::fromExpressions({"sindy_dynamics","SINDy vector field","","model",{},false},rhs);

@@ -1,3 +1,5 @@
+#include <dynsyslab/core/EigenfunctionArchive.hpp>
+#include <dynsyslab/core/DataObject.hpp>
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/Json.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
@@ -56,21 +58,42 @@ int main() {
         core::writeNpzAtomic(sourcePath,source);
 
         const auto run=dynsyslab::workflow::executeJob(job(sourcePath),root/"archives");
-        require(run.archives.size()==1,"H-DMD did not publish one archive");
+        // H-DMD publishes two data objects: eigenfunctions (primary) and reconstructions over them.
+        require(run.archives.size()==2,"H-DMD did not publish eigenfunctions and reconstructions");
         const auto archive=core::readNpz(run.archives.front());
-        require(archive.contains("training_states")
-            &&archive.contains("eigenfunction_values")
-            &&!archive.contains("training_eigenfunction_values")
-            &&archive.contains("reconstruction_names"),
-            "H-DMD archive did not store one canonical interpolated KROM value array");
-        const auto observable=archive.at("reconstruction_names").string();
-        const auto model=core::loadKoopmanModel(run.archives.front());
+        const auto readouts=core::readNpz(run.archives.back());
+        require(core::dataObjectKind(archive.metadataJson())=="eigenfunctions"
+            &&core::dataObjectKind(readouts.metadataJson())=="reconstructions","objects declare their kinds");
+        require(core::hasEigenfunctionObjects(archive)
+            &&!archive.contains("training_states")
+            &&archive.contains("eigenfunction_values")&&archive.contains("window_map")
+            &&!archive.contains("modes")&&!archive.contains("reconstruction_names")
+            &&readouts.contains("reconstruction_names"),
+            "the eigenfunctions object holds eigenfunctions only, and no copied state");
+        require(core::json::parse(archive.metadataJson()).at("data_object").at("produced_by").at("method").string()=="hdmd",
+                "the producing method is a provenance tag");
+        const auto observable=readouts.at("reconstruction_names").string().substr(0,readouts.at("reconstruction_names").string().find('\n'));
+        core::ModelBindingOptions withReadouts;
+        withReadouts.reconstructions={run.archives.back()};
+        const auto model=core::loadKoopmanModel(run.archives.front(),withReadouts);
+        {   // One eigenfunction on its own evaluates a new window without H-DMD.
+            const auto psi=core::readEigenfunction(archive,0,"expansion");
+            const auto layout=core::hankelWindowLayoutFromJson(core::json::parse(archive.metadataJson())
+                .at("eigenfunction_objects").at("representations").array()[1]);
+            const core::TimeSeries series(time,states,2);
+            const auto window=layout.window_at(series,static_cast<std::size_t>(archive.at("training_sample_indices").doubles().back()));
+            const auto value=psi.evaluate(window.data());
+            const auto stored=archive.at("eigenfunction_values").complexDoubles();
+            const std::size_t last=archive.at("eigenfunction_values").shape[0]-1,modes=archive.at("eigenfunction_values").shape[1];
+            require(std::abs(value[0]-stored[last*modes])<1e-8*(1+std::abs(stored[last*modes])),"a stand-alone eigenfunction reproduces its value");
+        }
         require(model.liftedDimension()==2
             &&model.eigenfunctionRepresentation()=="scattered-interpolation"
             &&model.hasReconstruction(observable),
             "H-DMD archive did not load as a control-ready scattered KROM");
-        const auto archivedStates=archive.at("training_states").doubles();
-        const auto lifted=model.evaluate(archivedStates.data());
+        // The state domain resolves through the input record: evaluate at a training state.
+        const auto label=static_cast<std::size_t>(archive.at("training_sample_indices").doubles().front());
+        const auto lifted=model.evaluate(states.data()+2*label);
         require(lifted.size()==2&&std::isfinite(lifted[0].real()),
             "interpolated H-DMD eigenfunction cannot be evaluated");
         auto jointJob=job(sourcePath);
@@ -79,7 +102,9 @@ int main() {
         settings["rank"]=4.0;settings["window_alignment"]="end";
         settings["reconstruction_observables"]=json::Value::Array{"state"};
         const auto jointRun=dynsyslab::workflow::executeJob(jointJob,root/"joint");
-        const auto joint=core::loadKoopmanModel(jointRun.archives.front());
+        core::ModelBindingOptions jointReadouts;
+        jointReadouts.reconstructions={jointRun.archives.back()};
+        const auto joint=core::loadKoopmanModel(jointRun.archives.front(),jointReadouts);
         require(joint.hasReconstruction("position")&&joint.hasReconstruction("velocity")
             &&joint.hasReconstruction("state"),"joint KROM lost named reconstruction maps");
         const auto jointArchive=core::readNpz(jointRun.archives.front());

@@ -1,0 +1,51 @@
+{
+ "schema": "dynsyslab.architecture-diagram/v1",
+ "title": "DynSysLab pipeline: training solve to K-ROM control on (r, ṙ)",
+ "description": "One RPE control run on state-space eigenfunctions. Settings are those of examples/native/pipelines/rpe-viscous-klqr-multisine/base-r.json; every stage is a job, and later stages name earlier ones (${train.archive}).",
+ "root": {
+  "id": "pipeline", "kind": "group", "layout": "row", "gap": 60,
+  "children": [
+   {"id": "solver", "kind": "module", "label": "Solver", "icon": "monitor",
+    "notes": {"stage": "train", "system": "rpe air_water_20c, viscous", "method": "BDF, rtol 1e-9", "time": "τ ∈ [0, 25], Δτ 1e-3"}},
+   {"id": "solution", "kind": "data", "label": "Training trajectory", "icon": "time_series", "notes": ["(r, ṙ)(τ), one IC"]},
+   {"id": "postprocessing", "kind": "module", "label": "Post-Processing", "icon": "monitor", "layout": "column", "align": "start", "gap": 50,
+    "children": [
+     {"id": "coords", "kind": "module", "label": "coordinate_transform", "icon": "matrix", "notes": {"kind": "identity: domain (r, ṙ)"}},
+     {"id": "hdmd-row", "kind": "group", "layout": "row", "gap": 60,
+      "children": [
+       {"id": "hdmd", "kind": "module", "label": "H-DMD", "icon": "matrix",
+        "notes": {"observable": "r", "matrix_size": "2000", "sampling_window": "20000"}},
+       {"id": "spectrum", "kind": "data", "label": "Spectrum λ_j", "icon": "spectrum"}
+      ]},
+     {"id": "sindy-row", "kind": "group", "layout": "row", "gap": 60,
+      "children": [
+       {"id": "sindy", "kind": "module", "label": "SINDy", "icon": "library",
+        "notes": {"polynomial_degree": "4", "threshold": "0.05", "Γ": "system_rhs"}},
+       {"id": "eigenfunctions", "kind": "data", "label": "Eigenfunctions ψ_j(r, ṙ)", "icon": "heatmap",
+        "notes": ["FunctionExpansion on the physical-state domain"]}
+      ]},
+     {"id": "extract", "kind": "module", "label": "krom_extract", "icon": "krom", "notes": {"rule": "oscillatory_pairs", "count": "1"}}
+    ]},
+   {"id": "krom", "kind": "data", "label": "K-ROM", "icon": "krom", "notes": ["ż = Λz + B_ψ u", "Spectrum + Eigenfunctions"]},
+   {"id": "consumers", "kind": "group", "layout": "column", "gap": 40,
+    "children": [
+     {"id": "controller", "kind": "module", "label": "Controller (KLQR)", "icon": "controller",
+      "notes": {"Q": "5000", "R": "1e-4", "target": "multi-sine radius, 10 τ ramp"}},
+     {"id": "viewer", "kind": "module", "label": "Viewer", "icon": "monitor", "notes": ["time, phase, K-ROM dashboard", "domain fields, animations"]}
+    ]}
+  ]
+ },
+ "edges": [
+  {"from": "solver", "to": "solution"},
+  {"from": "solution", "to": "postprocessing"},
+  {"from": "coords", "to": "hdmd-row", "from_side": "bottom", "to_side": "top"},
+  {"from": "hdmd", "to": "spectrum"},
+  {"from": "spectrum", "to": "sindy", "label": "λ frozen",
+   "route": [{"x": "spectrum.right+14"}, {"y": "hdmd-row.bottom+25"}, {"x": "sindy.left-14"}]},
+  {"from": "sindy", "to": "eigenfunctions"},
+  {"from": "sindy-row", "to": "extract", "from_side": "bottom", "to_side": "top"},
+  {"from": "postprocessing", "to": "krom"},
+  {"from": "krom", "to": "controller"},
+  {"from": "controller", "to": "viewer", "from_side": "bottom", "to_side": "top", "label": "controlled solve"}
+ ]
+}

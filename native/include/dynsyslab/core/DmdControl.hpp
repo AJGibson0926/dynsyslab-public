@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <vector>
 #include <dynsyslab/core/SINDy.hpp>
-#include <dynsyslab/core/PolynomialEigenfunctions.hpp>
+#include <dynsyslab/core/EigenfunctionFit.hpp>
 
 namespace dynsyslab::core {
 
@@ -37,9 +37,9 @@ struct DmdControlResult {
     std::vector<std::complex<double>> modalInputMatrix; // rank x inputDimension
     // Export linear polynomials to the shared eigenfunction representation.
     // Uses principal log(mu)/dt; rejects zero multipliers/defective eigenbases.
-    [[nodiscard]] PolynomialEigenfunctionSet eigenfunctionSet() const;
+    [[nodiscard]] EigenfunctionFitResult eigenfunctionSet() const;
     // Compatibility export requires finite continuous rates (nonzero multipliers).
-    [[nodiscard]] KoopmanSINDyResult polynomialEigenfunctions() const;
+    [[nodiscard]] KoopmanSINDyResult expansion() const;
 };
 
 // Explicit sample-major pairs support multiple trajectories without ever

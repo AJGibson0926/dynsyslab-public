@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <string>
 #include <utility>
@@ -53,8 +54,23 @@ struct NpzIndex {
     [[nodiscard]] bool contains(const std::string& name) const;
 };
 
+// Reads an archive. A recorded archive (RecordedArchive below) is replayed: its arrays are
+// recomputed from the record, and its stored metadata is kept.
 [[nodiscard]] NpzRecord readNpz(const std::filesystem::path& path);
+// Array names and metadata only; a recorded archive lists the arrays its replay produces.
 [[nodiscard]] NpzIndex readNpzIndex(const std::filesystem::path& path);
+// The file exactly as stored (no replay).
+[[nodiscard]] NpzRecord readNpzStored(const std::filesystem::path& path);
+[[nodiscard]] NpzIndex readNpzIndexStored(const std::filesystem::path& path);
+
+// Recorded archives. A derived archive may store how to recompute its arrays instead of the arrays:
+// its metadata then holds "recorded_archive": {"schema", "arrays": [names], ...}. Cheap,
+// deterministic derivations (e.g. coordinate changes) are recorded this way, so a chain of them
+// keeps one copy of the data, at its root. The library that writes a schema registers its replay;
+// readNpz calls it with the stored record and returns the recomputed archive.
+using RecordedArchiveReader = std::function<NpzRecord(const std::filesystem::path& path, NpzRecord stored)>;
+void registerRecordedArchiveReader(const std::string& schema, RecordedArchiveReader reader);
+[[nodiscard]] bool isRecordedArchive(const std::string& metadataJson);
 void writeNpzAtomic(const std::filesystem::path& path, const NpzRecord& record);
 // Atomically create a completed archive; fail if the destination already exists.
 void writeNpzAtomicNew(const std::filesystem::path& path, const NpzRecord& record);

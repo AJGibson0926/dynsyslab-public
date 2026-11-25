@@ -1,0 +1,136 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "pipeline",
+  "label": "Koopman action demos",
+  "description": "The Koopman operator acting on a state-component observable, U^t g = g o Phi^t, for the undamped pendulum (g = angle), double-well Duffing (g = position) and Rayleigh-Plesset bubble (g = radius), each animated beside its phase portrait; plus the push-forward of the bubble radius into the far-field echo coordinates (e, e').",
+  "reuse_identical_stages": false,
+  "stages": [
+    {
+      "id": "pendulum",
+      "job": {
+        "kind": "solve", "label": "pendulum-undamped",
+        "system": {"name": "nonlinear_pendulum", "preset": "large_angle_low_damping", "parameters": {"damping_n_m_s": 0.0}},
+        "time": {"start": 0.0, "stop": 6.0, "output_step": 0.005, "coordinate_system": "automatic"},
+        "initial_conditions": {"mode": "explicit", "count": 3, "clusters": 1, "seed": 0,
+                               "values": [[1.0, 0.0], [2.4, 0.0], [0.0, 6.6]], "ranges": []},
+        "controller": {"kind": "none", "settings": {}, "target": {"kind": "constant", "state": [0.0, 0.0]}},
+        "solver": {"method": "RK45", "rtol": 1e-10, "atol": 1e-12},
+        "archive": {"enabled": true, "data_role": "free_training"}
+      }
+    },
+    {
+      "id": "pendulum_action",
+      "job": {
+        "kind": "postprocess", "label": "pendulum-koopman-action",
+        "sources": ["${pendulum.archives[0]}"],
+        "methods": [{"name": "domain_field", "enabled": true, "settings": {
+          "function": {"expression": "angle", "label": "angle"},
+          "domain": {"lower": [-3.14159, -7.5], "upper": [3.14159, 7.5], "points": 121},
+          "operation": "koopman_action", "time_step": 0.1, "steps": 40, "maximum_step": 0.005,
+          "animation": {"frame_seconds": 0.25}}}],
+        "archive": {"enabled": true}
+      }
+    },
+    {
+      "id": "duffing",
+      "job": {
+        "kind": "solve", "label": "duffing-undamped",
+        "system": {"name": "duffing", "preset": "double_well_reference", "parameters": {"delta": 0.0}},
+        "time": {"start": 0.0, "stop": 20.0, "output_step": 0.01, "coordinate_system": "automatic"},
+        "initial_conditions": {"mode": "explicit", "count": 3, "clusters": 1, "seed": 0,
+                               "values": [[1.2, 0.0], [0.4, 0.0], [0.0, 1.0]], "ranges": []},
+        "controller": {"kind": "none", "settings": {}, "target": {"kind": "constant", "state": [0.0, 0.0]}},
+        "solver": {"method": "RK45", "rtol": 1e-10, "atol": 1e-12},
+        "archive": {"enabled": true, "data_role": "free_training"}
+      }
+    },
+    {
+      "id": "duffing_action",
+      "job": {
+        "kind": "postprocess", "label": "duffing-koopman-action",
+        "sources": ["${duffing.archives[0]}"],
+        "methods": [{"name": "domain_field", "enabled": true, "settings": {
+          "function": {"expression": "position", "label": "position"},
+          "domain": {"lower": [-2.0, -1.5], "upper": [2.0, 1.5], "points": 121},
+          "operation": "koopman_action", "time_step": 0.25, "steps": 40, "maximum_step": 0.01,
+          "animation": {"frame_seconds": 0.25}}}],
+        "archive": {"enabled": true}
+      }
+    },
+    {
+      "id": "rpe",
+      "job": {
+        "kind": "solve", "label": "rpe-undamped",
+        "system": {"name": "rpe", "preset": "air_water_20c", "parameters": {
+          "ambient_pressure_pa": 100000, "equilibrium_radius_m": 1e-05, "kappa": 1.3333333333333333,
+          "mu_pa_s": 0.0, "pressure_input_sign": -1, "rho_kg_m3": 998, "sigma_n_m": 0.0725, "vapor_pressure_pa": 2330}},
+        "time": {"start": 0.0, "stop": 20.0, "output_step": 0.001, "coordinate_system": "dimensionless"},
+        "initial_conditions": {"mode": "explicit", "count": 2, "clusters": 1, "seed": 0,
+                               "values": [[1.5, 0.0], [1.2, 0.0]], "ranges": []},
+        "controller": {"kind": "none", "settings": {}, "target": {"kind": "constant", "state": [1.0, 0.0]}},
+        "solver": {"method": "BDF", "rtol": 1e-09, "atol": 1e-09},
+        "archive": {"enabled": true, "data_role": "free_training"}
+      }
+    },
+    {
+      "id": "rpe_action",
+      "job": {
+        "kind": "postprocess", "label": "rpe-koopman-action",
+        "sources": ["${rpe.archives[0]}"],
+        "methods": [{"name": "domain_field", "enabled": true, "settings": {
+          "function": {"expression": "radius", "label": "radius"},
+          "domain": {"points": 101},
+          "operation": "koopman_action", "time_step": 0.2, "steps": 40, "maximum_step": 0.0005,
+          "animation": {"frame_seconds": 0.25}}}],
+        "archive": {"enabled": true}
+      }
+    },
+    {
+      "id": "rpe_echo_push",
+      "job": {
+        "kind": "postprocess", "label": "rpe-echo-push-forward",
+        "sources": ["${rpe.archives[0]}"],
+        "methods": [{"name": "domain_field", "enabled": true, "settings": {
+          "function": {"expression": "radius", "label": "radius"},
+          "map": {"observables": ["far_field_acoustic_echo", "far_field_acoustic_echo_dot"]},
+          "domain": {"points": 241},
+          "target": {"points": 81},
+          "operation": "push_forward", "tolerance": 0.02, "oversampling": 3}}],
+        "archive": {"enabled": true}
+      }
+    },
+    {
+      "id": "pendulum_movie",
+      "job": {
+        "kind": "postprocess", "label": "pendulum-koopman-action-animation",
+        "sources": ["${pendulum_action.archives[0]}", "${pendulum.archives[0]}"],
+        "methods": [{"name": "animation", "enabled": true, "settings": {
+          "title": "Pendulum: U^t angle", "frame_seconds": 0.25, "columns": 2,
+          "panels": [{"view": "domain_field"}, {"view": "phase"}]}}],
+        "archive": {"enabled": true}
+      }
+    },
+    {
+      "id": "duffing_movie",
+      "job": {
+        "kind": "postprocess", "label": "duffing-koopman-action-animation",
+        "sources": ["${duffing_action.archives[0]}", "${duffing.archives[0]}"],
+        "methods": [{"name": "animation", "enabled": true, "settings": {
+          "title": "Duffing: U^t position", "frame_seconds": 0.25, "columns": 2,
+          "panels": [{"view": "domain_field"}, {"view": "phase"}]}}],
+        "archive": {"enabled": true}
+      }
+    },
+    {
+      "id": "rpe_movie",
+      "job": {
+        "kind": "postprocess", "label": "rpe-koopman-action-animation",
+        "sources": ["${rpe_action.archives[0]}", "${rpe.archives[0]}"],
+        "methods": [{"name": "animation", "enabled": true, "settings": {
+          "title": "Rayleigh-Plesset: U^t radius", "frame_seconds": 0.25, "columns": 2,
+          "panels": [{"view": "domain_field"}, {"view": "phase"}]}}],
+        "archive": {"enabled": true}
+      }
+    }
+  ]
+}

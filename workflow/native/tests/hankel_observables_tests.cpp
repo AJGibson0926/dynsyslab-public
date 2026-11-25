@@ -1,3 +1,5 @@
+#include <dynsyslab/core/DataObject.hpp>
+#include <dynsyslab/core/EigenfunctionArchive.hpp>
 #include <dynsyslab/workflow/Postprocess.hpp>
 #include <dynsyslab/workflow/CoordinateInverse.hpp>
 #include <algorithm>
@@ -24,6 +26,14 @@ std::vector<std::filesystem::path> byMethod(const workflow::PostprocessResult& r
     std::vector<std::filesystem::path> out;
     for(std::size_t i=0;i<r.methods.size();++i) if(r.methods[i]==method) out.push_back(r.archives[i]);
     return out;
+}
+// The one object of `kind` a method published (methods publish data objects, primary first).
+std::filesystem::path objectOf(const workflow::PostprocessResult& r,const std::string& method,const std::string& kind) {
+    std::vector<std::filesystem::path> out;
+    for(const auto& path:byMethod(r,method))
+        if(core::dataObjectKind(core::readNpzIndex(path).metadataJson)==kind) out.push_back(path);
+    require(out.size()==1,"expected one object of the kind");
+    return out.front();
 }
 template<class F> void rejects(F f) {
     bool failed=false;
@@ -62,8 +72,9 @@ void test(const std::filesystem::path& root) {
     require(byMethod(result,"coordinate_transform").size()==1,"shorthand expands to one coordinate change");
     require(result.methods.front()=="coordinate_transform","coordinate change runs before the Hankel module");
     auto a=core::readNpz(byMethod(result,"hankel_svd").at(0)),b=core::readNpz(byMethod(result,"hdmd").at(0));
-    auto H=a.at("hankel_matrix").doubles(),Y=b.at("shifted_hankel_matrix").doubles();
-    require(H==b.at("hankel_matrix").doubles(),"SVD and DMD inputs differ");
+    const auto bm=core::readNpz(objectOf(result,"hdmd","matrix"));
+    auto H=a.at("hankel_matrix").doubles(),Y=bm.at("shifted_hankel_matrix").doubles();
+    require(H==bm.at("hankel_matrix").doubles(),"SVD and DMD inputs differ");
     const auto e=catalog.at("echo").evaluateRealBatch(x,52),q=catalog.at("echo_dot").evaluateRealBatch(x,52);
     for (std::size_t j=0;j<18;++j) for (std::size_t d=0;d<4;++d) {
         const auto i=4+2*(j+d),k=3*d*18+j;
@@ -85,13 +96,14 @@ void test(const std::filesystem::path& root) {
         core::json::Value::Object{{"name","hankel_svd"},{"settings",core::json::parse(R"({"use_previous_hankel":true,"center":true,"save_matrix":true})")}},
         core::json::Value::Object{{"name","hdmd"},{"settings",core::json::parse(R"({"use_previous_hankel":true,"rank":2,"save_matrix":true})")}}};
     const auto stored=workflow::executePostprocess(replay,root);
-    for(const auto* method:{"hankel_matrix","hankel_svd","hdmd"})
+    for(const auto* method:{"hankel_matrix","hankel_svd"})
         require(core::readNpz(byMethod(stored,method).at(0)).at("hankel_matrix").doubles()==H,"matrix replay changed H");
+    require(core::readNpz(objectOf(stored,"hdmd","matrix")).at("hankel_matrix").doubles()==H,"matrix replay changed H");
     const auto savedMatrix=core::readNpz(byMethod(stored,"hankel_matrix").at(0));
     require(savedMatrix.at("time").doubles()==t,"stored matrix alignment changed");
     near(savedMatrix.at("successor_time").doubles().back(),time[46]);
     const auto repeated=core::readNpz(byMethod(stored,"hdmd").at(0));
-    require(repeated.at("shifted_hankel_matrix").doubles()==Y,"stored successor changed");
+    require(core::readNpz(objectOf(stored,"hdmd","matrix")).at("shifted_hankel_matrix").doubles()==Y,"stored successor changed");
     const auto eig=repeated.at("discrete_eigenvalues").complexDoubles(),expected=b.at("discrete_eigenvalues").complexDoubles();
     for(std::size_t i=0;i<eig.size();++i) near(std::abs(eig[i]-expected[i]),0.);
     source.arrays["control_values"]=core::NpyArray::fromDoubles({52,1},std::vector<double>(52,.4));
@@ -125,13 +137,18 @@ void test(const std::filesystem::path& root) {
             R"({"kind":"channels","channels":["echo",{"observable":"echo","derivative_order":1}]})")}},
         core::json::Value::Object{{"name","hdmd"},{"settings",columns}}};
     const auto explicitRun=workflow::executePostprocess(explicitJob,root);
-    require(core::readNpz(byMethod(explicitRun,"hdmd").at(0)).at("hankel_matrix").doubles()==H,"explicit form changed H");
+    require(core::readNpz(objectOf(explicitRun,"hdmd","matrix")).at("hankel_matrix").doubles()==H,"explicit form changed H");
     const auto coordinates=core::readNpz(byMethod(explicitRun,"coordinate_transform").at(0));
     require(coordinates.at("source_states").doubles()==x,"coordinate change keeps the physical states");
-    {   // H-DMD's model state is still the physical state at each training sample.
+    {   // The eigenfunctions' interpolation stores the physical state at each training sample.
         const auto fit=core::readNpz(byMethod(explicitRun,"hdmd").at(0));
-        const auto tt=fit.at("training_time").doubles();const auto ts=fit.at("training_states").doubles();
-        require(fit.at("training_states").shape.at(1)==2,"physical state width");
+        require(!fit.contains("training_states"),"H-DMD must not copy the physical state");
+        require(!fit.contains("training_coordinates")&&!fit.contains("domain__input"),"H-DMD must not copy its input");
+        const auto set=core::readEigenfunctionSet(fit,{"interpolation"});
+        const auto& interpolation=core::interpolationOf(set);
+        require(interpolation.coordinates().isPhysicalState(),"the default interpolation domain is the full state");
+        const auto tt=fit.at("training_time").doubles();const auto ts=interpolation.points();
+        require(interpolation.coordinates().dimension==2,"physical state width");
         for(std::size_t k=0;k<tt.size();++k) {
             const auto i=static_cast<std::size_t>(std::lround(tt[k]/.01));
             near(ts[2*k],x[2*i]);near(ts[2*k+1],x[2*i+1]);

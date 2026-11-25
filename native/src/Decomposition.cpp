@@ -155,6 +155,9 @@ EDMDResult extendedDynamicModeDecomposition(
         result.continuousEigenvalues.push_back(std::log(value)/step);
     result.operatorMatrix=operation.values;
     result.eigenfunctionCoefficients=coefficients.values;
+    if(options.dictionary.kind==DictionaryKind::polynomial)
+        for(const auto& row:monomials(dimension,options.dictionary.polynomialDegree,options.dictionary.includeConstant))
+            result.dictionaryExponents.insert(result.dictionaryExponents.end(),row.begin(),row.end());
     result.eigenfunctionValues=functions.values;
     result.modes=modes.values;
     return result;

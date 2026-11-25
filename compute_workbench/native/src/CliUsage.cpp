@@ -27,6 +27,8 @@ void usage() {
         << "dynsyslab_cli lie-algebra <query.json>\n"
         << "dynsyslab_cli krom-audit <query.json>\n"
         << "dynsyslab_cli coordinate-inverse <coordinates.npz> <input.npz> <output.npz>\n"
+        << "dynsyslab_cli materialize <recorded.npz> <output.npz>\n"
+        << "    a recorded archive (e.g. a coordinate change) with its arrays recomputed and stored\n"
         << "dynsyslab_cli analytic <query.json>\n"
         << "dynsyslab_cli special-function <query.json>\n"
         << "dynsyslab_cli phase-space <query.json> [--archive-root PATH]\n"

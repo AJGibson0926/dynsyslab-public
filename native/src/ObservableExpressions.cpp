@@ -1,3 +1,4 @@
+#include <dynsyslab/core/FunctionExpansion.hpp>
 #include <dynsyslab/core/Observable.hpp>
 #include <stdexcept>
 #include <algorithm>
@@ -24,22 +25,37 @@ Observable Observable::fromExpressions(ObservableDescriptor descriptor,
             for(const auto& expression:partials)values.emplace_back(expression.evaluate(x));
             return values;
         });
-    result.expressions_=std::move(expressions);
+    // The formulas as a FunctionExpansion: one expression term per output, identity coefficients.
+    std::vector<DictionaryTerm> terms;
+    for(auto& expression:expressions) {
+        DictionaryTerm term; term.kind="expression";
+        term.expression=std::make_shared<const AnalyticExpression>(std::move(expression));
+        terms.push_back(std::move(term));
+    }
+    const auto outputs=terms.size();
+    std::vector<std::complex<double>> identity(outputs*outputs);
+    for(std::size_t r=0;r<outputs;++r)identity[r*outputs+r]=1.0;
+    result.representation_=std::make_shared<const FunctionExpansion>(
+        std::make_shared<const ExpansionDictionary>(dimension,std::move(terms)),std::move(identity),
+        FunctionDomain::physicalState(dimension),
+        result.descriptor_.outputNames.size()==outputs?result.descriptor_.outputNames:std::vector<std::string>{});
     return result;
 }
 Observable Observable::partialDerivative(std::size_t axis) const {
-    if(expressions_.empty())throw std::logic_error("observable has no differentiable expression definition");
+    const auto own=expressions();
+    if(own.empty())throw std::logic_error("observable has no differentiable expression definition");
     std::vector<AnalyticExpression> partials;
-    for(const auto& item:expressions_)partials.push_back(item.derivative(axis));
+    for(const auto& item:own)partials.push_back(item.derivative(axis));
     auto descriptor=descriptor_; descriptor.name+="_dx"+std::to_string(axis);
     descriptor.label="Partial derivative of "+descriptor_.label;
     descriptor.outputNames.clear(); descriptor.units.clear(); descriptor.decompositions.clear();
     return fromExpressions(std::move(descriptor),std::move(partials));
 }
 Observable Observable::flowDerivative(const std::vector<AnalyticExpression>& field,std::size_t order) const {
-    if(expressions_.empty())throw std::logic_error("observable has no differentiable expression definition");
+    const auto own=expressions();
+    if(own.empty())throw std::logic_error("observable has no differentiable expression definition");
     std::vector<AnalyticExpression> derivatives;
-    for(const auto& item:expressions_)derivatives.push_back(item.flowDerivative(field,order));
+    for(const auto& item:own)derivatives.push_back(item.flowDerivative(field,order));
     auto descriptor=descriptor_; descriptor.name+="_dt"+std::to_string(order);
     descriptor.label="Flow derivative of "+descriptor_.label;
     descriptor.outputNames.clear(); descriptor.units.clear(); descriptor.decompositions.clear();
@@ -63,10 +79,11 @@ Observable Observable::inputFlowDerivative(
     auto result=flowDerivative(field,order);
     if(order==2&&!inputRates.empty()) {
         auto terms=result.expressions();
+        const auto own=expressions();
         for(std::size_t output=0;output<terms.size();++output)
             for(std::size_t axis=0;axis<stateDimension_;++axis)
                 for(std::size_t input=0;input<inputs.size();++input)
-                    terms[output]=terms[output]+expressions_[output].derivative(axis)
+                    terms[output]=terms[output]+own[output].derivative(axis)
                         *inputFields[axis*inputs.size()+input]*inputRates[input];
         result=fromExpressions(result.descriptor(),std::move(terms));
     }
@@ -74,11 +91,12 @@ Observable Observable::inputFlowDerivative(
 }
 
 json::Value Observable::expressionDefinition() const {
-    if(expressions_.empty())throw std::logic_error("observable has no serializable expression definition");
+    const auto own=this->expressions();
+    if(own.empty())throw std::logic_error("observable has no serializable expression definition");
     json::Value::Array expressions,names,references;
     for(const auto& ref:descriptor_.decompositions)references.emplace_back(json::Value::Object{
         {"artifact",ref.artifact},{"model_identity",ref.modelIdentity},{"component",ref.component},{"kind",ref.kind},{"index",double(ref.index)}});
-    for(const auto& item:expressions_)expressions.push_back(item.toJson());
+    for(const auto& item:own)expressions.push_back(item.toJson());
     for(const auto& item:descriptor_.outputNames)names.emplace_back(item);
     json::Value::Object definition{{"schema","dynsyslab.observable-expression/v1"},
         {"name",descriptor_.name},{"label",descriptor_.label},{"units",descriptor_.units},

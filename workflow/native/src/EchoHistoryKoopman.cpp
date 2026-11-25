@@ -200,17 +200,17 @@ std::filesystem::path runEchoHistoryKoopman(
     const auto eigenfunction = dynsyslab::core::selectedPolynomialEigenfunction(
         edmd, candidates.front());
     auto bank=dynsyslab::core::polynomialEigenfunctionsFromLegacy(eigenfunction);
-    auto coordinateContract=bank.coordinates();coordinateContract.physicalStateDimension.reset();
+    auto coordinateContract=bank.functions.coordinates();coordinateContract.physicalStateDimension.reset();
     coordinateContract.providerIdentity=transform.identity();
     // Preserve the same coefficients/rates, while retaining their discrete origin.
-    bank=dynsyslab::core::PolynomialEigenfunctionSet(bank.dictionary(),bank.coefficients(),
-        dynsyslab::core::EigenfunctionSpectrum::fromStoredRates({candidates.front().continuousEigenvalue},edmd.pairTime,
-            dynsyslab::core::EigenvalueDomain::discreteTime),coordinateContract);
+    const auto functions=bank.functions.withCoordinates(coordinateContract);
+    const auto spectrum=dynsyslab::core::Spectrum::fromStoredRates({candidates.front().continuousEigenvalue},edmd.pairTime,
+            dynsyslab::core::EigenvalueDomain::discreteTime);
     dynsyslab::core::EigenfunctionFitDiagnostics diagnostics;
     diagnostics.algorithm="pooled-polynomial-edmd";diagnostics.sampleCount=eigenfunction.samples;
     const auto physical=postprocess_detail::observationSystem(training.front().source);
-    auto model=physical?dynsyslab::core::KoopmanModel(bank,*physical,diagnostics):
-        dynsyslab::core::KoopmanModel(bank,positiveInteger(settings,"input_dimension",1),diagnostics);
+    auto model=physical?dynsyslab::core::KoopmanModel(functions,spectrum,*physical,diagnostics):
+        dynsyslab::core::KoopmanModel(functions,spectrum,positiveInteger(settings,"input_dimension",1),diagnostics);
 
     std::vector<double> trainingCoordinates, trainingTime, offsets;
     std::vector<double> trainingValidation;

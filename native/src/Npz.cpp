@@ -142,7 +142,7 @@ std::string arrayName(const char* path) {
 
 }  // namespace
 
-NpzRecord readNpz(const std::filesystem::path& path) {
+NpzRecord readNpzStored(const std::filesystem::path& path) {
     archive* handle = archive_read_new();
     if (!handle) throw std::runtime_error("unable to allocate archive reader");
     archive_read_support_format_zip(handle);
@@ -178,7 +178,7 @@ bool NpzIndex::contains(const std::string& name) const {
     return std::find(arrays.begin(),arrays.end(),name)!=arrays.end();
 }
 
-NpzIndex readNpzIndex(const std::filesystem::path& path) {
+NpzIndex readNpzIndexStored(const std::filesystem::path& path) {
     archive* handle=archive_read_new();
     if (!handle) throw std::runtime_error("unable to allocate archive reader");
     archive_read_support_format_zip(handle); archive_read_support_filter_all(handle);

@@ -24,6 +24,5 @@ TimeSeries windowIntegralCoordinates(const TimeSeries& scalarMeasurement, double
 // Fourth-order centered, uniform-clock derivative. Drops two endpoints on each
 // side; never invents endpoint rates or silently differentiates across records.
 TimeSeries differentiateTimeSeries(const TimeSeries& source);
-TimeSeries trimTimeSeries(const TimeSeries& source, std::size_t first, std::size_t count);
 void requireAlignedTimeSeries(const TimeSeries& left, const TimeSeries& right);
 }

@@ -17,6 +17,23 @@ struct DynamicalFact {
     std::string applicabilityReason;
     std::string evidence{"researched relation; verify against configured equations"};
 };
+// A hand-derived eigenfunction of the configured system, kept as text so that systems carry their
+// own eigenfunctions without depending on the Koopman libraries. Expressions use the state names and
+// the parameter names; the eigenvalue is the continuous-time rate lambda with psi(x(t)) =
+// exp(lambda t) psi(x(0)). kind "exact" holds on the stated region; "principal" is the linearization
+// w^T (x - x*) of a principal eigenfunction at an equilibrium (accurate near x* only); "shell" is
+// exact on the stated region but its rate text uses the state through an invariant (e.g.
+// i n Omega(H)), so it is an eigenfunction along each orbit, with the eigenvalue of that orbit.
+// Expressions may use atan2 and the elliptic integrals (AnalyticExpressionText.cpp).
+// Loaded by libraryEigenfunctions (KnownEigenfunctions.hpp) as Eigenfunction objects.
+struct EigenfunctionEntry {
+    std::string id, title, kind{"exact"};
+    std::string real, imag{"0"};               // psi(x) = real + i imag
+    std::string rate, rateImag{"0"};           // lambda = rate + i rateImag
+    std::string conditions, derivation;
+    std::vector<std::string> references;
+    bool applicable{true};                     // false when the configuration violates `conditions`
+};
 struct EquilibriumGuide {
     std::string factId;
     std::vector<double> state;
@@ -35,5 +52,6 @@ struct DynamicalKnowledge {
                                                 const std::vector<double> &upper)>
         equilibriumGuides;
     std::vector<InvariantGuide> invariantGuides;
+    std::vector<EigenfunctionEntry> eigenfunctions;
 };
 } // namespace dynsyslab::core

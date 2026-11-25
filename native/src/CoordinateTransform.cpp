@@ -17,13 +17,6 @@ void requireAlignedTimeSeries(const TimeSeries& a,const TimeSeries& b) {
     for(std::size_t k=0;k<a.sampleCount();++k)
         if(a.time(k)!=b.time(k))throw std::invalid_argument("Coordinate values and rates have different clocks");
 }
-TimeSeries trimTimeSeries(const TimeSeries& s,std::size_t first,std::size_t count) {
-    if(first>s.sampleCount()||count>s.sampleCount()-first||!count)
-        throw std::invalid_argument("Invalid time series slice");
-    return TimeSeries({s.timeData()+first,s.timeData()+first+count},
-        {s.valuesData()+first*s.componentCount(),s.valuesData()+(first+count)*s.componentCount()},
-        s.componentCount());
-}
 TimeSeries windowIntegralCoordinates(const TimeSeries& signal, double duration) {
     if (signal.componentCount() != 1 || !std::isfinite(duration) || duration <= 0)
         throw std::invalid_argument("Window integration requires a scalar signal and a positive finite duration");

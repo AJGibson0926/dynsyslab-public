@@ -1,5 +1,7 @@
 #include "KromTraining.hpp"
 #include <dynsyslab/core/KoopmanArchive.hpp>
+#include <dynsyslab/core/DataObject.hpp>
+#include <optional>
 #include <cctype>
 #include <algorithm>
 #include <cmath>
@@ -23,6 +25,47 @@ void trainingPaths(const json::Value& value, std::vector<std::string>& paths, in
         if (key != "eigenfunctions" && key != "eigenfunction_records") trainingPaths(item, paths, depth + 1);
     }
 }
+// Data objects keep no copies of their training data: the states are found by following the
+// archive's references (sources, the producing step's inputs, eigenfunction origins) back to a
+// series holding states of this width (a solve, or a coordinate record's source states).
+struct RecoveredStates { dynsyslab::core::NpyArray states, time; };
+std::optional<RecoveredStates> recoveredStates(const std::filesystem::path& source, const json::Value& metadata,
+                                               std::size_t dimension) {
+    std::vector<std::pair<std::filesystem::path, json::Value>> frontier{{source, metadata}};
+    std::set<std::filesystem::path> seen{std::filesystem::weakly_canonical(source)};
+    for (int depth = 0; depth < 5 && !frontier.empty(); ++depth) {
+        std::vector<std::pair<std::filesystem::path, json::Value>> next;
+        for (const auto& [from, meta] : frontier) {
+            std::vector<std::string> references;
+            trainingPaths(meta, references);
+            if (!meta.at("source_krom").string().empty()) references.push_back(meta.at("source_krom").string());
+            for (const auto* block : {&meta.at("data_object").at("produced_by").at("inputs"),
+                                      &meta.at("eigenfunction_objects").at("origin").at("inputs")})
+                if (!block->isNull()) for (const auto& input : block->array()) references.push_back(input.at("path").string());
+            for (const auto& encoded : references) {
+                auto p = std::filesystem::u8path(encoded);
+                if (p.is_relative()) p = from.parent_path() / p;
+                std::error_code ignored;
+                const auto key = std::filesystem::weakly_canonical(p, ignored);
+                if (!std::filesystem::is_regular_file(p) || !seen.insert(key).second) continue;
+                try {
+                    const auto record = dynsyslab::core::readNpz(p);
+                    const auto* states = array(record, {"source_states", "states", "values"});
+                    const auto* time = array(record, {"time"});
+                    const auto recordMeta = record.metadataJson().empty() ? json::Value{} : json::parse(record.metadataJson());
+                    const auto kind = dynsyslab::core::dataObjectKind(record.metadataJson());
+                    if (states && time && states->shape.size() == 2 && states->shape[1] == dimension
+                        && time->elementCount() == states->shape[0] && (kind.empty() || kind == "time_series"))
+                        return RecoveredStates{*states, *time};
+                    next.emplace_back(p, recordMeta);
+                } catch (const std::exception&) {}
+            }
+        }
+        frontier = std::move(next);
+    }
+    return std::nullopt;
+}
+
 bool aligned(const std::vector<double>& saved, const std::vector<double>& candidate, std::size_t start) {
     if (start + candidate.size() > saved.size()) return false;
     for (std::size_t i = 0; i < candidate.size(); ++i)
@@ -86,9 +129,14 @@ KromTraining readKromTraining(const std::filesystem::path& source,
         : array(archive, {"training_states"});
     const auto expectedDimension = model.requiresExternalCoordinates()
         ? model.coordinateDimension() : model.stateDimension();
+    std::optional<RecoveredStates> recovered;
+    if (!states && !model.requiresExternalCoordinates()) {
+        recovered = recoveredStates(source, metadata, expectedDimension);
+        if (recovered) states = &recovered->states;
+    }
     if (!states || states->shape.size() != 2 || !states->shape[0] ||
         states->shape[1] != expectedDimension)
-        throw std::runtime_error("KROM requires retained training_states aligned with its native state dimension");
+        throw std::runtime_error("KROM training states are neither stored nor reachable through its references");
     result.states = *states;
     const auto count = states->shape[0], dimension = states->shape[1];
     const auto native = states->doubles();
@@ -127,6 +175,8 @@ KromTraining readKromTraining(const std::filesystem::path& source,
     }
     if (const auto* t = array(archive, {"training_time", "time"}); t && t->elementCount() == count)
         result.time = t->doubles();
+    else if (recovered && recovered->time.elementCount() == count)
+        result.time = recovered->time.doubles();
     if (sourceTime.size() == count) {
         if (result.time.empty()) result.time = sourceTime;
         result.starts = sourceStarts; result.labels = sourceLabels;

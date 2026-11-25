@@ -1,6 +1,8 @@
 #include "Plot3DDrawing.hpp"
 
+#include "DomainColor.hpp"
 #include "MathTextDrawing.hpp"
+#include "dynsyslab_viewer/Theme.hpp"
 #include "PlotFigureDrawing.hpp"
 #include "PlotSeries.hpp"
 #include "dynsyslab_viewer/MathText.hpp"
@@ -275,6 +277,45 @@ void drawPlot3D(Gdiplus::Graphics& graphics, const Figure& sourceFigure,
     Gdiplus::Pen boxPen(theme::color(theme::plotGrid), 1.0f);
     for (const auto& edge : edges)
         graphics.DrawLine(&boxPen, point(projected[edge[0]]), point(projected[edge[1]]));
+
+    // Translucent function slices (DomainFieldPayload.hpp), farthest plane first; invalid nodes
+    // stay transparent.
+    std::vector<std::pair<double, std::size_t>> planes;
+    for (std::size_t index = 0; index < figure.traces.size(); ++index) {
+        const auto& trace = figure.traces[index];
+        if ((trace.encoding != "slice" && trace.encoding != "slice-domain-color") || trace.zShape.size() != 2 || trace.x.size() < 4)
+            continue;
+        const Plot3DPoint centre{(trace.x[0] + trace.x[1]) / 2, (trace.y[0] + trace.y[2]) / 2, trace.z[0]};
+        planes.push_back({camera.project(centre, bounds, viewport).depth, index});
+    }
+    std::sort(planes.begin(), planes.end());
+    for (const auto& [depth, index] : planes) {
+        const auto& trace = figure.traces[index];
+        const auto rows = static_cast<std::size_t>(trace.zShape[0]), columns = static_cast<std::size_t>(trace.zShape[1]);
+        if (rows < 2 || columns < 2 || trace.colorValues.size() != rows * columns) continue;
+        const double x0 = trace.x[0], x1 = trace.x[1], y0 = trace.y[0], y1 = trace.y[2], z = trace.z[0];
+        const auto alpha = static_cast<BYTE>(std::clamp(trace.opacity, 0.05, 1.0) * 255);
+        for (std::size_t row = 0; row + 1 < rows; ++row)
+            for (std::size_t column = 0; column + 1 < columns; ++column) {
+                const auto k = row * columns + column;
+                const double value = trace.colorValues[k];
+                if (!std::isfinite(value)) continue;
+                const auto base = trace.encoding == "slice" ? theme::heatColor(std::clamp(value, 0.0, 1.0))
+                    : domainColor(value, k < trace.magnitudes.size() ? trace.magnitudes[k] : 1.0);
+                const Gdiplus::Color colour(alpha, base.GetR(), base.GetG(), base.GetB());
+                const double xa = x0 + (x1 - x0) * double(column) / double(columns - 1);
+                const double xb = x0 + (x1 - x0) * double(column + 1) / double(columns - 1);
+                const double ya = y0 + (y1 - y0) * double(row) / double(rows - 1);
+                const double yb = y0 + (y1 - y0) * double(row + 1) / double(rows - 1);
+                const std::array<Plot3DProjectedPoint, 4> corner{{camera.project({xa, ya, z}, bounds, viewport),
+                    camera.project({xb, ya, z}, bounds, viewport), camera.project({xb, yb, z}, bounds, viewport),
+                    camera.project({xa, yb, z}, bounds, viewport)}};
+                if (!std::all_of(corner.begin(), corner.end(), [](const auto& c) { return c.visible; })) continue;
+                const Gdiplus::PointF polygon[4]{point(corner[0]), point(corner[1]), point(corner[2]), point(corner[3])};
+                Gdiplus::SolidBrush brush(colour);
+                graphics.FillPolygon(&brush, polygon, 4);
+            }
+    }
 
     std::vector<Segment> segments;
     for (std::size_t traceIndex = 0; traceIndex < figure.traces.size(); ++traceIndex) {

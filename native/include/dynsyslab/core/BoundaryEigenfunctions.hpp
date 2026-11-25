@@ -3,7 +3,7 @@
 #include <dynsyslab/core/Observable.hpp>
 #include <dynsyslab/core/KoopmanTraining.hpp>
 #include <dynsyslab/core/Reconstruction.hpp>
-#include <dynsyslab/core/ScatteredEigenfunctions.hpp>
+#include <dynsyslab/core/FunctionInterpolation.hpp>
 
 #include <complex>
 #include <cstddef>
@@ -19,7 +19,8 @@ struct BoundaryEigenfunctionOptions {
 };
 
 struct BoundaryEigenfunctionResult {
-    ScatteredEigenfunctionData eigenfunctions;
+    InterpolationData eigenfunctions;                        // the interpolation representation
+    std::vector<std::complex<double>> continuousEigenvalues;  // their eigenvalues (the supplied ones)
     ReconstructionResult observableReconstruction;
     std::vector<double> relativeResidualByOutput;
     std::vector<std::vector<std::size_t>> modeGroups;

@@ -1,3 +1,4 @@
+#include <dynsyslab/core/FunctionRepresentation.hpp>
 #include <dynsyslab/core/Observable.hpp>
 
 #include <algorithm>
@@ -35,6 +36,36 @@ std::optional<std::size_t> Observable::stateComponentIndex(std::size_t output) c
     return output < stateComponents_.size() ? stateComponents_[output] : std::nullopt;
 }
 bool Observable::hasAnalyticJacobian() const noexcept { return bool(analyticJacobian_); }
+
+TimeSeries Observable::evaluate(const TimeSeries& series) const {
+    const auto* window = representation_ ? representation_->coordinates().window.get() : nullptr;
+    if (!window && series.componentCount() != stateDimension_)
+        throw std::invalid_argument(descriptor_.name + ": the series has " + std::to_string(series.componentCount())
+                                    + " components, the observable takes " + std::to_string(stateDimension_));
+    const bool complex = descriptor_.complexValued;
+    std::vector<double> time, values;
+    std::size_t width = 0;
+    for (std::size_t k = 0; k < series.sampleCount(); ++k) {
+        Values g;
+        if (window) {
+            if (!window->complete(series.sampleCount(), k)) continue;
+            const auto q = window->window_at(series, k);
+            g = evaluate(q.data());
+        } else {
+            std::vector<double> x(stateDimension_);
+            for (std::size_t i = 0; i < stateDimension_; ++i) x[i] = series.value(k, i);
+            g = evaluate(x.data());
+        }
+        width = complex ? 2 * g.size() : g.size();
+        time.push_back(series.time(k));
+        for (const auto& value : g) {
+            values.push_back(value.real());
+            if (complex) values.push_back(value.imag());
+        }
+    }
+    if (time.empty()) throw std::invalid_argument(descriptor_.name + ": the series is shorter than one window");
+    return TimeSeries(std::move(time), std::move(values), width);
+}
 
 Observable::Values Observable::evaluate(const double* state) const {
     auto result = evaluator_(state);
@@ -109,7 +140,6 @@ Observable Observable::stateComponent(std::size_t dimension, std::size_t index,
             Values result(dimension); result[index] = 1.0; return result;
         }};
     result.stateComponents_ = {index};
-    result.expressions_.push_back(AnalyticExpression::state(dimension,index));
     return result;
 }
 
@@ -131,7 +161,6 @@ Observable Observable::identity(std::size_t dimension, std::vector<std::string> 
         }};
     for (std::size_t i = 0; i < dimension; ++i) {
         result.stateComponents_.push_back(i);
-        result.expressions_.push_back(AnalyticExpression::state(dimension,i));
     }
     return result;
 }
@@ -169,12 +198,16 @@ Observable Observable::stack(std::string name, std::string label,
         }
         return result;
     };
-    Observable result{std::move(descriptor), stateDimension, outputDimension,
-            std::move(evaluate), std::move(jacobian)};
-    if (std::all_of(observables.begin(),observables.end(),
-        [](const Observable& item){return !item.expressions().empty();}))
-        for(const auto& item:observables)result.expressions_.insert(result.expressions_.end(),
-            item.expressions().begin(),item.expressions().end());
+    std::vector<AnalyticExpression> formulas;
+    bool closed = !complex;
+    for (const auto& item : observables) {
+        const auto own = item.expressions();
+        closed = closed && !own.empty();
+        formulas.insert(formulas.end(), own.begin(), own.end());
+    }
+    // A stack of formulas is a formula observable (an expansion); otherwise it stacks evaluators.
+    Observable result = closed ? fromExpressions(descriptor, std::move(formulas))
+                               : Observable{descriptor, stateDimension, outputDimension, std::move(evaluate), std::move(jacobian)};
     for (const auto& item : observables)
         for (std::size_t i = 0; i < item.outputDimension(); ++i)
             result.stateComponents_.push_back(item.descriptor().stateCoordinateSystem == result.descriptor().stateCoordinateSystem

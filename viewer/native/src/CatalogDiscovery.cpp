@@ -62,6 +62,9 @@ Catalog baseCatalog(const std::filesystem::path& projectRoot) {
         {"lattice", "Lattice states"}, {"control", "Control"},
         {"observable_time", "Observable time series"},
         {"observable_heatmap", "Observable phase maps"},
+        {"domain_field", "Function on its domain"},
+        {"observable_phase", "Observable on the phase plane"},
+        {"animation", "Animation"},
         {"control_map_error", "Control-map error"},
         {"observability", "Observability"},
         {"hankel_spectrum", "Hankel singular values"},
@@ -211,7 +214,7 @@ Catalog Catalog::scan(const std::filesystem::path& projectRoot,
 
 Catalog Catalog::indexed(const std::filesystem::path& projectRoot,
                          const std::filesystem::path& archiveRoot) {
-    constexpr std::uint32_t snapshotVersion = 8;  // 8: classical linear-systems views (bode, nyquist, loop_bode, sensitivity)
+    constexpr std::uint32_t snapshotVersion = 11;  // 11: index summary v5; 10: observable series; 9: animation, domain fields
     constexpr const char* consumer = "dynsyslab.viewer.native";
     if (!std::filesystem::is_regular_file(
             dynsyslab::core::archiveIndexPath(archiveRoot)))

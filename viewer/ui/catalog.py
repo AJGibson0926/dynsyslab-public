@@ -349,7 +349,7 @@ def _campaign_item(root: Path, path: Path) -> CatalogItem | None:
 
 
 def _candidate_paths(root: Path) -> Iterable[Path]:
-    for section in ("solutions", "derived", "experiments"):
+    for section in ("solutions", "objects", "derived", "experiments"):
         base = root / "archives" / section
         if base.is_dir():
             yield from base.rglob("*.npz")

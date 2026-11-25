@@ -1,5 +1,7 @@
 #include "PostprocessInternal.hpp"
+#include "SampledDomain.hpp"
 #include <dynsyslab/core/KoopmanArchive.hpp>
+#include <dynsyslab/core/EigenfunctionArchive.hpp>
 #include <dynsyslab/core/Reconstruction.hpp>
 #include <dynsyslab/core/Text.hpp>
 #include <stdexcept>
@@ -26,7 +28,15 @@ std::filesystem::path runObservableReconstruction(const std::filesystem::path& s
         // A common source archive supplies time-aligned measurements and Psi.
         // This route is usable with purely measured data and history coordinates.
         const auto& psi=archive.at(settings.at("eigenfunction_array").string("eigenfunction_values"));
-        const auto& values=archive.at(array);
+        // Eigenfunction objects keep no state copy: "training_states" are found through their origin.
+        const auto values=!archive.contains(array)&&array=="training_states"
+                &&dynsyslab::core::hasEigenfunctionObjects(archive)
+            ? [&]{
+                const auto set=dynsyslab::core::readEigenfunctionSet(archive,{"interpolation"});
+                const auto states=trainingStates(set);
+                return dynsyslab::core::NpyArray::fromDoubles({set.samples().samples(),states.dimension},states.values);
+            }()
+            : archive.at(array);
         if(psi.shape.size()!=2||psi.shape[1]!=model.liftedDimension()
             ||values.shape.empty()||values.shape.size()>2||values.shape[0]!=psi.shape[0])
             throw std::invalid_argument("measured reconstruction arrays are not sample aligned");

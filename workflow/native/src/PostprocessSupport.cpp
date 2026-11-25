@@ -4,6 +4,7 @@
 #include <limits>
 #include "PostprocessInternal.hpp"
 #include "KromDatasetSupport.hpp"
+#include "ObjectPublishing.hpp"
 
 #include <dynsyslab/core/Text.hpp>
 
@@ -168,7 +169,10 @@ std::string metadata(const SourceData& source, const std::string& method,
 std::filesystem::path publish(const std::filesystem::path& root, const SourceData& source,
                               const std::string& method, const std::string&,
                               dynsyslab::core::NpzRecord archive) {
-    const auto directory = root / L"derived" / dynsyslab::core::wide(method);
+    // Filed by what the archive is (core/DataObject.hpp), stamped with how it was made.
+    const auto kind = objectKindFor(method);
+    stampDataObject(archive, kind, method, {source.path});
+    const auto directory = dynsyslab::core::objectDirectory(root, kind);
     const auto stem=safeName(source.path.stem().u8string()+"__"+method+"__"+timestamp());
     for (std::size_t suffix=0;suffix<10000;++suffix) {
         const auto path=directory/dynsyslab::core::wide(stem

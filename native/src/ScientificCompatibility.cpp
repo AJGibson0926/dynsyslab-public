@@ -53,7 +53,7 @@ void requireCompatibleSystems(const SystemConfiguration& e,const SystemConfigura
     throw std::invalid_argument(message);
 }
 std::string koopmanModelIdentity(const KoopmanModel& model) {
-    auto coordinates=eigenfunctionCoordinatesJson(model.coordinates());
+    auto coordinates=functionDomainJson(model.coordinates());
     // The frozen provider's content identity, rather than its filesystem location,
     // belongs in the model identity. Keep the path only for unversioned providers.
     if(!model.coordinates().providerIdentity.empty())coordinates.object().erase("provider_artifact");
@@ -78,9 +78,12 @@ std::string koopmanModelIdentity(const KoopmanModel& model) {
         m["neighbors"]=double(scattered->neighbors);
         m["gradient_step"]=scattered->finiteDifferenceRelativeStep;
     } else {
-        const auto& p=model.polynomialEigenfunctions();const auto& d=p.dictionary();
-        json::Value::Array exponents;for(auto n:d.exponents)exponents.emplace_back(double(n));
-        m["exponents"]=exponents;m["center"]=numbers(d.center);m["scale"]=numbers(d.scale);
+        const auto& p=model.expansion();
+        if(p.monomial()){  // identity unchanged for monomial expansions
+            const auto& d=p.monomialTable();
+            json::Value::Array exponents;for(auto n:d.exponents)exponents.emplace_back(double(n));
+            m["exponents"]=exponents;m["center"]=numbers(d.center);m["scale"]=numbers(d.scale);
+        } else m["dictionary"]=p.dictionary().describe();
         m["coefficients"]=complexNumbers(p.coefficients());
     }
     return "sha256:"+sha256Text(json::dump(m));

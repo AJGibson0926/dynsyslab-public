@@ -26,6 +26,9 @@ std::string activity(const CatalogItem& item, const std::string& originalLabel,
         return "KLQR controls";
     if (item.kind == "control_map" || item.kind == "control_error" ||
         item.kind == "control_data" || has(text, "bpsi")) return "Bψ identification";
+    if (item.kind == "animation") return "Animations";
+    if (item.kind == "domain_field") return "Functions on domains";
+    if (item.kind == "observable_series") return "Observables along trajectories";
     if (item.kind == "krom") return "KROM models";
     if (item.kind == "koopman_validation") return "KROM validation";
     if (item.kind == "koopman_spectrum") return "Koopman spectra";
@@ -159,6 +162,9 @@ std::string noun(const CatalogItem& item, const std::string& originalParentKind,
     if (item.kind == "control_data") return "Dataset";
     if (item.kind == "koopman_validation") return "Validation";
     if (item.kind == "koopman_spectrum") return "Spectrum";
+    if (item.kind == "animation") return "Animation";
+    if (item.kind == "domain_field") return "Domain field";
+    if (item.kind == "observable_series") return "Observable series";
     if (item.kind == "decomposition") return "Result";
     return "Data";
 }

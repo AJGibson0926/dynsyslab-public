@@ -1,3 +1,6 @@
+#include "SampledDomain.hpp"
+#include "TimeSeriesSource.hpp"
+#include <dynsyslab/core/EigenfunctionArchive.hpp>
 #include "PostprocessInternal.hpp"
 #include <dynsyslab/core/LongPath.hpp>
 #include "KromEvidence.hpp"
@@ -152,14 +155,27 @@ json::Value::Array refitReconstructions(dynsyslab::core::KoopmanModel& reduced, 
     using Complex = std::complex<double>;
     json::Value::Array report;
     if (refit.isNull()) return report;
-    if (!parent.contains("eigenfunction_values") || !parent.contains("training_states"))
+    const bool objects = dynsyslab::core::hasEigenfunctionObjects(parent);
+    if (!parent.contains("eigenfunction_values") || (!parent.contains("training_states") && !objects))
         throw std::invalid_argument("refit_reconstructions needs training eigenfunction values and states");
     const auto& valuesArray = parent.at("eigenfunction_values");
     const auto all = valuesArray.complexDoubles();
     const std::size_t samples = valuesArray.shape.at(0), parentModes = valuesArray.shape.at(1), k = indices.size();
-    const auto states = parent.at("training_states").doubles();
-    const std::size_t stateWidth = parent.at("training_states").shape.at(1);
-    if (parent.at("training_states").shape.at(0) != samples)
+    // States at the training samples: stored (legacy) or found through the eigenfunctions' origin.
+    std::vector<double> states;
+    std::size_t stateWidth = 0, stateRows = 0;
+    if (parent.contains("training_states")) {
+        states = parent.at("training_states").doubles();
+        stateWidth = parent.at("training_states").shape.at(1);
+        stateRows = parent.at("training_states").shape.at(0);
+    } else {
+        const auto set = dynsyslab::core::readEigenfunctionSet(parent, {"interpolation"});
+        auto found = trainingStates(set);  // through the input series' origin, not a stored copy
+        states = std::move(found.values);
+        stateWidth = found.dimension;
+        stateRows = set.samples().samples();
+    }
+    if (stateRows != samples)
         throw std::invalid_argument("refit_reconstructions: training states and eigenfunction values are not aligned");
     const bool intercept = refit.at("intercept").boolean(true);
     const double ridge = refit.at("ridge").number(1e-10);
@@ -252,9 +268,10 @@ json::Value::Array refitReconstructions(dynsyslab::core::KoopmanModel& reduced, 
 // target and are never chosen; at an unstable target they would be unstable lifted modes that a constant
 // input map cannot reach, which makes the lifted (A, B) unstabilizable for KLQR. Conjugates are completed.
 std::vector<std::size_t> principalIndices(const json::Value& rule, const std::filesystem::path& source,
-                                          const dynsyslab::core::NpzRecord& parent) {
+                                          const dynsyslab::core::NpzRecord& parent,
+                                          const dynsyslab::core::ModelBindingOptions& binding) {
     using Complex = std::complex<double>;
-    const auto model = dynsyslab::core::loadKoopmanModel(source);
+    const auto model = dynsyslab::core::loadKoopmanModel(source,binding);
     const auto dimension = model.physicalStateDimension();
     if (!dimension) throw std::invalid_argument("mode_selection principal needs a physical-state KROM");
     const auto& targetValue = rule.at("target_state");
@@ -414,16 +431,25 @@ std::filesystem::path runKromExtraction(
     const std::filesystem::path& root,const std::string& label) {
     if (!std::filesystem::is_regular_file(dynsyslab::core::extendedLengthPath(source)))
         throw std::invalid_argument("KROM extraction source does not exist");
-    const auto parentArchive=dynsyslab::core::readNpz(source);
+    // A Koopman model is assembled from data objects: the eigenfunctions (source) and, optionally,
+    // reconstructions objects written over them ("reconstructions": path or list), as readouts.
+    auto binding = composedBinding(settings);
+    auto parentArchive=dynsyslab::core::readNpz(source);
+    for (const auto& path : binding.reconstructions)
+        dynsyslab::core::mergeReconstructions(parentArchive, source, dynsyslab::core::readNpz(path));
     const auto& selection=settings.at("mode_selection");
     const auto indices=!selection.isNull()&&selection.at("rule").string()=="principal"
-        ? principalIndices(selection,source,parentArchive) : modeIndices(settings,parentArchive);
+        ? principalIndices(selection,source,parentArchive,binding) : modeIndices(settings,parentArchive);
     const auto parentMetadata=parentArchive.metadataJson().empty()
         ? json::Value{}:json::parse(parentArchive.metadataJson());
-    const auto parent=dynsyslab::core::loadKoopmanModel(source);
+    const auto domain=settings.at("interpolation_domain").string();
+    const auto& method=settings.at("interpolation_method");
+    binding.interpolationDomain=domain;
+    binding.interpolationMethod=method;
+    const auto parent=dynsyslab::core::loadKoopmanModel(source,binding);
     auto reduced=parent.extract(indices);
     const auto refitReport=refitReconstructions(reduced,settings.at("refit_reconstructions"),parentArchive,indices);
-    const auto directory=root/L"derived"/L"koopman-krom-extract";
+    const auto directory=objectFolder(root, "koopman-krom-extract");
     std::filesystem::create_directories(directory);
     const auto path=directory/dynsyslab::core::wide(safeName(
         source.stem().u8string()+"__krom-extract__"+timestamp())+".npz");

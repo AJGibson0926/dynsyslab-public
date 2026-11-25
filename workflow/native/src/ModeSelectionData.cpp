@@ -31,9 +31,9 @@ std::vector<Record> loadRecords(const c::KoopmanModel& model, const std::vector<
     bool polynomial = true;
     try { (void)model.evaluateCoordinates(std::vector<double>(model.coordinateDimension(), 0.0).data()); }
     catch (const std::logic_error&) { polynomial = false; }
-    const auto kind = model.coordinates().kind;
-    const bool coordinateKind = polynomial && kind != c::EigenfunctionCoordinateKind::physicalState;
-    const bool analyticKind = kind == c::EigenfunctionCoordinateKind::analyticObservable;
+    const auto& domain = model.coordinates();
+    const bool coordinateKind = polynomial && !domain.isPhysicalState();
+    const bool analyticKind = domain.computableFromState() && !domain.isPhysicalState();
     const double maxSamples = settings.at("max_samples_per_record").number(20000);
     // Readout records: "unforced" (default), "forced", "all", or a list of source indices. The
     // readouts are a static map psi -> (e, x); fitting them where the controller operates removes

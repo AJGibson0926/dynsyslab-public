@@ -2,6 +2,8 @@
 #include <dynsyslab/workflow/ObservableQuery.hpp>
 #include <dynsyslab/workflow/Solve.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
+#include <dynsyslab/core/DataObject.hpp>
+#include <dynsyslab/core/EigenfunctionArchive.hpp>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -28,16 +30,21 @@ int main(){try{
     auto job=core::json::parse(R"({"schema":"dynsyslab.compute-job/v1","kind":"postprocess","label":"echo-pipeline-test","methods":[{"name":"hdmd","settings":{"observable":"far_field_acoustic_echo","matrix_size":4,"sampling_window":30,"rank":2}},{"name":"sindy","settings":{"coordinate_observable":"far_field_acoustic_echo","polynomial_degree":3,"include_constant":false,"threshold":0,"max_iterations":1,"normalize":false,"gamma_method":"system_rhs","reconstruction_observables":["far_field_acoustic_echo"]}}]})");
     job.at("sources")=core::json::Value::Array{source.generic_u8string()};
     const auto result=workflow::executePostprocess(job,root,{});
-    // The echo named in hdmd is a coordinate change that runs first.
-    check(result.archives.size()==3&&result.methods.front()=="coordinate_transform","pipeline archive count");
-    const auto fitted=core::readNpz(result.archives.back());
-    check(fitted.at("training_coordinates").shape[1]==1,"echo must be the only coordinate");
-    check(fitted.at("polynomial_exponents").shape[1]==1,"echo polynomial dimension");
-    check(std::abs(fitted.at("training_states").doubles()[0]-1.2)<1e-12,"legacy radius conversion");
-    check(std::abs(fitted.at("training_states").doubles()[1]-.3)<1e-12,"legacy velocity conversion");
-    check(std::abs(fitted.at("training_time").doubles().back()-.064)<1e-12,"legacy time conversion");
+    // The echo named in hdmd is a coordinate change that runs first. H-DMD and SINDy each publish
+    // eigenfunctions and the reconstructions written over them; neither copies the training series.
+    check(result.archives.size()==5&&result.methods.front()=="coordinate_transform","pipeline archive count");
+    const auto fittedPath=result.archives.at(3);
+    const auto fitted=core::readNpz(fittedPath);
+    check(core::dataObjectKind(fitted.metadataJson())=="eigenfunctions","SINDy publishes eigenfunctions");
+    check(!fitted.contains("training_states")&&!fitted.contains("training_coordinates"),"SINDy copies no training data");
+    const auto fittedSet=core::readEigenfunctionSet(fitted);
+    check(fittedSet.representation().domainDimension(fittedSet.representation().domains().front())==1,"echo must be the only coordinate");
+    const auto coordinates=core::readNpz(result.archives.front());  // the recorded coordinate change, replayed
+    check(std::abs(coordinates.at("source_states").doubles()[0]-1.2)<1e-12,"legacy radius conversion");
+    check(std::abs(coordinates.at("source_states").doubles()[1]-.3)<1e-12,"legacy velocity conversion");
+    check(std::abs(coordinates.at("time").doubles().back()-.064)<1e-12,"legacy time conversion");
     check(core::readNpz(source).at("values").doubles()==values,"source was modified");
-    const auto model=core::loadKoopmanModel(result.archives.back());
+    const auto model=core::loadKoopmanModel(fittedPath);
     check(model.coordinateDimension()==1&&model.stateDimension()==2,"model coordinate distinction");
     check(model.coordinateObservable().hasAnalyticJacobian(),"saved analytic echo gradient");
     auto query=core::json::parse(R"({"schema":"dynsyslab.observable-query/v1","system":{"name":"rpe"},"state":[1.2,0.3],"observable":"far_field_acoustic_echo","flow_order":2})");
@@ -47,21 +54,24 @@ int main(){try{
     jetJob.at("sources")=core::json::Value::Array{source.generic_u8string()};
     jetJob.at("methods").array()[0].at("settings").at("spectrum_archive")=result.archives.at(1).generic_u8string();
     const auto jetResult=workflow::executePostprocess(jetJob,root,{});
-    check(jetResult.archives.size()==1,"jet job recomputed a spectrum");
-    check(jetResult.archives.front()!=result.archives.back(),"new fit reused a completed archive path");
-    check(core::readNpz(result.archives.back()).at("training_coordinates").shape[1]==1,"new fit overwrote prior coordinate model");
+    check(jetResult.archives.size()==2,"jet job recomputed a spectrum");
+    check(jetResult.archives.front()!=fittedPath,"new fit reused a completed archive path");
+    {
+        const auto again=core::readEigenfunctionSet(core::readNpz(fittedPath));
+        check(again.representation().domainDimension(again.representation().domains().front())==1,"new fit overwrote prior coordinate model");
+    }
     const auto jetArchive=core::readNpz(jetResult.archives.front());
-    check(jetArchive.at("training_coordinates").shape==std::vector<std::size_t>({65,2}),"jet coordinate shape");
-    check(jetArchive.at("polynomial_exponents").shape==std::vector<std::size_t>({14,2}),"jet polynomial library shape");
+    check(jetArchive.at("expansion_coefficients").shape[1]==14,"jet polynomial library size");
     check(jetArchive.at("continuous_eigenvalues").complexDoubles()==core::readNpz(result.archives.at(1)).at("continuous_eigenvalues").complexDoubles(),"jet fit changed supplied spectrum");
     check(jetArchive.at("training_coordinate_jacobians").shape==std::vector<std::size_t>({65,2,2}),"jet gradient evidence shape");
-    const auto jetCoordinates=jetArchive.at("training_coordinates").doubles();
     const auto jetVelocities=jetArchive.at("training_coordinate_velocities").doubles();
-    const auto jetStates=jetArchive.at("training_states").doubles();
     const auto catalog=system->observableCatalog();
-    for(std::size_t i=0;i<65;++i){
-        check(std::abs(jetVelocities[2*i]-jetCoordinates[2*i+1])<1e-10,"echo derivative differs from second coordinate");
-        check(std::abs(jetVelocities[2*i+1]-catalog.at("echo_ddot").evaluateReal(jetStates.data()+2*i)[0])<1e-9,"echo second derivative was not used in Gamma");
+    const auto jet=catalog.coordinatePreset("echo_jet2");
+    for(std::size_t i=0;i<65;++i){  // the training states, from the source's dimensionless form
+        const double t=.001*double(i),x[2]={1.2+.05*std::sin(6*t),.3*std::cos(6*t)};
+        const auto q=jet.evaluateReal(x);
+        check(std::abs(jetVelocities[2*i]-q[1])<1e-9,"echo derivative differs from second coordinate");
+        check(std::abs(jetVelocities[2*i+1]-catalog.at("echo_ddot").evaluateReal(x)[0])<1e-8,"echo second derivative was not used in Gamma");
     }
     const auto jetModel=core::loadKoopmanModel(jetResult.archives.front());
     check(jetModel.coordinateDimension()==2&&jetModel.coordinateObservable().hasAnalyticJacobian(),"reloaded jet model lost analytic coordinates");

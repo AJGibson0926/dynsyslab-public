@@ -140,14 +140,13 @@ void scatteredArchiveStoresOneValueArray() {
         / "dynsyslab-native-scattered-krom-deduplication-test";
     std::filesystem::remove_all(root);std::filesystem::create_directories(root);
     const auto path=root/"scattered-krom.npz";
-    core::ScatteredEigenfunctionData fit;
-    fit.continuousEigenvalues={{-0.5,0.25}};
+    core::InterpolationData fit;
     fit.trainingStates={-1.0,0.0,0.0,0.5,1.0,0.0};
     fit.trainingValues={{-1.0,0.0},{0.0,0.5},{1.0,0.0}};
     fit.samples=3;fit.stateDimension=2;fit.neighbors=2;
     core::SystemConfiguration system;
     system.identifier="duffing";system.preset="double_well_reference";
-    core::saveKoopmanModel(path,core::KoopmanModel(std::move(fit),std::move(system)));
+    core::saveKoopmanModel(path,core::KoopmanModel(std::move(fit),core::Spectrum::fromContinuousRates({{-0.5,0.25}}),std::move(system)));
     const auto archive=core::readNpz(path);
     if(!archive.contains("eigenfunction_values")
         ||archive.contains("training_eigenfunction_values"))

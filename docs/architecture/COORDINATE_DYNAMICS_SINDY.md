@@ -151,6 +151,24 @@ analytic map it also runs the observable closure search seeded with those
 witnesses. Results are in metadata `coordinate_diagnostics` and arrays
 `crossing_segments` / `crossing_metrics`.
 
+### Recorded, not copied
+
+A coordinate change is cheap to evaluate, so its archive stores no arrays by
+default. It keeps only `metadata_json`, with a `recorded_archive` block: the schema
+`dynsyslab.coordinate-record/v1`, the names of the arrays it produces, the source
+archive's path and SHA-256, the step's settings and its label. `core::readNpz`
+replays it: it checks the source digest, loads the source (replaying that too when
+it is itself recorded, so a chain replays from its root), recomputes the step and
+keeps the stored metadata. A changed or missing source is refused, never replayed
+silently. `readNpzIndex` lists the replayed arrays, and `readNpzStored` returns
+the file as written.
+
+Two cases store the arrays. `"store_values": true` stores them on request. A step
+that fits a history basis always stores them, because its basis is fitted rather
+than given. Replays need the workflow library, which registers the reader when
+it loads. Viewer loads it from its own folder. Anywhere else, run
+`dynsyslab-cli materialize RECORDED.npz OUTPUT.npz` to write a self-contained copy.
+
 ## Rate laws across coordinate systems
 
 `sindy_dynamics` fits z' = f(z) by default. With `response_source` (and

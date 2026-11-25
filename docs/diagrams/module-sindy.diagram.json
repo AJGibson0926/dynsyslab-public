@@ -1,0 +1,64 @@
+{
+ "schema": "dynsyslab.architecture-diagram/v1",
+ "title": "Module: SINDy eigenfunction fit (postprocess method sindy)",
+ "description": "Inside runSindy (workflow/native/src/Postprocess.cpp), analyticCoordinateInput (CoordinateChangeKinds.cpp) and fitKoopmanEigenfunctionsInCoordinates (native/src/SINDy.cpp). Settings are those of the echo job s05. Red cards and arrows are audit findings.",
+ "root": {
+  "id": "page", "kind": "group", "layout": "row", "gap": 70,
+  "children": [
+   {"id": "inputs", "kind": "group", "layout": "column", "gap": 40,
+    "children": [
+     {"id": "physical", "kind": "data", "label": "Physical solve archive", "icon": "archive",
+      "notes": ["time, values = (r, ṙ)", "control_values u"]},
+     {"id": "coords", "kind": "data", "label": "Coordinate-transform archive", "icon": "archive",
+      "notes": ["values = q(t), e.g. e or (e, ė)", "metadata: source_archive"]},
+     {"id": "spectrum-in", "kind": "data", "label": "H-DMD archive", "icon": "spectrum",
+      "notes": ["continuous_eigenvalues λ_j"]}
+    ]},
+   {"id": "sindy", "kind": "module", "label": "SINDy", "icon": "library", "layout": "column", "align": "start", "gap": 70,
+    "children": [
+     {"id": "row-1", "kind": "group", "layout": "row", "gap": 60,
+      "children": [
+       {"id": "resolve", "kind": "module", "label": "Resolve coordinates", "icon": "monitor",
+        "notes": ["analyticCoordinateInput", "q = catalog observable of x"],
+        "flags": ["drops the stored q(t) values,", "reloads x and recomputes q(x)"]},
+       {"id": "rows", "kind": "module", "label": "Select rows", "icon": "time_series",
+        "notes": {"time_window": "[40, 80]", "sample_stride": "10"}},
+       {"id": "library", "kind": "module", "label": "Library Θ(q)", "icon": "library",
+        "notes": {"polynomial_degree": "4", "normalize": "true", "include_constant": "true"}},
+       {"id": "derivative", "kind": "module", "label": "Rates Γ = dΘ/dt", "icon": "matrix",
+        "notes": {"gamma_method": "system_rhs", "Γ": "∇Θ · ∂q/∂x · f(x, u)"},
+        "flags": ["evaluates the RPE model f(x, u)"]}
+      ]},
+     {"id": "row-2", "kind": "group", "layout": "row", "gap": 60,
+      "children": [
+       {"id": "fit", "kind": "module", "label": "Sparse null vector per λ_j", "icon": "heatmap",
+        "notes": ["min ‖(Γ − λ_j Θ) ξ_j‖, ‖ξ_j‖ = 1", "threshold: 0.05 · max|ξ|", "max_iterations: 20",
+                  "nullspace_solver: gram", "reuse_conjugate_fits: true", "ψ_j(q) = Θ(q) ξ_j"],
+        "flags": ["fits every λ it is given (all 2000)"]},
+       {"id": "reconstruct", "kind": "module", "label": "Reconstruction C", "icon": "krom",
+        "notes": {"reconstruction": "none in s05", "default": "C for state, x ≈ C ψ(x)"}}
+      ]}
+    ]},
+   {"id": "output", "kind": "data", "label": "SINDy archive (polynomial K-ROM pool)", "icon": "archive",
+    "notes": ["continuous_eigenvalues λ_j", "coefficients ξ_j, polynomial_exponents", "state_center, state_scale",
+              "coordinate_observable_names", "training_coordinates = q(x)", "training_residual_rms"],
+    "flags": ["training_states = (r, ṙ)"]},
+   {"id": "next", "kind": "module", "label": "krom_extract (next module)", "icon": "krom",
+    "notes": ["selects the modes to keep"]}
+  ]
+ },
+ "edges": [
+  {"from": "coords", "to": "resolve", "label": "metadata only"},
+  {"from": "physical", "to": "resolve", "style": "flagged", "label": "loadSource(source_archive)",
+   "route": [{"x": "resolve.left-34"}]},
+  {"from": "resolve", "to": "rows"},
+  {"from": "rows", "to": "library"},
+  {"from": "library", "to": "derivative"},
+  {"from": "derivative", "to": "fit", "from_side": "bottom", "to_side": "top",
+   "route": [{"y": "row-1.bottom+35"}, {"x": "fit.cx"}]},
+  {"from": "spectrum-in", "to": "fit", "label": "λ_j (frozen)"},
+  {"from": "fit", "to": "reconstruct"},
+  {"from": "sindy", "to": "output"},
+  {"from": "output", "to": "next"}
+ ]
+}

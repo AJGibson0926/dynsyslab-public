@@ -5,7 +5,7 @@
 
 namespace dynsyslab::core {
 
-NpzRecord readNpz(const std::filesystem::path&) {
+NpzRecord readNpzStored(const std::filesystem::path&) {
     throw std::runtime_error("This DynSysLab build does not include native NPZ support");
 }
 
@@ -13,7 +13,7 @@ bool NpzIndex::contains(const std::string& name) const {
     return std::find(arrays.begin(),arrays.end(),name)!=arrays.end();
 }
 
-NpzIndex readNpzIndex(const std::filesystem::path&) {
+NpzIndex readNpzIndexStored(const std::filesystem::path&) {
     throw std::runtime_error("This DynSysLab build does not include native NPZ support");
 }
 

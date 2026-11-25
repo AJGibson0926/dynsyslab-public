@@ -1,5 +1,6 @@
 // mode_selection, part 3: exhaustive subset search, Pareto front, archive and optional K-ROM.
 #include "ModeSelectionInternal.hpp"
+#include "ObjectPublishing.hpp"
 
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
@@ -49,7 +50,7 @@ std::filesystem::path writeKrom(const std::filesystem::path& kromPath, const std
     std::vector<std::size_t> modes;
     for (auto u : chosen) for (auto m : units[u].modes) modes.push_back(m);
     const std::size_t n = modes.size(), d = score.readouts.stateStd.size();
-    const auto directory = root / L"derived" / L"koopman-mode-selection";
+    const auto directory = objectFolder(root, "koopman-mode-selection");
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(kromPath.stem().u8string() + "__mode-selection-krom__" + timestamp()) + ".npz");
     std::map<std::string, c::NpyArray> extra;
@@ -266,7 +267,7 @@ std::filesystem::path runModeSelection(const std::vector<std::filesystem::path>&
                                           std::move(krom)).generic_u8string();
     }
     out.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(json::Value(std::move(meta))));
-    const auto directory = root / L"derived" / L"mode-selection";
+    const auto directory = objectFolder(root, "mode-selection");
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(kromPath.stem().u8string() + "__mode-selection__" + timestamp()) + ".npz");
     c::writeNpzAtomic(path, out);

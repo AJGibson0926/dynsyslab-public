@@ -38,6 +38,7 @@ add_library(dynsyslab_ui_support STATIC
   ${DYNSYSLAB_VIEWER_NATIVE}/src/FolderTab.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotSeries.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotHeatmap.cpp
+  ${DYNSYSLAB_VIEWER_NATIVE}/src/ComplexHeatmap.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/MathTextDrawing.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotCanvasInteraction.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotCanvas3DInteraction.cpp

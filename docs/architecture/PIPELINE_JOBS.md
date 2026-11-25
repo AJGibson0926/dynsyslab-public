@@ -26,9 +26,10 @@ References are resolved when a stage starts:
 
 | Reference | Meaning |
 |---|---|
-| `${id.archive}` | the stage's single published archive (error if it published several) |
+| `${id.archive}` | the stage's result: its one method's primary object (error if several methods published) |
 | `${id.archives[N]}` | its N-th archive |
-| `${id.output:METHOD}` | the archive a postprocess stage produced for METHOD |
+| `${id.output:METHOD}` | the primary object a postprocess stage produced for METHOD |
+| `${id.object:KIND}` | its one data object of that kind, e.g. `reconstructions` ([DATA_OBJECTS.md](DATA_OBJECTS.md)) |
 | `${id.manifest}` | its hierarchy, campaign or pipeline manifest |
 | `${params.NAME}` | a named parameter; as a whole string it is replaced by the JSON value |
 

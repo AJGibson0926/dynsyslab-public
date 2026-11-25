@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(dynsyslab_workflow VERSION 0.8.1 LANGUAGES CXX)
+project(dynsyslab_workflow VERSION 0.9.0 LANGUAGES CXX)
 
 if(MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
@@ -23,10 +23,10 @@ add_library(dynsyslab_workflow SHARED
   src/AnalyticQuery.cpp src/AnalyticHistoryQuery.cpp src/TorusQuery.cpp src/PeriodicQuery.cpp src/PeriodicControlQuery.cpp src/PeriodicSnapshotQuery.cpp src/PeriodicSpectralQuery.cpp src/AnalyticArchive.cpp src/LieAlgebraQuery.cpp src/KromAuditQuery.cpp src/KromTrajectoryAudit.cpp
   src/PhaseSpaceQuery.cpp src/PhaseSpaceSerialization.cpp src/PhaseForcingConfiguration.cpp
   src/KnowledgeSerialization.cpp src/ResearchCatalogue.cpp
-  src/LinearAnalysisPostprocess.cpp src/LinearSystemsPostprocess.cpp src/LinearSystemsClassical.cpp src/EmpiricalObservabilityPostprocess.cpp src/ReconstructionPostprocess.cpp src/HankelAnalysis.cpp src/HankelArchive.cpp src/HdmdPostprocess.cpp src/DmdPostprocess.cpp src/DmdControlPostprocess.cpp
+  src/LinearAnalysisPostprocess.cpp src/LinearSystemsPostprocess.cpp src/LinearSystemsClassical.cpp src/EmpiricalObservabilityPostprocess.cpp src/ReconstructionPostprocess.cpp src/HankelAnalysis.cpp src/HankelArchive.cpp src/HdmdPostprocess.cpp src/HdmdObjects.cpp src/SampledDomain.cpp src/ObjectPublishing.cpp src/TimeSeriesSource.cpp src/HankelSvdPostprocess.cpp src/MeasurementMap.cpp src/ExpansionArchive.cpp src/EigenfunctionExpansionPostprocess.cpp src/DomainFieldPostprocess.cpp src/AnimationManifest.cpp src/EigenfunctionErrorsPostprocess.cpp src/DmdPostprocess.cpp src/DmdControlPostprocess.cpp
   src/KromControlSearch.cpp src/KromControlSearchSupport.cpp
   src/TrainingPreflight.cpp
-  src/EchoHistoryKoopman.cpp src/ObservationSource.cpp src/HistoryControl.cpp src/HistoryControlRegression.cpp src/InputMap.cpp src/ModeSelection.cpp src/ModeSelectionData.cpp src/ModeSelectionScore.cpp src/EigenfunctionPolynomialFit.cpp src/KlqrAugmentation.cpp src/ControlTargetLift.cpp src/DerivativeBenchmark.cpp src/HistoryPostprocess.cpp src/CoordinateSindy.cpp
+  src/EchoHistoryKoopman.cpp src/ObservationSource.cpp src/HistoryControl.cpp src/MeasuredJetControl.cpp src/IoDelayControl.cpp src/IoDelayPostprocess.cpp src/HistoryControlRegression.cpp src/InputMap.cpp src/ModeSelection.cpp src/ModeSelectionData.cpp src/ModeSelectionScore.cpp src/EigenfunctionPolynomialFit.cpp src/KlqrAugmentation.cpp src/ControlTargetLift.cpp src/DerivativeBenchmark.cpp src/HistoryPostprocess.cpp src/CoordinateSindy.cpp
   src/EstimationPostprocess.cpp src/DecompositionPostprocess.cpp
   src/CoordinateTransformPostprocess.cpp src/CoordinateChannels.cpp src/CoordinateChangeKinds.cpp src/CoordinateDiagnostics.cpp src/CoordinateInverse.cpp src/HankelShorthand.cpp src/SindyDynamicsPostprocess.cpp
   src/PcaPostprocess.cpp src/KromPostprocess.cpp src/KromEvidence.cpp
@@ -158,6 +158,18 @@ if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
     COMMAND dynsyslab_echo_history_koopman_tests)
   set_tests_properties(dynsyslab_echo_history_koopman_tests PROPERTIES
     LABELS "native;workflow;postprocess;koopman;echo-history")
+  add_executable(dynsyslab_expansion_producers_tests tests/expansion_producers_tests.cpp)
+  target_link_libraries(dynsyslab_expansion_producers_tests PRIVATE dynsyslab_workflow)
+  add_test(NAME dynsyslab_expansion_producers_tests COMMAND dynsyslab_expansion_producers_tests)
+  add_executable(dynsyslab_domain_field_tests tests/domain_field_tests.cpp)
+  target_link_libraries(dynsyslab_domain_field_tests PRIVATE dynsyslab_workflow)
+  add_test(NAME dynsyslab_domain_field_tests COMMAND dynsyslab_domain_field_tests)
+  add_executable(dynsyslab_coordinate_record_tests tests/coordinate_record_tests.cpp)
+  target_link_libraries(dynsyslab_coordinate_record_tests PRIVATE dynsyslab_workflow)
+  add_test(NAME dynsyslab_coordinate_record_tests COMMAND dynsyslab_coordinate_record_tests)
+  add_executable(dynsyslab_hankel_svd_record_tests tests/hankel_svd_record_tests.cpp)
+  target_link_libraries(dynsyslab_hankel_svd_record_tests PRIVATE dynsyslab_workflow)
+  add_test(NAME dynsyslab_hankel_svd_record_tests COMMAND dynsyslab_hankel_svd_record_tests)
   add_executable(dynsyslab_hdmd_scattered_krom_tests
     tests/hdmd_scattered_krom_tests.cpp)
   target_link_libraries(dynsyslab_hdmd_scattered_krom_tests PRIVATE dynsyslab_workflow)

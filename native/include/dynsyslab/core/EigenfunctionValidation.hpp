@@ -38,7 +38,7 @@ EigenfunctionValidationResult validateEigenfunctions(
     std::vector<double> horizons = {}, const std::vector<double> &trainingMinimum = {},
     const std::vector<double> &trainingMaximum = {});
 EigenfunctionValidationResult
-validateEigenfunctions(const PolynomialEigenfunctionSet &eigenfunctions,
+validateEigenfunctions(const FunctionExpansion &functions, const Spectrum &spectrum,
                        const std::vector<double> &time, const std::vector<double> &coordinates,
                        std::vector<double> horizons = {},
                        const std::vector<double> &trainingMinimum = {},

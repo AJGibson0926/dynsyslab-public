@@ -1,3 +1,4 @@
+#include "MeasurementMap.hpp"
 #include "KromTrajectoryAudit.hpp"
 #include "PostprocessInternal.hpp"
 #include <cmath>
@@ -53,19 +54,12 @@ core::json::Value auditKromTrajectory(const core::KoopmanModel &model,
   std::optional<core::CausalHistoryProjector> history;
   std::optional<core::Observable> measurement;
   if (model.requiresExternalCoordinates()) {
-    const auto path = q.at("history_transform")
-                          .string(model.coordinates().providerArtifact.empty()
-                                      ? q.at("krom").string()
-                                      : model.coordinates().providerArtifact);
-    auto transform =
-        core::loadFrozenHistoryTransform(std::filesystem::u8path(path));
+    auto transform = postprocess_detail::loadMeasurementMap(
+        model, std::filesystem::u8path(q.at("krom").string()), q).transform;
     if (transform.retainedCoordinates().size() != model.coordinateDimension() ||
         std::abs(transform.sampleInterval() - dt) > 1e-8 * dt)
       throw std::invalid_argument(
           "Frozen history coordinates or clock differ from trajectory");
-    const auto identity = model.coordinates().providerIdentity;
-    if (identity.rfind("sha256:", 0) == 0 && identity != transform.identity())
-      throw std::invalid_argument("History transform identity mismatch");
     auto system = core::createSystem(model.systemConfiguration());
     measurement = system->observableCatalog().at(
         q.at("measurement").string(transform.measurement()));

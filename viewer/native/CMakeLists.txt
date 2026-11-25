@@ -49,6 +49,12 @@ add_library(dynsyslab_viewer_services STATIC
   src/NativePayload.cpp
   src/ArchiveMatrixPayload.cpp
   src/ObservablePayload.cpp
+  src/DomainFieldPayload.cpp
+  src/ObservablePhasePayload.cpp
+  src/PayloadSampling.cpp
+  src/AnimationPayload.cpp
+  src/AnimationPlayer.cpp
+  src/RecordedArchives.cpp
   src/ObservableWorkspace.cpp
   src/PanelCatalog.cpp
   src/KoopmanValidationPayload.cpp
@@ -172,6 +178,12 @@ if(BUILD_TESTING AND DYNSYSLAB_VIEWER_BUILD_TESTS)
   add_executable(dynsyslab_observable_workspace_tests tests/observable_workspace_tests.cpp)
   target_link_libraries(dynsyslab_observable_workspace_tests PRIVATE dynsyslab_viewer_services)
   add_test(NAME dynsyslab_observable_workspace_tests COMMAND dynsyslab_observable_workspace_tests)
+  add_executable(dynsyslab_domain_field_payload_tests tests/domain_field_payload_tests.cpp)
+  target_link_libraries(dynsyslab_domain_field_payload_tests PRIVATE dynsyslab_viewer_services)
+  add_test(NAME dynsyslab_domain_field_payload_tests COMMAND dynsyslab_domain_field_payload_tests)
+  add_executable(dynsyslab_observable_phase_payload_tests tests/observable_phase_payload_tests.cpp)
+  target_link_libraries(dynsyslab_observable_phase_payload_tests PRIVATE dynsyslab_viewer_services)
+  add_test(NAME dynsyslab_observable_phase_payload_tests COMMAND dynsyslab_observable_phase_payload_tests)
   add_executable(dynsyslab_plot_presentation_tests tests/plot_presentation_tests.cpp)
   target_link_libraries(dynsyslab_plot_presentation_tests PRIVATE dynsyslab_viewer_services)
   add_test(NAME dynsyslab_plot_presentation_tests COMMAND dynsyslab_plot_presentation_tests)

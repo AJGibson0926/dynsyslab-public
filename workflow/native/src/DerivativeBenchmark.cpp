@@ -132,7 +132,7 @@ std::filesystem::path runDerivativeBenchmark(const std::vector<std::filesystem::
         {"delta_t", json::Value(dt)}, {"samples", json::Value(double(n))}, {"settings", settings},
         {"independent_archive", json::Value(true)}};
     archive.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(json::Value(std::move(meta))));
-    const auto directory = root / L"derived" / L"derivative-benchmark";
+    const auto directory = objectFolder(root, "derivative-benchmark");
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(sources.front().stem().u8string() + "__derivative-benchmark__" + timestamp()) + ".npz");
     c::writeNpzAtomic(path, archive);

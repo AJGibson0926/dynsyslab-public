@@ -2,9 +2,10 @@
 
 #include <dynsyslab/core/SINDy.hpp>
 #include <dynsyslab/core/EigenfunctionFit.hpp>
+#include <dynsyslab/core/Eigenfunction.hpp>
 #include <dynsyslab/core/DiscreteInputMap.hpp>
 #include <dynsyslab/core/Reconstruction.hpp>
-#include <dynsyslab/core/ScatteredEigenfunctions.hpp>
+#include <dynsyslab/core/FunctionInterpolation.hpp>
 #include <dynsyslab/core/System.hpp>
 #include <dynsyslab/core/KoopmanDatasets.hpp>
 #include <dynsyslab/core/SpectralKROM.hpp>
@@ -52,13 +53,20 @@ struct KoopmanEigenfunctionDescriptor {
 class KoopmanModel {
 public:
     // Coordinate-only models need neither an ODE nor fictitious physical state.
-    explicit KoopmanModel(PolynomialEigenfunctionSet eigenfunctions,
+    // The eigenfunctions' shared expansion and, separately, their eigenvalues (one per output).
+    KoopmanModel(FunctionExpansion functions, Spectrum spectrum,
         std::size_t inputDimension = 0, EigenfunctionFitDiagnostics diagnostics = {});
-    KoopmanModel(PolynomialEigenfunctionSet eigenfunctions, SystemConfiguration system,
+    KoopmanModel(FunctionExpansion functions, Spectrum spectrum, SystemConfiguration system,
         EigenfunctionFitDiagnostics diagnostics = {});
-    [[nodiscard]] const PolynomialEigenfunctionSet& polynomialEigenfunctions() const;
-    [[nodiscard]] const EigenfunctionSpectrum& spectrum() const noexcept;
-    [[nodiscard]] const EigenfunctionCoordinates& coordinates() const noexcept;
+    explicit KoopmanModel(EigenfunctionFitResult fit, std::size_t inputDimension = 0);
+    KoopmanModel(EigenfunctionFitResult fit, SystemConfiguration system);
+    [[nodiscard]] const FunctionExpansion& expansion() const;
+    // Mode `mode` as an Eigenfunction object on the physical state (or on the K-ROM coordinates
+    // when they cannot be computed from a state): its representation is this model's expansion or
+    // interpolation, its eigenvalue the model's.
+    [[nodiscard]] Eigenfunction eigenfunction(std::size_t mode) const;
+    [[nodiscard]] const Spectrum& spectrum() const noexcept;
+    [[nodiscard]] const FunctionDomain& coordinates() const noexcept;
     [[nodiscard]] const EigenfunctionFitDiagnostics& fitDiagnostics() const noexcept;
     [[nodiscard]] bool hasPhysicalSystem() const noexcept { return bool(system_); }
     [[nodiscard]] std::optional<std::size_t> physicalStateDimension() const noexcept;
@@ -80,7 +88,7 @@ public:
         std::vector<double> center = {}, std::vector<double> scale = {});
 
     KoopmanModel(KoopmanSINDyResult eigenfunctions, SystemConfiguration system);
-    KoopmanModel(ScatteredEigenfunctionData eigenfunctions,
+    KoopmanModel(InterpolationData eigenfunctions, Spectrum spectrum,
                  SystemConfiguration system);
 
     [[nodiscard]] std::size_t stateDimension() const;
@@ -95,7 +103,7 @@ public:
     [[nodiscard]] std::string eigenfunctionRepresentation() const;
     [[nodiscard]] std::vector<KoopmanEigenfunctionDescriptor>
         eigenfunctionDescriptors() const;
-    [[nodiscard]] const ScatteredEigenfunctionData*
+    [[nodiscard]] const InterpolationData*
         scatteredEigenfunctions() const noexcept;
     [[nodiscard]] const SystemConfiguration& systemConfiguration() const;
     [[nodiscard]] const std::vector<KoopmanDatasetReference>& datasetReferences() const noexcept;
@@ -156,17 +164,15 @@ public:
 private:
     void attachPhysicalSystem(SystemConfiguration system);
     bool isRealMode(std::size_t mode) const noexcept;
-    std::optional<PolynomialEigenfunctionSet> polynomial_;
-    std::optional<EigenfunctionSpectrum> scatteredSpectrum_;
-    EigenfunctionCoordinates scatteredCoordinates_;
+    std::optional<FunctionExpansion> polynomial_;
+    std::optional<Spectrum> spectrum_;
     EigenfunctionFitDiagnostics fitDiagnostics_;
     std::size_t suppliedInputDimension_{};
     // Read-only legacy snapshot; runtime evaluation uses polynomial_.
     KoopmanSINDyResult eigenfunctions_;
     SystemConfiguration systemConfiguration_;
     std::shared_ptr<ODESystem> system_;
-    std::shared_ptr<const Observable> coordinateObservable_;
-    std::shared_ptr<const ScatteredEigenfunctionSet> scattered_;
+    std::shared_ptr<const FunctionInterpolation> scattered_;
     std::map<std::string, ApproximateControlMap> controlMaps_;
     std::map<std::string, DiscreteInputMap> discreteInputMaps_;
     std::map<std::string, ReconstructionResult> reconstructions_;

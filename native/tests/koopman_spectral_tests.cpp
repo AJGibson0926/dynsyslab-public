@@ -111,9 +111,8 @@ void periodicComparison() {
 }
 void existingModelAttachments() {
     c::PolynomialDictionary dictionary;dictionary.coordinateDimension=1;dictionary.exponents={1};
-    c::EigenfunctionCoordinates coordinates;coordinates.dimension=1;coordinates.names={"x"};
-    c::KoopmanModel model(c::PolynomialEigenfunctionSet(dictionary,{{1,0}},
-        c::EigenfunctionSpectrum::fromContinuousRates({{-1,0}}),coordinates));
+    c::FunctionDomain coordinates;coordinates.dimension=1;coordinates.names={"x"};
+    c::KoopmanModel model(c::EigenfunctionFitResult{c::FunctionExpansion(dictionary, {{1,0}}, coordinates), c::Spectrum::fromContinuousRates({{-1,0}}), {}});
     c::SpectralData data;data.residuals.eigenpair={.01};
     c::SpectralMeasure measure;measure.name="x";measure.method="test-atom";measure.atomLocations={0};measure.atomMasses={2};measure.totalMass=2;
     data.measures.push_back(measure);model.setSpectralData(data);
