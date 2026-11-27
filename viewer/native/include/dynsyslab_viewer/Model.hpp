@@ -92,6 +92,9 @@ struct Trace {
     // Brightness reference of a domain-coloured line (brightness = magnitude / scale). Zero: the
     // trace's own largest magnitude. Overlaid runs of one function share one scale.
     double magnitudeScale = 0.0;
+    // Drawn against the figure's right ordinate: y holds plotted = offset + scale * value
+    // (Figure::RightAxis), so the value reads off the right-hand ticks.
+    bool rightAxis = false;
 };
 
 struct DetailInset {
@@ -121,6 +124,9 @@ struct Figure {
     std::string yLabel;
     bool square = false;
     std::string titleColor;
+    // Legend placement: "" (or "auto") overlays it on the plot, top right unless that hides data;
+    // "top" sets the entries in one horizontal row (wrapping if needed) between the title and the plot.
+    std::string legendPlacement;
     int dashboardPage = -1;
     int gridSpan = 1;
     int rowSpan = 1;
@@ -154,7 +160,12 @@ struct Figure {
     // Index abscissas (singular-value index, mode number): ticks and grid at integers.
     bool integerXTicks = false;
     // Optional right ordinate for a curve plotted as offset + scale * value.
-    struct RightAxis { std::string label; double scale = 1, offset = 0; };
+    // Right ordinate: value = (plotted - offset) / scale. Stacked axes set the plotted ranges each
+    // side labels: the left curves' band above, the right curves' band below.
+    struct RightAxis {
+        std::string label; double scale = 1, offset = 0;
+        std::optional<std::pair<double, double>> leftBand, rightBand;
+    };
     std::optional<RightAxis> rightAxis;
     // Initial abscissa range (e.g. a spectrum's dominant band); the ordinate is fitted inside it.
     // Resetting the axes returns to the full data range.

@@ -98,13 +98,18 @@ van Dantzig 1930).
   - `difference`: minus another spec, `"minus":{...}`.
   - `diff`: successive differences; with `"per_time":true`, divided by the clock steps.
   - `psi`: K-ROM eigenfunctions along the source's rows, `"krom"`, `"modes"`,
-    `"part":"real|imag|abs|phase"`.
+    `"part":"real|imag|abs|phase"`. Rows are physical states or the K-ROM's own coordinates; a
+    causal-history K-ROM, ψ(ξ), takes coordinates only, for example ξ lifted from a run or its
+    target by `control_target`. `"domain":"state|coordinates"` overrides the choice.
 - **`viewer_figure` curve sources:**
   - Each curve may name its own `"source"` archive, `"clock"` and `"interpolation"`.
   - The figure's clock is `"figure.clock":{"source","array"}`.
   - `"figure.fit_y_to":[curve indices]` fits the ordinate to those curves only (a model-scale page);
     `"figure.time_key"` plots against another array (for example per-run values of a score table);
     `"figure.scale"` is linear, log or symlog.
+  - Presentation: `"figure.legend":"auto|top"`, `"figure.spectrum":true` with
+    `"frequency_scale"`, `"figure.stack_axes":true`, and `"axis":"right"` on a curve, which the
+    `right_axis.label` titles (docs/architecture/VIEWER_CLI.md).
   - Every curve is resampled onto that clock (linear by default, NaN outside its span) before
     rendering.
 - **`bifurcation_points`:** a peak-amplitude bifurcation diagram.

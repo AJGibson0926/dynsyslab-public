@@ -8,15 +8,18 @@
 namespace dsl {
 namespace {
 
-std::wstring coordinates(const CurveProbe& probe) {
+// A right-axis trace stores plotted = offset + scale * value; the readout shows the value.
+std::wstring coordinates(const Figure& figure, const CurveProbe& probe) {
+    const bool right = figure.rightAxis && probe.traceIndex < figure.traces.size() && figure.traces[probe.traceIndex].rightAxis;
+    const double y = right ? (probe.y - figure.rightAxis->offset) / figure.rightAxis->scale : probe.y;
     std::wostringstream text;
-    text << std::setprecision(6) << L"(" << probe.x << L", " << probe.y;
+    text << std::setprecision(6) << L"(" << probe.x << L", " << y;
     if (probe.z) text << L", " << *probe.z;
     text << L")";
     return text.str();
 }
 
-void tooltip(Gdiplus::Graphics& graphics, const PlotTransform& transform,
+void tooltip(Gdiplus::Graphics& graphics, const Figure& figure, const PlotTransform& transform,
              const CurveProbe& probe, const theme::Fonts& fonts) {
     constexpr float height = 28.0f, gap = 10.0f;
     const float desiredWidth = probe.z ? 240.0f : 178.0f;
@@ -42,7 +45,7 @@ void tooltip(Gdiplus::Graphics& graphics, const PlotTransform& transform,
     Gdiplus::StringFormat format;
     format.SetAlignment(Gdiplus::StringAlignmentCenter);
     format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-    const auto label = coordinates(probe);
+    const auto label = coordinates(figure, probe);
     graphics.DrawString(label.c_str(), -1, &font, area, &format, &textBrush);
 }
 
@@ -65,7 +68,7 @@ void drawCurveProbe(Gdiplus::Graphics& graphics, const Figure& figure,
     const float radius = pinned ? 4.2f : 3.5f;
     graphics.FillEllipse(&fill, x - radius, y - radius, radius * 2, radius * 2);
     graphics.DrawEllipse(&ring, x - radius, y - radius, radius * 2, radius * 2);
-    if (pinned) tooltip(graphics, transform, probe, fonts);
+    if (pinned) tooltip(graphics, figure, transform, probe, fonts);
 }
 
 }  // namespace dsl

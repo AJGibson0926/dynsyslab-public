@@ -3,6 +3,7 @@
 #include "dynsyslab_viewer/PlotInteractionModel.hpp"
 #include "PlotPanelChrome.hpp"
 #include "PlotLegend.hpp"
+#include "PlotAxisBands.hpp"
 #include "PlotSeries.hpp"
 #include "PlotHeatmap.hpp"
 #include "PlotColorbar.hpp"
@@ -81,15 +82,13 @@ Gdiplus::RectF squareInside(const Gdiplus::RectF& value) {
     return {value.X + (value.Width - side) / 2.0f,
             value.Y + (value.Height - side) / 2.0f, side, side};
 }
-Gdiplus::RectF plotArea(const Figure& figure, const Gdiplus::RectF& card, const theme::Fonts& fonts) {
+Gdiplus::RectF plotArea(const Figure& figure, const Gdiplus::RectF& card, const theme::Fonts& fonts, bool withBand = true) {
     const float scale = scientificTextScale(fonts.body);
-    const bool redundantTitle = figure.title == "Phase space" ||
-        figure.title == "Control history" ||
-        (figure.kind == "time" && figure.title.find(" versus time") != std::string::npos);
     // Domain-coloured figures carry a caption under the title; colour bars sit right of the plot.
     const bool domainCaption = std::any_of(figure.traces.begin(), figure.traces.end(),
         [](const Trace& trace) { return trace.encoding == "domain-color"; });
-    const float top = domainCaption ? 56.0f : (redundantTitle ? 10.0f : 44.0f);
+    const auto band = withBand ? topLegendBand(figure, card, plotArea(figure, card, fonts, false), fonts) : std::nullopt;
+    const float top = band ? (band->GetBottom() - card.Y) / scale + 10.0f : domainCaption ? 56.0f : (redundantPlotTitle(figure) ? 10.0f : 44.0f);
     const float right = (figure.rightAxis ? 192 : 130) + plotColorbarReserve(figure);
     Gdiplus::RectF plot(card.X + 90*scale, card.Y + top*scale,
         std::max(1.0f, card.Width - right*scale), std::max(1.0f, card.Height - (top+62)*scale));
@@ -144,9 +143,11 @@ void grid(Gdiplus::Graphics& graphics, const Gdiplus::RectF& area,
         const double step = std::max(1.0, std::ceil((last - first + 1) / 12.0));
         for (double x = first; x <= last; x += step) xTick((x - xr.low) / (xr.high - xr.low), x);
     }
+    const bool banded = figure.rightAxis && figure.rightAxis->leftBand;  // stacked axes: PlotAxisBands
     for (int index = 0; index <= 4; ++index) {
         const float fraction = static_cast<float>(index) / 4.0f;
         if (!integers) xTick(fraction, xr.low + fraction * (xr.high - xr.low));
+        if (banded) continue;
         graphics.DrawLine(&gridPen, area.X, area.Y + fraction * area.Height,
                           area.GetRight(), area.Y + fraction * area.Height);
         const double y = valueScale.inverse(valueScale.forward(yr.high) - fraction *
@@ -162,13 +163,13 @@ void grid(Gdiplus::Graphics& graphics, const Gdiplus::RectF& area,
                 62*scale, 20*scale}, fonts.body, theme::plotMuted, Gdiplus::StringAlignmentNear);
         }
     }
-    if (figure.rightAxis)
+    const auto yTitle = axisLabel(figure.yLabel + (valueScale.kind == ValueScaleKind::linear ? "" : " [" + valueScale.name() + "]"), yExponent);
+    if (!drawAxisBands(graphics, area, yr.low, yr.high, figure, fonts, valueScale, yExponent, yTitle) && figure.rightAxis)
         drawVerticalText(graphics, wide(scientificMathLabel(figure.rightAxis->label)),
             {area.GetRight() + 68*scale, area.Y, 32*scale, area.Height}, fonts.body, theme::plotMuted);
     drawMathText(graphics, axisLabel(figure.xLabel, xExponent), {area.X, area.GetBottom() + 23*scale,
         area.Width, 34*scale}, fonts.body, theme::plotMuted, Gdiplus::StringAlignmentCenter);
-    drawVerticalText(graphics, axisLabel(figure.yLabel + (valueScale.kind == ValueScaleKind::linear ? "" : " [" + valueScale.name() + "]"), yExponent), {area.X - 89*scale, area.Y,
-        32*scale, area.Height}, fonts.body, theme::plotMuted);
+    if (!banded) drawVerticalText(graphics, yTitle, {area.X - 89*scale, area.Y, 32*scale, area.Height}, fonts.body, theme::plotMuted);
 }
 
 void heatmap(Gdiplus::Graphics& graphics, const Trace& trace,
@@ -413,11 +414,7 @@ void figureCard(Gdiplus::Graphics& graphics, const Figure& figure,
                 const PlotTransform& transform, const Plot3DCamera* camera3D,
                 Plot3DControl hovered3DControl) {
     rounded(graphics, card, theme::plotBackground, theme::plotBorder, 13);
-    const bool redundantTitle = figure.title == "Phase space" ||
-        figure.title == "Control history" ||
-        (figure.kind == "time" && figure.title.find(" versus time") != std::string::npos);
-    const bool showTitle = !redundantTitle;
-    if (showTitle)
+    if (!redundantPlotTitle(figure))
         drawMathText(graphics, wide(scientificMathLabel(figure.title)), {card.X + 14, card.Y + 5,
             card.Width - 28, 30}, fonts.heading,
             figure.titleColor.empty() ? theme::plotText : colorRef(figure.titleColor,0));
@@ -471,7 +468,9 @@ void figureCard(Gdiplus::Graphics& graphics, const Figure& figure,
         selected.traces.clear();
         for (const auto& t : figure.traces) if (t.selected) selected.traces.push_back(t);
     }
-    const Figure* legendFigure = ordinaryLegend ? &figure : figure.kind == "krom_spectrum" ? &selected : nullptr;
+    const auto band = ordinaryLegend ? topLegendBand(figure, card, plotArea(figure, card, fonts, false), fonts) : std::nullopt;
+    if (band) drawPlotTopLegend(graphics, figure, *band, fonts);
+    const Figure* legendFigure = band ? nullptr : ordinaryLegend ? &figure : figure.kind == "krom_spectrum" ? &selected : nullptr;
     std::optional<Gdiplus::SizeF> legendSize;
     if (legendFigure) {
         const auto size = plotLegendSize(graphics, *legendFigure, plot, fonts);
@@ -489,6 +488,8 @@ void figureCard(Gdiplus::Graphics& graphics, const Figure& figure,
             if (cost < best) { best = cost; layout = candidate; }
         }
     }
+    if (const auto clear = figure.legendPlacement.empty() && legendFigure && !detail ? clearLegendCorner(figure, plot, fonts) : std::nullopt)
+        layout.legend = clear;  // automatic placement of a time or spectrum plot: a corner with no data under it
     if (legendFigure && layout.legend) {
         const Gdiplus::PointF origin(layout.legend->X, layout.legend->Y);
         drawPlotLegend(graphics, *legendFigure, plot, fonts, &origin);

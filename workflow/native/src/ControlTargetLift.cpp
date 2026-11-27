@@ -14,7 +14,7 @@
 //                 (defaults to the first source).
 //   state_target  state target specification (waveform, constant, trajectory; optional ramp).
 //   time          {start, stop, step}; step defaults to the history clock (history KROMs)
-//                 or 0.001.
+//                 or 0.001; start and stop default to a trajectory target's own clock.
 //   measurement_observable  history KROMs: observable sampled along the target (default:
 //                 the frozen transform's measurement).
 // Output arrays: time, values (coordinate target), state_target_values.
@@ -70,7 +70,16 @@ std::filesystem::path runControlTarget(const std::vector<std::filesystem::path>&
     }
 
     const auto& time = settings.at("time");
-    const double start = time.at("start").number(0.0), stop = time.at("stop").number(NAN);
+    // A recorded trajectory (a run, or a run's stored target) spans its own clock by default, so
+    // a run that ended early is lifted to where it ended.
+    double recordedStart = 0.0, recordedStop = NAN;
+    if (settings.at("state_target").at("kind").string() == "trajectory") {
+        const auto& source = settings.at("state_target");
+        const auto clock = c::readNpz(std::filesystem::u8path(source.at("source").string()))
+            .at(source.at("time_array").string("time")).doubles();
+        if (!clock.empty()) { recordedStart = clock.front(); recordedStop = clock.back(); }
+    }
+    const double start = time.at("start").number(recordedStart), stop = time.at("stop").number(recordedStop);
     const double step = time.at("step").number(history ? transform->sampleInterval() : 0.001);
     if (!std::isfinite(start) || !std::isfinite(stop) || !(stop > start) || !(step > 0))
         throw std::invalid_argument("control_target time needs finite start < stop and a positive step");

@@ -6,8 +6,10 @@
 //   "diff"        successive differences v[k+1] - v[k] of each column (n - 1 rows); with
 //                 "per_time": true divided by the matching differences of "clock" (default "time")
 //   "psi"         K-ROM eigenfunctions ("krom": PATH, "modes": [k,...] default all) evaluated on
-//                 every row of the source array ("array", the state), one column per mode;
-//                 "part": "real" (default), "imag", "abs" or "phase"
+//                 every row of the source array ("array"), one column per mode; "part": "real"
+//                 (default), "imag", "abs" or "phase". Rows are physical states or the K-ROM's own
+//                 coordinates; a causal-history K-ROM (psi of xi) takes coordinates only, e.g. xi
+//                 lifted by control_target. "domain": "state" | "coordinates" overrides the choice.
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/Json.hpp>
 

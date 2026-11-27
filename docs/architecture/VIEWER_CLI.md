@@ -14,8 +14,10 @@ There are two entry points:
 | Arrays you saved yourself in an `.npz` (one clock, any curves) | `time-series` |
 
 Both write a PNG and print a `dynsyslab.viewer.render/v1` JSON report (page count,
-axis bounds). `render --output plot.svg` writes vector graphics and `--output plot.html` a
-self-contained interactive page of every page; `report SPEC.json` renders multi-page HTML or PDF
+axis bounds). `render` and `time-series` with `--output plot.svg` write vector graphics, and with
+`--output plot.html` a self-contained interactive page of every page. Both exports, like the PNG
+and the Viewer window, draw the right ordinate, stacked axes and the legend placement, and the
+HTML and window readouts give right-axis curves in their own units. `report SPEC.json` renders multi-page HTML or PDF
 reports and JSON result documents render directly
 ([Viewer reports and export](VIEWER_REPORTS_AND_EXPORT.md)). Errors are `dynsyslab.viewer.error/v1` JSON on stderr with a nonzero exit.
 A relative `--output` (including a bare `plot.png`) resolves against the current directory and
@@ -164,7 +166,10 @@ DynSysLabViewerCli time-series --source run.npz --output comparison.png `
 | `--axis`, `--value-label`, `--x-label`, `--columns` | panel labels and tiling |
 | `--time-key`, `--time-label`, `--start`, `--stop` | clock array, abscissa label, window |
 | `--right-axis-label`, `--right-axis-scale s`, `--right-axis-offset c` | right ordinate for a curve stored as `c + s * value`; its ticks show `(plotted - c) / s`. In a `viewer_figure` job: `"right_axis":{"label":...,"scale":s,"offset":c}` |
-| `--spectrum [--frequency-scale k]` | replace each time curve by its one-sided amplitude spectrum over the window (mean removed, Hann; the archive convention). Frequency is cycles per clock unit × k, without the zero bin. Use `--time-label` for the frequency label. |
+| `--curve-axis left\|right` | per curve, after its `--curve`: a right-axis curve gets its own ordinate, fitted to span the left curves' range and labelled by `--right-axis-label` (do not give a scale or offset). In a job: `"axis":"right"` on the curve |
+| `--stack-axes` | with right-axis curves: the left curves in an upper band and the right curves in a band of the same height below, each band with its own ticks and title (for example Re ψ above, Im ψ below). In a job: `"stack_axes":true` |
+| `--legend auto\|top` | `auto` (default): inside the plot, in the first corner (top right, top left, bottom right, bottom left) with no data under it; a time or spectrum plot with data in every corner gets the legend as one row between the title and the plot instead. `top`: always that row. Entries keep the curve order, so list curves in the groups they belong to. Also for `render`. In a job: `"legend":"top"` |
+| `--spectrum [--frequency-scale k]` | replace each time curve by its one-sided amplitude spectrum over the window (mean removed, Hann; the archive convention). Frequency is cycles per clock unit × k, without the zero bin. Use `--time-label` for the frequency label. With `--x-range`, only the bins in that band are kept, before display thinning, so a zoom keeps full resolution. In a job: `"spectrum":true`, `"frequency_scale":k` |
 | `--scale`, `--x-range`, `--y-range`, `--title`, `--font-scale`, `--width`, `--height`, `--page` | as for archives. Plot text defaults to `--font-scale 2.3`; curves without `--line-width` use the Viewer default pens (3.6 pt curves, 3.0 pt targets) |
 
 Arrays on different clocks of one archive can be plotted directly by naming the clock,

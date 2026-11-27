@@ -1,0 +1,58 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "solve",
+ "label": "rpe-viscous-echo-long-training-five-ics-trajectory-0",
+ "system": {
+  "name": "rpe",
+  "preset": "air_water_20c",
+  "parameters": {
+   "ambient_pressure_pa": 100000,
+   "equilibrium_radius_m": 1e-05,
+   "kappa": 1.3333333333333333,
+   "mu_pa_s": 0.001,
+   "pressure_input_sign": -1,
+   "rho_kg_m3": 998,
+   "sigma_n_m": 0.0725,
+   "vapor_pressure_pa": 2330
+  }
+ },
+ "time": {
+  "coordinate_system": "dimensionless",
+  "output_step": 0.0001,
+  "start": 0,
+  "stop": 80
+ },
+ "initial_conditions": {
+  "mode": "explicit",
+  "count": 1,
+  "clusters": 1,
+  "seed": 0,
+  "values": [
+   [
+    2.333386598601735,
+    0
+   ]
+  ],
+  "ranges": []
+ },
+ "controller": {
+  "kind": "none",
+  "settings": {},
+  "target": {
+   "kind": "constant",
+   "state": [
+    1,
+    0
+   ]
+  }
+ },
+ "solver": {
+  "atol": 1e-09,
+  "method": "BDF",
+  "rtol": 1e-09
+ },
+ "archive": {
+  "enabled": true,
+  "data_role": "free_training"
+ }
+}

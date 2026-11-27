@@ -40,6 +40,7 @@ Trace timeTrace(const TimeSeriesCurve& curve,const std::vector<double>& t,const 
         trace.markerShape=curve.lineStyle=="markers"?"large-circle":"large-open-circle";
     }
     trace.lineWidthPoints=curve.lineWidthPoints;
+    trace.rightAxis=curve.rightAxis;
     const auto value=[&](std::size_t i){return data[(i+firstRow)*width+component];};
     // Nonfinite samples (e.g. after a run was truncated on failure) are not drawn.
     const auto append=[&](std::size_t i){
@@ -92,6 +93,29 @@ Trace stemBaseline(const std::vector<double>& t,double base) {
     const double pad=t.size()>1?0.5*(t.back()-t.front())/double(t.size()-1):0.5;
     line.x={t.front()-pad,t.back()+pad}; line.y={base,base};
     return line;
+}
+
+// Right-axis curves get their own ordinate: their range is mapped onto the plotted one, spanning
+// the left curves' range (overlaid) or a band of the same height below it (stacked).
+static void fitRightAxis(Figure& panel,const TimeSeriesOverlay& req) {
+    if (std::none_of(panel.traces.begin(),panel.traces.end(),[](const Trace& t){return t.rightAxis;})) return;
+    const auto range=[&](bool right) {
+        double low=std::numeric_limits<double>::infinity(),high=-low;
+        for (const auto& trace:panel.traces) if (trace.rightAxis==right)
+            for (const double y:trace.y) if (std::isfinite(y)) { low=std::min(low,y); high=std::max(high,y); }
+        if (high<=low) { const double mid=std::isfinite(low)?low:0.0; low=mid-0.5; high=mid+0.5; }
+        return std::pair{low,high};
+    };
+    const auto [c,d]=range(true);
+    const bool anyLeft=std::any_of(panel.traces.begin(),panel.traces.end(),[](const Trace& t){return !t.rightAxis;});
+    const auto [a,b]=anyLeft?range(false):std::pair{c,d};
+    const double height=b-a, top=req.stackAxes?a-0.12*height:b;  // the right band's upper edge
+    Figure::RightAxis axis;
+    axis.label=req.rightAxis?req.rightAxis->label:std::string{};
+    axis.scale=height/(d-c); axis.offset=top-axis.scale*d;
+    if (req.stackAxes) { axis.leftBand=std::pair{a,b}; axis.rightBand=std::pair{top-height,top}; }
+    for (auto& trace:panel.traces) if (trace.rightAxis) for (auto& y:trace.y) y=axis.offset+axis.scale*y;
+    panel.rightAxis=axis;
 }
 
 Payload timeSeriesOverlay(const std::filesystem::path& source,const TimeSeriesOverlay& req,std::size_t horizontalBins) {
@@ -148,8 +172,12 @@ Payload timeSeriesOverlay(const std::filesystem::path& source,const TimeSeriesOv
                 panel.kind="time"; panel.valueScale="linear"; panel.xLabel=req.timeLabel;
                 panel.integerXTicks=req.integerTicks;
                 panel.rightAxis=req.rightAxis;
-                panel.yLabel=req.componentLabels.empty()?"Component "+std::to_string(j+1):req.componentLabels[j];
-                panel.title=req.title.empty()?panel.yLabel:req.title+" | "+panel.yLabel;
+                // Components are named only when there are several or they were labelled: a single
+                // unlabelled series keeps the bare title and takes its ordinate from its curve.
+                const bool named=!req.componentLabels.empty() || width>1;
+                panel.yLabel=!req.componentLabels.empty()?req.componentLabels[j]:named?"Component "+std::to_string(j+1)
+                    :curve.label.empty()?curve.key:curve.label;
+                panel.title=req.title.empty()?panel.yLabel:named?req.title+" | "+panel.yLabel:req.title;
                 if (!req.valueLabel.empty()) panel.yLabel=req.valueLabel;
                 if (req.columns>=2) {
                     panel.gridSpan=1; panel.dashboardPage=static_cast<int>(j/(req.columns*req.columns));
@@ -178,9 +206,12 @@ Payload timeSeriesOverlay(const std::filesystem::path& source,const TimeSeriesOv
                 const auto transform=series.fourier().transform(options);
                 std::vector<double> frequency,amplitude;
                 for (std::size_t bin=1;bin<transform->binCount;++bin) {
-                    frequency.push_back(transform->frequencies[bin]*req.frequencyScale);
+                    const double f=transform->frequencies[bin]*req.frequencyScale;
+                    if (req.frequencyRange && (f<req.frequencyRange->first || f>req.frequencyRange->second)) continue;
+                    frequency.push_back(f);
                     amplitude.push_back(transform->amplitude(bin,0));
                 }
+                if (frequency.size()<2) throw std::invalid_argument("Spectrum has fewer than two bins in the frequency range: "+curve.key);
                 auto& panel=result.figures[j];
                 panel.kind="fourier";
                 panel.traces.push_back(timeTrace(curve,frequency,amplitude,0,1,0,timeBins(frequency,horizontalBins)));
@@ -214,6 +245,7 @@ Payload timeSeriesOverlay(const std::filesystem::path& source,const TimeSeriesOv
             panel.traces.push_back(std::move(trace));
         }
     }
+    for (auto& panel:result.figures) fitRightAxis(panel,req);
     return result;
 }
 }

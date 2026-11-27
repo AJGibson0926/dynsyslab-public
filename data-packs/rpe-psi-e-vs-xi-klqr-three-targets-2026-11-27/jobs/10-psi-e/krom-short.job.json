@@ -1,0 +1,22 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "postprocess",
+ "label": "psi(e) K-ROM short",
+ "archive": {
+  "enabled": true
+ },
+ "methods": [
+  {
+   "name": "krom_extract",
+   "settings": {
+    "mode_selection": {
+     "count": 1,
+     "rule": "oscillatory_pairs"
+    }
+   }
+  }
+ ],
+ "sources": [
+  "${inputs.src}"
+ ]
+}

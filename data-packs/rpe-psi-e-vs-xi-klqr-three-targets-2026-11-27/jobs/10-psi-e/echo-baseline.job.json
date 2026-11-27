@@ -1,0 +1,23 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "postprocess",
+ "label": "echo on baseline training trajectory",
+ "archive": {
+  "enabled": true
+ },
+ "methods": [
+  {
+   "name": "coordinate_transform",
+   "settings": {
+    "kind": "observable",
+    "observable": "echo",
+    "labels": [
+     "e"
+    ]
+   }
+  }
+ ],
+ "sources": [
+  "${inputs.run}"
+ ]
+}

@@ -1,6 +1,7 @@
 #include "../src/AnimationPlayer.hpp"
 #include "../src/PlotSvg.hpp"
 #include "../src/DocumentPayload.hpp"
+#include <algorithm>
 #include <iterator>
 #include "dynsyslab_viewer/ViewerSession.hpp"
 #include "dynsyslab_viewer/TimeSeriesOverlay.hpp"
@@ -48,13 +49,13 @@ Options parse(int argc,wchar_t** argv) {
     const std::set<std::wstring> keys{L"--project",L"--archives",L"--cache",L"--catalog",L"--focus",
         L"--id",L"--source",L"--view",L"--coordinates",L"--search",L"--parent",L"--output",
         L"--mode",L"--options",L"--width",L"--height",L"--page",L"--figure",L"--workspace",L"--modes",L"--complex-display",L"--scale",L"--scroll-y",L"--benchmark-scroll",
-        L"--panel",L"--start",L"--stop",L"--title",L"--x-range",L"--y-range",L"--every"};
+        L"--panel",L"--start",L"--stop",L"--title",L"--x-range",L"--y-range",L"--every",L"--legend"};
     Options result;
     const bool series=std::wstring(argv[1])==L"time-series";
     const std::set<std::wstring> seriesKeys{L"--source",L"--output",L"--width",L"--height",L"--page",
         L"--title",L"--time-key",L"--time-label",L"--start",L"--stop",L"--columns",L"--value-label",L"--font-scale",L"--x-label",
         L"--frequency-scale",L"--scale",L"--x-range",L"--y-range",L"--stem-baseline",
-        L"--right-axis-label",L"--right-axis-scale",L"--right-axis-offset"};
+        L"--right-axis-label",L"--right-axis-scale",L"--right-axis-offset",L"--legend"};
     for (int i = 2; i < argc; ++i) {
         const std::wstring key = argv[i];
         if (series && key==L"--line-width") {
@@ -75,6 +76,14 @@ Options parse(int argc,wchar_t** argv) {
                 && style!="dot" && style!="dash-dot" && style!="stem" && style!="markers" && style!="open-markers")
                 throw std::runtime_error("Expected solid, dash, time-dash, sparse-dash, dot, dash-dot, stem, markers, or open-markers");
             result.overlay.curves.back().lineStyle=style;
+            continue;
+        }
+        if (series && key==L"--curve-axis") {
+            if (result.overlay.curves.empty() || ++i>=argc)
+                throw std::runtime_error("Use --curve-axis left|right after a --curve");
+            const auto side=dsl::narrow(argv[i]);
+            if (side!="left" && side!="right") throw std::runtime_error("Expected --curve-axis left or right");
+            result.overlay.curves.back().rightAxis=side=="right";
             continue;
         }
         if (series && key==L"--color") {
@@ -119,6 +128,7 @@ Options parse(int argc,wchar_t** argv) {
             continue;
         }
         if (series && key==L"--spectrum") { result.overlay.spectrum=true; continue; }
+        if (series && key==L"--stack-axes") { result.overlay.stackAxes=true; continue; }
         if (series && key==L"--integer-x-ticks") { result.overlay.integerTicks=true; continue; }
         if (key == L"--json") continue;
         if (key == L"--samples") { result.samples = true; continue; }
@@ -130,6 +140,14 @@ Options parse(int argc,wchar_t** argv) {
 }
 }
 
+// --legend auto|top: where every figure on the page draws its legend (Figure::legendPlacement).
+void applyLegendPlacement(dsl::Payload& payload, const Options& args) {
+    if (!args.values.count(L"--legend")) return;
+    const auto placement = args.text(L"--legend");
+    if (placement != "auto" && placement != "top") throw std::invalid_argument("--legend must be auto or top");
+    for (auto& figure : payload.figures) figure.legendPlacement = placement == "auto" ? "" : placement;
+}
+
 void viewerSessionUsage() {
     std::cout
         << "  Archive views (see docs/architecture/VIEWER_CLI.md):\n"
@@ -139,14 +157,17 @@ void viewerSessionUsage() {
         << "         [--start t --stop t] [--coordinates dimensional|dimensionless] [--scale auto|linear|log|symlog]\n"
         << "         [--compare-source path | --compare-id id ...] [--label text ...] [--color #RRGGBB ...]\n"
         << "         [--title text] [--x-range low:high] [--y-range low:high] [--width 1100 --height 760] [--page 0 | --figure 0]\n"
+        << "         [--legend auto|top] auto: over the plot, top right unless that hides data; top: one row under the title\n"
         << "  animate (--id id | --source path) --output player.html [--view route] [--every n] [--width 1100 --height 620]\n"
         << "         every page (animation frame) in one self-contained HTML player with play/pause/step/stop\n"
         << "  inspect: same selection as render, JSON instead of PNG [--samples]\n"
         << "      Views: time, phase, fourier, control_fourier, estimator, ... or a label from panels.\n"
         << "      --start/--stop: archive clock units; windows every route (spectra too).\n"
         << "      Comparisons overlay runs in order (selected first); --label/--color: one per run.\n"
-        << "  time-series --source data.npz --curve key|xkey,ykey[=label] [--color #RRGGBB[,#RRGGBB per panel]] [--line-width points] [--line-style solid|dash|time-dash|sparse-dash|dot|dash-dot|stem] ... --output plot.png\n"
-        << "      [--axis component-label ...] [--title text] [--time-key time] [--time-label Time] [--start t --stop t] [--columns n] [--value-label text] [--x-label text] [--font-scale x] [--width n --height n --page n]\n"
+        << "  time-series --source data.npz --curve key|xkey,ykey[=label] [--color #RRGGBB[,#RRGGBB per panel]] [--line-width points] [--line-style solid|dash|time-dash|sparse-dash|dot|dash-dot|stem] ... --output plot.png|plot.svg|plot.html\n"
+        << "      [--axis component-label ...] [--title text] [--time-key time] [--time-label Time] [--start t --stop t] [--columns n] [--value-label text] [--x-label text] [--font-scale x] [--width n --height n --page n] [--legend auto|top]\n"
+        << "      [--curve-axis left|right] after a --curve: right-axis curves get their own fitted ordinate (label: --right-axis-label)\n"
+        << "      [--stack-axes] the left curves in an upper band, the right curves in a band below, each with its own ticks\n"
         << "      [--spectrum [--frequency-scale k]] one-sided Hann amplitude spectra of the curves over [start, stop], frequency x k\n"
         << "      [--scale auto|linear|log|symlog] [--x-range low:high] [--y-range low:high]\n"
         << "      [--stem-baseline v] baseline of stem curves (default 0; a decade below the smallest value with --scale log)\n"
@@ -217,8 +238,25 @@ int viewerSessionCommand(int argc,wchar_t** argv) {
                 if (used!=text.size()) throw std::invalid_argument("Invalid font scale: "+dsl::narrow(text));
             }
             options.xRange=args.range(L"--x-range"); options.yRange=args.range(L"--y-range");
+            if (request.spectrum) request.frequencyRange=options.xRange;
+            const bool fittedRight=std::any_of(request.curves.begin(),request.curves.end(),[](const auto& c){return c.rightAxis;});
+            if (fittedRight && (args.values.count(L"--right-axis-scale") || args.values.count(L"--right-axis-offset")))
+                throw std::runtime_error("--curve-axis right fits the right axis; drop --right-axis-scale and --right-axis-offset");
+            if (request.stackAxes && !fittedRight) throw std::runtime_error("--stack-axes needs a curve with --curve-axis right");
             auto payload=dsl::timeSeriesOverlay(source,request,4ULL*options.width);
+            applyLegendPlacement(payload,args);
             if (args.values.count(L"--scale")) dsl::setValueScale(payload,args.text(L"--scale"));
+            const auto extension=std::filesystem::path(output).extension().wstring();
+            if (extension==L".svg" || extension==L".html") {  // vector / interactive export, as for render
+                const auto path=dynsyslab::core::prepareOutputFile(output,"--output");
+                std::ofstream file(path,std::ios::binary);
+                file << (extension==L".svg" ? dsl::payloadSvg(payload,options.page,options.width,options.height)
+                                            : dsl::payloadHtml(payload,request.title));
+                if (!file) throw std::runtime_error("Unable to write "+path.u8string());
+                std::cout << dsl::json::dump(dsl::json::Value::Object{{"schema","dynsyslab.viewer.render/v1"},{"output",path.u8string()},
+                    {"format",extension==L".svg"?"svg":"html"},{"page_count",static_cast<double>(dsl::pageCount(payload))}}) << '\n';
+                return 0;
+            }
             std::cout << dsl::json::dump(dsl::renderPlotPng(payload,
                 dynsyslab::core::prepareOutputFile(output,"--output"),options)) << '\n';
             return 0;
@@ -297,6 +335,7 @@ int viewerSessionCommand(int argc,wchar_t** argv) {
                 if (!document && session.selected().kind != "krom" && (args.values.count(L"--modes") || args.values.count(L"--complex-display")))
                     throw std::runtime_error("KROM options require a KROM data-tree item");
                 auto payload = document ? *document : session.workspace(request);
+                applyLegendPlacement(payload,args);
                 if (args.values.count(L"--title"))
                     for (auto& figure : payload.figures)
                         figure.title = payload.figures.size() == 1 ? args.text(L"--title")

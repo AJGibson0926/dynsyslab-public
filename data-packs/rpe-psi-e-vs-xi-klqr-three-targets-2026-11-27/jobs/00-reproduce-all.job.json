@@ -1,0 +1,3032 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "job_group",
+ "label": "rpe-psi-e-vs-xi-klqr-three-targets-2026-11-27",
+ "data_pack": "../pack.json",
+ "description": "Echo-only KLQR with eigenfunctions of the echo alone, psi(e) evaluated directly, against eigenfunctions of the first two causal echo-history coordinates, psi(xi1, xi2), on the mild, strong and hard radius targets. Each formulation trains and controls with the pipeline as is (psi-e/jobs, psi-xi/jobs); the figures follow each run: radius and echo in time and frequency (the echo and its target lifted offline through (r, r') by control_target), and the controller's eigenfunction (mode 0) along the run and its target. psi(e) on the hard target diverges within 0.005 tau, too short for a spectrum.",
+ "cleanup": {
+  "enabled": true,
+  "min_free_gb": 6
+ },
+ "jobs": [
+  {
+   "id": "e-train-long",
+   "job": "10-psi-e/train-long.job.json"
+  },
+  {
+   "id": "e-train-short",
+   "job": "10-psi-e/train-short.job.json"
+  },
+  {
+   "id": "e-forced",
+   "job": "10-psi-e/forced.job.json"
+  },
+  {
+   "id": "e-coords-long",
+   "job": "10-psi-e/coords-long.job.json",
+   "inputs": {
+    "src": "${e-train-long.archive}"
+   }
+  },
+  {
+   "id": "e-hdmd-long",
+   "job": "10-psi-e/hdmd-long.job.json",
+   "inputs": {
+    "src": "${e-coords-long.archive}"
+   }
+  },
+  {
+   "id": "e-sindy-long",
+   "job": "10-psi-e/sindy-long.job.json",
+   "inputs": {
+    "src": "${e-coords-long.archive}",
+    "spec": "${e-hdmd-long.archive}"
+   }
+  },
+  {
+   "id": "e-krom-long",
+   "job": "10-psi-e/krom-long.job.json",
+   "inputs": {
+    "src": "${e-sindy-long.archive}"
+   }
+  },
+  {
+   "id": "e-coords-short",
+   "job": "10-psi-e/coords-short.job.json",
+   "inputs": {
+    "src": "${e-train-short.archive}"
+   }
+  },
+  {
+   "id": "e-hdmd-short",
+   "job": "10-psi-e/hdmd-short.job.json",
+   "inputs": {
+    "src": "${e-coords-short.archive}"
+   }
+  },
+  {
+   "id": "e-sindy-short",
+   "job": "10-psi-e/sindy-short.job.json",
+   "inputs": {
+    "src": "${e-coords-short.archive}",
+    "spec": "${e-hdmd-short.archive}"
+   }
+  },
+  {
+   "id": "e-krom-short",
+   "job": "10-psi-e/krom-short.job.json",
+   "inputs": {
+    "src": "${e-sindy-short.archive}"
+   }
+  },
+  {
+   "id": "e-forced-a",
+   "job": "10-psi-e/forced-a.job.json"
+  },
+  {
+   "id": "e-forced-b",
+   "job": "10-psi-e/forced-b.job.json"
+  },
+  {
+   "id": "e-forced-c",
+   "job": "10-psi-e/forced-c.job.json"
+  },
+  {
+   "id": "e-bmap-long",
+   "job": "10-psi-e/bmap-long.job.json",
+   "inputs": {
+    "krom": "${e-krom-long.archive}",
+    "a": "${e-forced-a.archive}",
+    "b": "${e-forced-b.archive}",
+    "c": "${e-forced-c.archive}"
+   }
+  },
+  {
+   "id": "e-bmap-short",
+   "job": "10-psi-e/bmap-short.job.json",
+   "inputs": {
+    "krom": "${e-krom-short.archive}",
+    "a": "${e-forced-a.archive}",
+    "b": "${e-forced-b.archive}",
+    "c": "${e-forced-c.archive}"
+   }
+  },
+  {
+   "id": "e-control-easy",
+   "job": "10-psi-e/control-easy.job.json",
+   "inputs": {
+    "krom": "${e-bmap-long.archive}"
+   }
+  },
+  {
+   "id": "e-control-strong",
+   "job": "10-psi-e/control-strong.job.json",
+   "inputs": {
+    "krom": "${e-bmap-long.archive}"
+   }
+  },
+  {
+   "id": "e-control-hard",
+   "job": "10-psi-e/control-hard.job.json",
+   "inputs": {
+    "krom": "${e-bmap-short.archive}"
+   }
+  },
+  {
+   "id": "e-echo-easy",
+   "job": "10-psi-e/echo-easy.job.json",
+   "inputs": {
+    "run": "${e-control-easy.archive}"
+   }
+  },
+  {
+   "id": "e-echo-baseline",
+   "job": "10-psi-e/echo-baseline.job.json",
+   "inputs": {
+    "run": "${e-train-short.archive}"
+   }
+  },
+  {
+   "id": "x-s01",
+   "job": "20-psi-xi/s01-rpe-viscous-echo-long-training-five-ics-trajectory-0.job.json"
+  },
+  {
+   "id": "x-s03",
+   "job": "20-psi-xi/s03-coordinate-transform-rpe-echo-jet-klqr-rediscovery-20k.job.json",
+   "inputs": {
+    "s01": "${x-s01.archive}"
+   }
+  },
+  {
+   "id": "x-s04",
+   "job": "20-psi-xi/s04-hdmd-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s03": "${x-s03.archive}"
+   }
+  },
+  {
+   "id": "x-s05",
+   "job": "20-psi-xi/s05-sindy-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s03": "${x-s03.archive}",
+    "s04": "${x-s04.archive}"
+   }
+  },
+  {
+   "id": "x-s06",
+   "job": "20-psi-xi/s06-krom-extract-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s05": "${x-s05.archive}"
+   }
+  },
+  {
+   "id": "x-s09",
+   "job": "20-psi-xi/s09-coordinate-transform-rpe-echo-jet-klqr-rediscovery-20k.job.json",
+   "inputs": {
+    "s01": "${x-s01.archive}"
+   }
+  },
+  {
+   "id": "x-s10",
+   "job": "20-psi-xi/s10-sindy-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s06": "${x-s06.archive}",
+    "s09": "${x-s09.archive}"
+   }
+  },
+  {
+   "id": "x-s11",
+   "job": "20-psi-xi/s11-krom-extract-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s10": "${x-s10.archive}"
+   }
+  },
+  {
+   "id": "x-s15",
+   "job": "20-psi-xi/s15-rpe-echo-jet-klqr-rediscovery-20kpa---forced-training.job.json"
+  },
+  {
+   "id": "x-s16",
+   "job": "20-psi-xi/s16-input-map-rpe-echo-jet-klqr-rediscovery-20kpa.job.json",
+   "inputs": {
+    "s11": "${x-s11.archive}",
+    "s15": "${x-s15.archive}"
+   }
+  },
+  {
+   "id": "x-s36",
+   "job": "20-psi-xi/s36-rpe-echo-jet-klqr-rediscovery-20kpa---control.job.json",
+   "inputs": {
+    "s16": "${x-s16.archive}"
+   }
+  },
+  {
+   "id": "x-s39",
+   "job": "20-psi-xi/s39-strong-control.job.json",
+   "inputs": {
+    "s16": "${x-s16.archive}"
+   }
+  },
+  {
+   "id": "x-s42",
+   "job": "20-psi-xi/s42-rpe-echo-jet-klqr-rediscovery-20kpa---control.job.json",
+   "inputs": {
+    "s16": "${x-s16.archive}"
+   }
+  },
+  {
+   "id": "table-r-e-mild",
+   "job": {
+    "kind": "postprocess",
+    "label": "table-r-e-mild",
+    "sources": [
+     "${inputs.e_control_easy}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "run": "${inputs.e_control_easy}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "run",
+         "array": "time"
+        },
+        {
+         "name": "radius",
+         "from": "run",
+         "array": "values",
+         "column": 0
+        },
+        {
+         "name": "target",
+         "from": "run",
+         "array": "control_target_values",
+         "column": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_control_easy": "${e-control-easy.archive}"
+   }
+  },
+  {
+   "id": "fig-r-e-mild",
+   "inputs": {
+    "table": "${table-r-e-mild.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-r-e-mild",
+    "source": "${inputs.table}",
+    "output": "fig-r-e-mild.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled r",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target r",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Radius r",
+     "title": "Mild target, ψ(e) KLQR, R = 0.01: radius",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 60.0
+    }
+   }
+  },
+  {
+   "id": "spec-r-e-mild",
+   "inputs": {
+    "table": "${table-r-e-mild.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "spec-r-e-mild",
+    "source": "${inputs.table}",
+    "output": "spec-r-e-mild.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled r",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target r",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Amplitude of r",
+     "title": "Mild target, ψ(e) KLQR, R = 0.01: radius spectrum",
+     "time_label": "Frequency (cycles per τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "spectrum": true,
+     "x_range": [
+      0.0,
+      3.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "echo-run-e-mild",
+   "job": {
+    "kind": "postprocess",
+    "label": "echo-run-e-mild",
+    "sources": [
+     "${inputs.e_bmap_long}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.e_bmap_long}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.e_control_easy}",
+        "time_array": "time",
+        "value_array": "values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "e_control_easy": "${e-control-easy.archive}"
+   }
+  },
+  {
+   "id": "echo-target-e-mild",
+   "job": {
+    "kind": "postprocess",
+    "label": "echo-target-e-mild",
+    "sources": [
+     "${inputs.e_bmap_long}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.e_bmap_long}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.e_control_easy}",
+        "time_array": "time",
+        "value_array": "control_target_values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "e_control_easy": "${e-control-easy.archive}"
+   }
+  },
+  {
+   "id": "table-e-e-mild",
+   "inputs": {
+    "a": "${echo-run-e-mild.archive}",
+    "b": "${echo-target-e-mild.archive}"
+   },
+   "job": {
+    "kind": "postprocess",
+    "label": "table-e-e-mild",
+    "sources": [
+     "${inputs.a}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "a": "${inputs.a}",
+        "b": "${inputs.b}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "a",
+         "array": "time"
+        },
+        {
+         "name": "echo",
+         "from": "a",
+         "array": "values",
+         "column": 0
+        },
+        {
+         "name": "echo_target",
+         "from": "b",
+         "array": "values",
+         "column": 0
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "fig-e-e-mild",
+   "inputs": {
+    "table": "${table-e-e-mild.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-e-e-mild",
+    "source": "${inputs.table}",
+    "output": "fig-e-e-mild.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "echo",
+       "label": "Echo e",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "echo_target",
+       "label": "Target echo",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Echo e",
+     "title": "Mild target, ψ(e) KLQR, R = 0.01: far-field echo",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 60.0
+    }
+   }
+  },
+  {
+   "id": "spec-e-e-mild",
+   "inputs": {
+    "table": "${table-e-e-mild.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "spec-e-e-mild",
+    "source": "${inputs.table}",
+    "output": "spec-e-e-mild.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "echo",
+       "label": "Echo e",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "echo_target",
+       "label": "Target echo",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Amplitude of e",
+     "title": "Mild target, ψ(e) KLQR, R = 0.01: echo spectrum",
+     "time_label": "Frequency (cycles per τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "spectrum": true,
+     "x_range": [
+      0.0,
+      3.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "table-psi-e-mild",
+   "job": {
+    "kind": "postprocess",
+    "label": "table-psi-e-mild",
+    "sources": [
+     "${inputs.e_control_easy}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "run": "${inputs.e_control_easy}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "run",
+         "array": "time"
+        },
+        {
+         "name": "psi_re",
+         "from": "run",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.e_bmap_long}",
+         "modes": [
+          0
+         ],
+         "part": "real"
+        },
+        {
+         "name": "psi_im",
+         "from": "run",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.e_bmap_long}",
+         "modes": [
+          0
+         ],
+         "part": "imag"
+        },
+        {
+         "name": "target_re",
+         "from": "run",
+         "array": "control_target_values",
+         "operation": "psi",
+         "krom": "${inputs.e_bmap_long}",
+         "modes": [
+          0
+         ],
+         "part": "real"
+        },
+        {
+         "name": "target_im",
+         "from": "run",
+         "array": "control_target_values",
+         "operation": "psi",
+         "krom": "${inputs.e_bmap_long}",
+         "modes": [
+          0
+         ],
+         "part": "imag"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "e_control_easy": "${e-control-easy.archive}"
+   }
+  },
+  {
+   "id": "fig-psi-e-mild",
+   "inputs": {
+    "table": "${table-psi-e-mild.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-psi-e-mild",
+    "source": "${inputs.table}",
+    "output": "fig-psi-e-mild.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "psi_re",
+       "label": "Re ψ",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target_re",
+       "label": "Re ψ target",
+       "color": "#D8242A",
+       "line_style": "dash"
+      },
+      {
+       "series": "psi_im",
+       "label": "Im ψ",
+       "color": "#1E8C4E",
+       "line_style": "solid",
+       "axis": "right"
+      },
+      {
+       "series": "target_im",
+       "label": "Im ψ target",
+       "color": "#E08A1E",
+       "line_style": "dash",
+       "axis": "right"
+      }
+     ],
+     "value_label": "Re ψ",
+     "title": "Mild target, ψ(e) KLQR, R = 0.01: eigenfunction used in control (mode 0)",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 60.0,
+     "stack_axes": true,
+     "right_axis": {
+      "label": "Im ψ"
+     }
+    }
+   }
+  },
+  {
+   "id": "table-r-e-strong",
+   "job": {
+    "kind": "postprocess",
+    "label": "table-r-e-strong",
+    "sources": [
+     "${inputs.e_control_strong}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "run": "${inputs.e_control_strong}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "run",
+         "array": "time"
+        },
+        {
+         "name": "radius",
+         "from": "run",
+         "array": "values",
+         "column": 0
+        },
+        {
+         "name": "target",
+         "from": "run",
+         "array": "control_target_values",
+         "column": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_control_strong": "${e-control-strong.archive}"
+   }
+  },
+  {
+   "id": "fig-r-e-strong",
+   "inputs": {
+    "table": "${table-r-e-strong.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-r-e-strong",
+    "source": "${inputs.table}",
+    "output": "fig-r-e-strong.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled r",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target r",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Radius r",
+     "title": "Strong target, ψ(e) KLQR, R = 0.01: radius",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 3.104
+    }
+   }
+  },
+  {
+   "id": "spec-r-e-strong",
+   "inputs": {
+    "table": "${table-r-e-strong.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "spec-r-e-strong",
+    "source": "${inputs.table}",
+    "output": "spec-r-e-strong.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled r",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target r",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Amplitude of r",
+     "title": "Strong target, ψ(e) KLQR, R = 0.01: radius spectrum",
+     "time_label": "Frequency (cycles per τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "spectrum": true,
+     "x_range": [
+      0.0,
+      3.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "echo-run-e-strong",
+   "job": {
+    "kind": "postprocess",
+    "label": "echo-run-e-strong",
+    "sources": [
+     "${inputs.e_bmap_long}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.e_bmap_long}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.e_control_strong}",
+        "time_array": "time",
+        "value_array": "values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "e_control_strong": "${e-control-strong.archive}"
+   }
+  },
+  {
+   "id": "echo-target-e-strong",
+   "job": {
+    "kind": "postprocess",
+    "label": "echo-target-e-strong",
+    "sources": [
+     "${inputs.e_bmap_long}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.e_bmap_long}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.e_control_strong}",
+        "time_array": "time",
+        "value_array": "control_target_values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "e_control_strong": "${e-control-strong.archive}"
+   }
+  },
+  {
+   "id": "table-e-e-strong",
+   "inputs": {
+    "a": "${echo-run-e-strong.archive}",
+    "b": "${echo-target-e-strong.archive}"
+   },
+   "job": {
+    "kind": "postprocess",
+    "label": "table-e-e-strong",
+    "sources": [
+     "${inputs.a}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "a": "${inputs.a}",
+        "b": "${inputs.b}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "a",
+         "array": "time"
+        },
+        {
+         "name": "echo",
+         "from": "a",
+         "array": "values",
+         "column": 0
+        },
+        {
+         "name": "echo_target",
+         "from": "b",
+         "array": "values",
+         "column": 0
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "fig-e-e-strong",
+   "inputs": {
+    "table": "${table-e-e-strong.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-e-e-strong",
+    "source": "${inputs.table}",
+    "output": "fig-e-e-strong.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "echo",
+       "label": "Echo e",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "echo_target",
+       "label": "Target echo",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Echo e",
+     "title": "Strong target, ψ(e) KLQR, R = 0.01: far-field echo",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 3.104
+    }
+   }
+  },
+  {
+   "id": "spec-e-e-strong",
+   "inputs": {
+    "table": "${table-e-e-strong.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "spec-e-e-strong",
+    "source": "${inputs.table}",
+    "output": "spec-e-e-strong.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "echo",
+       "label": "Echo e",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "echo_target",
+       "label": "Target echo",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Amplitude of e",
+     "title": "Strong target, ψ(e) KLQR, R = 0.01: echo spectrum",
+     "time_label": "Frequency (cycles per τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "spectrum": true,
+     "x_range": [
+      0.0,
+      3.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "table-psi-e-strong",
+   "job": {
+    "kind": "postprocess",
+    "label": "table-psi-e-strong",
+    "sources": [
+     "${inputs.e_control_strong}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "run": "${inputs.e_control_strong}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "run",
+         "array": "time"
+        },
+        {
+         "name": "psi_re",
+         "from": "run",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.e_bmap_long}",
+         "modes": [
+          0
+         ],
+         "part": "real"
+        },
+        {
+         "name": "psi_im",
+         "from": "run",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.e_bmap_long}",
+         "modes": [
+          0
+         ],
+         "part": "imag"
+        },
+        {
+         "name": "target_re",
+         "from": "run",
+         "array": "control_target_values",
+         "operation": "psi",
+         "krom": "${inputs.e_bmap_long}",
+         "modes": [
+          0
+         ],
+         "part": "real"
+        },
+        {
+         "name": "target_im",
+         "from": "run",
+         "array": "control_target_values",
+         "operation": "psi",
+         "krom": "${inputs.e_bmap_long}",
+         "modes": [
+          0
+         ],
+         "part": "imag"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "e_control_strong": "${e-control-strong.archive}"
+   }
+  },
+  {
+   "id": "fig-psi-e-strong",
+   "inputs": {
+    "table": "${table-psi-e-strong.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-psi-e-strong",
+    "source": "${inputs.table}",
+    "output": "fig-psi-e-strong.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "psi_re",
+       "label": "Re ψ",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target_re",
+       "label": "Re ψ target",
+       "color": "#D8242A",
+       "line_style": "dash"
+      },
+      {
+       "series": "psi_im",
+       "label": "Im ψ",
+       "color": "#1E8C4E",
+       "line_style": "solid",
+       "axis": "right"
+      },
+      {
+       "series": "target_im",
+       "label": "Im ψ target",
+       "color": "#E08A1E",
+       "line_style": "dash",
+       "axis": "right"
+      }
+     ],
+     "value_label": "Re ψ",
+     "title": "Strong target, ψ(e) KLQR, R = 0.01: eigenfunction used in control (mode 0)",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 3.104,
+     "stack_axes": true,
+     "right_axis": {
+      "label": "Im ψ"
+     }
+    }
+   }
+  },
+  {
+   "id": "table-r-e-hard",
+   "job": {
+    "kind": "postprocess",
+    "label": "table-r-e-hard",
+    "sources": [
+     "${inputs.e_control_hard}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "run": "${inputs.e_control_hard}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "run",
+         "array": "time"
+        },
+        {
+         "name": "radius",
+         "from": "run",
+         "array": "values",
+         "column": 0
+        },
+        {
+         "name": "target",
+         "from": "run",
+         "array": "control_target_values",
+         "column": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_control_hard": "${e-control-hard.archive}"
+   }
+  },
+  {
+   "id": "fig-r-e-hard",
+   "inputs": {
+    "table": "${table-r-e-hard.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-r-e-hard",
+    "source": "${inputs.table}",
+    "output": "fig-r-e-hard.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled r",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target r",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Radius r",
+     "title": "Hard target, ψ(e) KLQR, R = 0.01: radius",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 0.005
+    }
+   }
+  },
+  {
+   "id": "echo-run-e-hard",
+   "job": {
+    "kind": "postprocess",
+    "label": "echo-run-e-hard",
+    "sources": [
+     "${inputs.e_bmap_long}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.e_bmap_long}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.e_control_hard}",
+        "time_array": "time",
+        "value_array": "values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "e_control_hard": "${e-control-hard.archive}"
+   }
+  },
+  {
+   "id": "echo-target-e-hard",
+   "job": {
+    "kind": "postprocess",
+    "label": "echo-target-e-hard",
+    "sources": [
+     "${inputs.e_bmap_long}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.e_bmap_long}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.e_control_hard}",
+        "time_array": "time",
+        "value_array": "control_target_values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "e_control_hard": "${e-control-hard.archive}"
+   }
+  },
+  {
+   "id": "table-e-e-hard",
+   "inputs": {
+    "a": "${echo-run-e-hard.archive}",
+    "b": "${echo-target-e-hard.archive}"
+   },
+   "job": {
+    "kind": "postprocess",
+    "label": "table-e-e-hard",
+    "sources": [
+     "${inputs.a}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "a": "${inputs.a}",
+        "b": "${inputs.b}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "a",
+         "array": "time"
+        },
+        {
+         "name": "echo",
+         "from": "a",
+         "array": "values",
+         "column": 0
+        },
+        {
+         "name": "echo_target",
+         "from": "b",
+         "array": "values",
+         "column": 0
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "fig-e-e-hard",
+   "inputs": {
+    "table": "${table-e-e-hard.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-e-e-hard",
+    "source": "${inputs.table}",
+    "output": "fig-e-e-hard.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "echo",
+       "label": "Echo e",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "echo_target",
+       "label": "Target echo",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Echo e",
+     "title": "Hard target, ψ(e) KLQR, R = 0.01: far-field echo",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 0.005
+    }
+   }
+  },
+  {
+   "id": "table-psi-e-hard",
+   "job": {
+    "kind": "postprocess",
+    "label": "table-psi-e-hard",
+    "sources": [
+     "${inputs.e_control_hard}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "run": "${inputs.e_control_hard}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "run",
+         "array": "time"
+        },
+        {
+         "name": "psi_re",
+         "from": "run",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.e_bmap_short}",
+         "modes": [
+          0
+         ],
+         "part": "real"
+        },
+        {
+         "name": "psi_im",
+         "from": "run",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.e_bmap_short}",
+         "modes": [
+          0
+         ],
+         "part": "imag"
+        },
+        {
+         "name": "target_re",
+         "from": "run",
+         "array": "control_target_values",
+         "operation": "psi",
+         "krom": "${inputs.e_bmap_short}",
+         "modes": [
+          0
+         ],
+         "part": "real"
+        },
+        {
+         "name": "target_im",
+         "from": "run",
+         "array": "control_target_values",
+         "operation": "psi",
+         "krom": "${inputs.e_bmap_short}",
+         "modes": [
+          0
+         ],
+         "part": "imag"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_short": "${e-bmap-short.archive}",
+    "e_control_hard": "${e-control-hard.archive}"
+   }
+  },
+  {
+   "id": "fig-psi-e-hard",
+   "inputs": {
+    "table": "${table-psi-e-hard.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-psi-e-hard",
+    "source": "${inputs.table}",
+    "output": "fig-psi-e-hard.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "psi_re",
+       "label": "Re ψ",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target_re",
+       "label": "Re ψ target",
+       "color": "#D8242A",
+       "line_style": "dash"
+      },
+      {
+       "series": "psi_im",
+       "label": "Im ψ",
+       "color": "#1E8C4E",
+       "line_style": "solid",
+       "axis": "right"
+      },
+      {
+       "series": "target_im",
+       "label": "Im ψ target",
+       "color": "#E08A1E",
+       "line_style": "dash",
+       "axis": "right"
+      }
+     ],
+     "value_label": "Re ψ",
+     "title": "Hard target, ψ(e) KLQR, R = 0.01: eigenfunction used in control (mode 0)",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 0.005,
+     "stack_axes": true,
+     "right_axis": {
+      "label": "Im ψ"
+     }
+    }
+   }
+  },
+  {
+   "id": "table-r-xi-mild",
+   "job": {
+    "kind": "postprocess",
+    "label": "table-r-xi-mild",
+    "sources": [
+     "${inputs.x_s36}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "run": "${inputs.x_s36}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "run",
+         "array": "time"
+        },
+        {
+         "name": "radius",
+         "from": "run",
+         "array": "values",
+         "column": 0
+        },
+        {
+         "name": "target",
+         "from": "run",
+         "array": "control_target_values",
+         "column": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "x_s36": "${x-s36.archive}"
+   }
+  },
+  {
+   "id": "fig-r-xi-mild",
+   "inputs": {
+    "table": "${table-r-xi-mild.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-r-xi-mild",
+    "source": "${inputs.table}",
+    "output": "fig-r-xi-mild.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled r",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target r",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Radius r",
+     "title": "Mild target, ψ(ξ₁,ξ₂) KLQR, R = 1000: radius",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 60.0
+    }
+   }
+  },
+  {
+   "id": "spec-r-xi-mild",
+   "inputs": {
+    "table": "${table-r-xi-mild.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "spec-r-xi-mild",
+    "source": "${inputs.table}",
+    "output": "spec-r-xi-mild.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled r",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target r",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Amplitude of r",
+     "title": "Mild target, ψ(ξ₁,ξ₂) KLQR, R = 1000: radius spectrum",
+     "time_label": "Frequency (cycles per τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "spectrum": true,
+     "x_range": [
+      0.0,
+      3.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "echo-run-xi-mild",
+   "job": {
+    "kind": "postprocess",
+    "label": "echo-run-xi-mild",
+    "sources": [
+     "${inputs.e_bmap_long}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.e_bmap_long}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.x_s36}",
+        "time_array": "time",
+        "value_array": "values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "x_s36": "${x-s36.archive}"
+   }
+  },
+  {
+   "id": "echo-target-xi-mild",
+   "job": {
+    "kind": "postprocess",
+    "label": "echo-target-xi-mild",
+    "sources": [
+     "${inputs.e_bmap_long}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.e_bmap_long}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.x_s36}",
+        "time_array": "time",
+        "value_array": "control_target_values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "x_s36": "${x-s36.archive}"
+   }
+  },
+  {
+   "id": "table-e-xi-mild",
+   "inputs": {
+    "a": "${echo-run-xi-mild.archive}",
+    "b": "${echo-target-xi-mild.archive}"
+   },
+   "job": {
+    "kind": "postprocess",
+    "label": "table-e-xi-mild",
+    "sources": [
+     "${inputs.a}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "a": "${inputs.a}",
+        "b": "${inputs.b}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "a",
+         "array": "time"
+        },
+        {
+         "name": "echo",
+         "from": "a",
+         "array": "values",
+         "column": 0
+        },
+        {
+         "name": "echo_target",
+         "from": "b",
+         "array": "values",
+         "column": 0
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "fig-e-xi-mild",
+   "inputs": {
+    "table": "${table-e-xi-mild.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-e-xi-mild",
+    "source": "${inputs.table}",
+    "output": "fig-e-xi-mild.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "echo",
+       "label": "Echo e",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "echo_target",
+       "label": "Target echo",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Echo e",
+     "title": "Mild target, ψ(ξ₁,ξ₂) KLQR, R = 1000: far-field echo",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 60.0
+    }
+   }
+  },
+  {
+   "id": "spec-e-xi-mild",
+   "inputs": {
+    "table": "${table-e-xi-mild.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "spec-e-xi-mild",
+    "source": "${inputs.table}",
+    "output": "spec-e-xi-mild.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "echo",
+       "label": "Echo e",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "echo_target",
+       "label": "Target echo",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Amplitude of e",
+     "title": "Mild target, ψ(ξ₁,ξ₂) KLQR, R = 1000: echo spectrum",
+     "time_label": "Frequency (cycles per τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "spectrum": true,
+     "x_range": [
+      0.0,
+      3.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "coord-run-xi-mild",
+   "job": {
+    "kind": "postprocess",
+    "label": "coord-run-xi-mild",
+    "sources": [
+     "${inputs.x_s16}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.x_s16}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.x_s36}",
+        "time_array": "time",
+        "value_array": "values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "x_s16": "${x-s16.archive}",
+    "x_s36": "${x-s36.archive}"
+   }
+  },
+  {
+   "id": "coord-target-xi-mild",
+   "job": {
+    "kind": "postprocess",
+    "label": "coord-target-xi-mild",
+    "sources": [
+     "${inputs.x_s16}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.x_s16}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.x_s36}",
+        "time_array": "time",
+        "value_array": "control_target_values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "x_s16": "${x-s16.archive}",
+    "x_s36": "${x-s36.archive}"
+   }
+  },
+  {
+   "id": "table-psi-xi-mild",
+   "inputs": {
+    "a": "${coord-run-xi-mild.archive}",
+    "b": "${coord-target-xi-mild.archive}",
+    "x_s16": "${x-s16.archive}"
+   },
+   "job": {
+    "kind": "postprocess",
+    "label": "table-psi-xi-mild",
+    "sources": [
+     "${inputs.a}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "a": "${inputs.a}",
+        "b": "${inputs.b}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "a",
+         "array": "time"
+        },
+        {
+         "name": "psi_re",
+         "from": "a",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.x_s16}",
+         "modes": [
+          0
+         ],
+         "part": "real"
+        },
+        {
+         "name": "psi_im",
+         "from": "a",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.x_s16}",
+         "modes": [
+          0
+         ],
+         "part": "imag"
+        },
+        {
+         "name": "target_re",
+         "from": "b",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.x_s16}",
+         "modes": [
+          0
+         ],
+         "part": "real"
+        },
+        {
+         "name": "target_im",
+         "from": "b",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.x_s16}",
+         "modes": [
+          0
+         ],
+         "part": "imag"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "fig-psi-xi-mild",
+   "inputs": {
+    "table": "${table-psi-xi-mild.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-psi-xi-mild",
+    "source": "${inputs.table}",
+    "output": "fig-psi-xi-mild.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "psi_re",
+       "label": "Re ψ",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target_re",
+       "label": "Re ψ target",
+       "color": "#D8242A",
+       "line_style": "dash"
+      },
+      {
+       "series": "psi_im",
+       "label": "Im ψ",
+       "color": "#1E8C4E",
+       "line_style": "solid",
+       "axis": "right"
+      },
+      {
+       "series": "target_im",
+       "label": "Im ψ target",
+       "color": "#E08A1E",
+       "line_style": "dash",
+       "axis": "right"
+      }
+     ],
+     "value_label": "Re ψ",
+     "title": "Mild target, ψ(ξ₁,ξ₂) KLQR, R = 1000: eigenfunction used in control (mode 0)",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 60.0,
+     "stack_axes": true,
+     "right_axis": {
+      "label": "Im ψ"
+     }
+    }
+   }
+  },
+  {
+   "id": "table-r-xi-strong",
+   "job": {
+    "kind": "postprocess",
+    "label": "table-r-xi-strong",
+    "sources": [
+     "${inputs.x_s39}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "run": "${inputs.x_s39}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "run",
+         "array": "time"
+        },
+        {
+         "name": "radius",
+         "from": "run",
+         "array": "values",
+         "column": 0
+        },
+        {
+         "name": "target",
+         "from": "run",
+         "array": "control_target_values",
+         "column": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "x_s39": "${x-s39.archive}"
+   }
+  },
+  {
+   "id": "fig-r-xi-strong",
+   "inputs": {
+    "table": "${table-r-xi-strong.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-r-xi-strong",
+    "source": "${inputs.table}",
+    "output": "fig-r-xi-strong.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled r",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target r",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Radius r",
+     "title": "Strong target, ψ(ξ₁,ξ₂) KLQR, R = 1000: radius",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 60.0
+    }
+   }
+  },
+  {
+   "id": "spec-r-xi-strong",
+   "inputs": {
+    "table": "${table-r-xi-strong.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "spec-r-xi-strong",
+    "source": "${inputs.table}",
+    "output": "spec-r-xi-strong.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled r",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target r",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Amplitude of r",
+     "title": "Strong target, ψ(ξ₁,ξ₂) KLQR, R = 1000: radius spectrum",
+     "time_label": "Frequency (cycles per τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "spectrum": true,
+     "x_range": [
+      0.0,
+      3.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "echo-run-xi-strong",
+   "job": {
+    "kind": "postprocess",
+    "label": "echo-run-xi-strong",
+    "sources": [
+     "${inputs.e_bmap_long}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.e_bmap_long}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.x_s39}",
+        "time_array": "time",
+        "value_array": "values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "x_s39": "${x-s39.archive}"
+   }
+  },
+  {
+   "id": "echo-target-xi-strong",
+   "job": {
+    "kind": "postprocess",
+    "label": "echo-target-xi-strong",
+    "sources": [
+     "${inputs.e_bmap_long}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.e_bmap_long}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.x_s39}",
+        "time_array": "time",
+        "value_array": "control_target_values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "x_s39": "${x-s39.archive}"
+   }
+  },
+  {
+   "id": "table-e-xi-strong",
+   "inputs": {
+    "a": "${echo-run-xi-strong.archive}",
+    "b": "${echo-target-xi-strong.archive}"
+   },
+   "job": {
+    "kind": "postprocess",
+    "label": "table-e-xi-strong",
+    "sources": [
+     "${inputs.a}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "a": "${inputs.a}",
+        "b": "${inputs.b}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "a",
+         "array": "time"
+        },
+        {
+         "name": "echo",
+         "from": "a",
+         "array": "values",
+         "column": 0
+        },
+        {
+         "name": "echo_target",
+         "from": "b",
+         "array": "values",
+         "column": 0
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "fig-e-xi-strong",
+   "inputs": {
+    "table": "${table-e-xi-strong.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-e-xi-strong",
+    "source": "${inputs.table}",
+    "output": "fig-e-xi-strong.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "echo",
+       "label": "Echo e",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "echo_target",
+       "label": "Target echo",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Echo e",
+     "title": "Strong target, ψ(ξ₁,ξ₂) KLQR, R = 1000: far-field echo",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 60.0
+    }
+   }
+  },
+  {
+   "id": "spec-e-xi-strong",
+   "inputs": {
+    "table": "${table-e-xi-strong.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "spec-e-xi-strong",
+    "source": "${inputs.table}",
+    "output": "spec-e-xi-strong.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "echo",
+       "label": "Echo e",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "echo_target",
+       "label": "Target echo",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Amplitude of e",
+     "title": "Strong target, ψ(ξ₁,ξ₂) KLQR, R = 1000: echo spectrum",
+     "time_label": "Frequency (cycles per τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "spectrum": true,
+     "x_range": [
+      0.0,
+      3.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "coord-run-xi-strong",
+   "job": {
+    "kind": "postprocess",
+    "label": "coord-run-xi-strong",
+    "sources": [
+     "${inputs.x_s16}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.x_s16}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.x_s39}",
+        "time_array": "time",
+        "value_array": "values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "x_s16": "${x-s16.archive}",
+    "x_s39": "${x-s39.archive}"
+   }
+  },
+  {
+   "id": "coord-target-xi-strong",
+   "job": {
+    "kind": "postprocess",
+    "label": "coord-target-xi-strong",
+    "sources": [
+     "${inputs.x_s16}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.x_s16}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.x_s39}",
+        "time_array": "time",
+        "value_array": "control_target_values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "x_s16": "${x-s16.archive}",
+    "x_s39": "${x-s39.archive}"
+   }
+  },
+  {
+   "id": "table-psi-xi-strong",
+   "inputs": {
+    "a": "${coord-run-xi-strong.archive}",
+    "b": "${coord-target-xi-strong.archive}",
+    "x_s16": "${x-s16.archive}"
+   },
+   "job": {
+    "kind": "postprocess",
+    "label": "table-psi-xi-strong",
+    "sources": [
+     "${inputs.a}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "a": "${inputs.a}",
+        "b": "${inputs.b}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "a",
+         "array": "time"
+        },
+        {
+         "name": "psi_re",
+         "from": "a",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.x_s16}",
+         "modes": [
+          0
+         ],
+         "part": "real"
+        },
+        {
+         "name": "psi_im",
+         "from": "a",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.x_s16}",
+         "modes": [
+          0
+         ],
+         "part": "imag"
+        },
+        {
+         "name": "target_re",
+         "from": "b",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.x_s16}",
+         "modes": [
+          0
+         ],
+         "part": "real"
+        },
+        {
+         "name": "target_im",
+         "from": "b",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.x_s16}",
+         "modes": [
+          0
+         ],
+         "part": "imag"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "fig-psi-xi-strong",
+   "inputs": {
+    "table": "${table-psi-xi-strong.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-psi-xi-strong",
+    "source": "${inputs.table}",
+    "output": "fig-psi-xi-strong.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "psi_re",
+       "label": "Re ψ",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target_re",
+       "label": "Re ψ target",
+       "color": "#D8242A",
+       "line_style": "dash"
+      },
+      {
+       "series": "psi_im",
+       "label": "Im ψ",
+       "color": "#1E8C4E",
+       "line_style": "solid",
+       "axis": "right"
+      },
+      {
+       "series": "target_im",
+       "label": "Im ψ target",
+       "color": "#E08A1E",
+       "line_style": "dash",
+       "axis": "right"
+      }
+     ],
+     "value_label": "Re ψ",
+     "title": "Strong target, ψ(ξ₁,ξ₂) KLQR, R = 1000: eigenfunction used in control (mode 0)",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 60.0,
+     "stack_axes": true,
+     "right_axis": {
+      "label": "Im ψ"
+     }
+    }
+   }
+  },
+  {
+   "id": "table-r-xi-hard",
+   "job": {
+    "kind": "postprocess",
+    "label": "table-r-xi-hard",
+    "sources": [
+     "${inputs.x_s42}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "run": "${inputs.x_s42}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "run",
+         "array": "time"
+        },
+        {
+         "name": "radius",
+         "from": "run",
+         "array": "values",
+         "column": 0
+        },
+        {
+         "name": "target",
+         "from": "run",
+         "array": "control_target_values",
+         "column": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "x_s42": "${x-s42.archive}"
+   }
+  },
+  {
+   "id": "fig-r-xi-hard",
+   "inputs": {
+    "table": "${table-r-xi-hard.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-r-xi-hard",
+    "source": "${inputs.table}",
+    "output": "fig-r-xi-hard.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled r",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target r",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Radius r",
+     "title": "Hard target, ψ(ξ₁,ξ₂) KLQR, R = 10000: radius",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 60.0
+    }
+   }
+  },
+  {
+   "id": "spec-r-xi-hard",
+   "inputs": {
+    "table": "${table-r-xi-hard.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "spec-r-xi-hard",
+    "source": "${inputs.table}",
+    "output": "spec-r-xi-hard.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "radius",
+       "label": "Controlled r",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target",
+       "label": "Target r",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Amplitude of r",
+     "title": "Hard target, ψ(ξ₁,ξ₂) KLQR, R = 10000: radius spectrum",
+     "time_label": "Frequency (cycles per τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "spectrum": true,
+     "x_range": [
+      0.0,
+      3.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "echo-run-xi-hard",
+   "job": {
+    "kind": "postprocess",
+    "label": "echo-run-xi-hard",
+    "sources": [
+     "${inputs.e_bmap_long}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.e_bmap_long}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.x_s42}",
+        "time_array": "time",
+        "value_array": "values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "x_s42": "${x-s42.archive}"
+   }
+  },
+  {
+   "id": "echo-target-xi-hard",
+   "job": {
+    "kind": "postprocess",
+    "label": "echo-target-xi-hard",
+    "sources": [
+     "${inputs.e_bmap_long}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.e_bmap_long}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.x_s42}",
+        "time_array": "time",
+        "value_array": "control_target_values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "e_bmap_long": "${e-bmap-long.archive}",
+    "x_s42": "${x-s42.archive}"
+   }
+  },
+  {
+   "id": "table-e-xi-hard",
+   "inputs": {
+    "a": "${echo-run-xi-hard.archive}",
+    "b": "${echo-target-xi-hard.archive}"
+   },
+   "job": {
+    "kind": "postprocess",
+    "label": "table-e-xi-hard",
+    "sources": [
+     "${inputs.a}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "a": "${inputs.a}",
+        "b": "${inputs.b}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "a",
+         "array": "time"
+        },
+        {
+         "name": "echo",
+         "from": "a",
+         "array": "values",
+         "column": 0
+        },
+        {
+         "name": "echo_target",
+         "from": "b",
+         "array": "values",
+         "column": 0
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "fig-e-xi-hard",
+   "inputs": {
+    "table": "${table-e-xi-hard.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-e-xi-hard",
+    "source": "${inputs.table}",
+    "output": "fig-e-xi-hard.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "echo",
+       "label": "Echo e",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "echo_target",
+       "label": "Target echo",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Echo e",
+     "title": "Hard target, ψ(ξ₁,ξ₂) KLQR, R = 10000: far-field echo",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 60.0
+    }
+   }
+  },
+  {
+   "id": "spec-e-xi-hard",
+   "inputs": {
+    "table": "${table-e-xi-hard.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "spec-e-xi-hard",
+    "source": "${inputs.table}",
+    "output": "spec-e-xi-hard.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "echo",
+       "label": "Echo e",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "echo_target",
+       "label": "Target echo",
+       "color": "#D8242A",
+       "line_style": "dash"
+      }
+     ],
+     "value_label": "Amplitude of e",
+     "title": "Hard target, ψ(ξ₁,ξ₂) KLQR, R = 10000: echo spectrum",
+     "time_label": "Frequency (cycles per τ)",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "spectrum": true,
+     "x_range": [
+      0.0,
+      3.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "coord-run-xi-hard",
+   "job": {
+    "kind": "postprocess",
+    "label": "coord-run-xi-hard",
+    "sources": [
+     "${inputs.x_s16}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.x_s16}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.x_s42}",
+        "time_array": "time",
+        "value_array": "values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "x_s16": "${x-s16.archive}",
+    "x_s42": "${x-s42.archive}"
+   }
+  },
+  {
+   "id": "coord-target-xi-hard",
+   "job": {
+    "kind": "postprocess",
+    "label": "coord-target-xi-hard",
+    "sources": [
+     "${inputs.x_s16}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "control_target",
+      "settings": {
+       "krom": "${inputs.x_s16}",
+       "state_target": {
+        "kind": "trajectory",
+        "source": "${inputs.x_s42}",
+        "time_array": "time",
+        "value_array": "control_target_values"
+       },
+       "time": {
+        "step": 0.001
+       }
+      }
+     }
+    ]
+   },
+   "inputs": {
+    "x_s16": "${x-s16.archive}",
+    "x_s42": "${x-s42.archive}"
+   }
+  },
+  {
+   "id": "table-psi-xi-hard",
+   "inputs": {
+    "a": "${coord-run-xi-hard.archive}",
+    "b": "${coord-target-xi-hard.archive}",
+    "x_s16": "${x-s16.archive}"
+   },
+   "job": {
+    "kind": "postprocess",
+    "label": "table-psi-xi-hard",
+    "sources": [
+     "${inputs.a}"
+    ],
+    "archive": {
+     "enabled": true
+    },
+    "methods": [
+     {
+      "name": "figure_dataset",
+      "settings": {
+       "inputs": {
+        "a": "${inputs.a}",
+        "b": "${inputs.b}"
+       },
+       "arrays": [
+        {
+         "name": "time",
+         "from": "a",
+         "array": "time"
+        },
+        {
+         "name": "psi_re",
+         "from": "a",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.x_s16}",
+         "modes": [
+          0
+         ],
+         "part": "real"
+        },
+        {
+         "name": "psi_im",
+         "from": "a",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.x_s16}",
+         "modes": [
+          0
+         ],
+         "part": "imag"
+        },
+        {
+         "name": "target_re",
+         "from": "b",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.x_s16}",
+         "modes": [
+          0
+         ],
+         "part": "real"
+        },
+        {
+         "name": "target_im",
+         "from": "b",
+         "array": "values",
+         "operation": "psi",
+         "krom": "${inputs.x_s16}",
+         "modes": [
+          0
+         ],
+         "part": "imag"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "fig-psi-xi-hard",
+   "inputs": {
+    "table": "${table-psi-xi-hard.archive}"
+   },
+   "job": {
+    "kind": "viewer_figure",
+    "label": "fig-psi-xi-hard",
+    "source": "${inputs.table}",
+    "output": "fig-psi-xi-hard.png",
+    "figure": {
+     "view": "time-series",
+     "curves": [
+      {
+       "series": "psi_re",
+       "label": "Re ψ",
+       "color": "#1F5FBF",
+       "line_style": "solid"
+      },
+      {
+       "series": "target_re",
+       "label": "Re ψ target",
+       "color": "#D8242A",
+       "line_style": "dash"
+      },
+      {
+       "series": "psi_im",
+       "label": "Im ψ",
+       "color": "#1E8C4E",
+       "line_style": "solid",
+       "axis": "right"
+      },
+      {
+       "series": "target_im",
+       "label": "Im ψ target",
+       "color": "#E08A1E",
+       "line_style": "dash",
+       "axis": "right"
+      }
+     ],
+     "value_label": "Re ψ",
+     "title": "Hard target, ψ(ξ₁,ξ₂) KLQR, R = 10000: eigenfunction used in control (mode 0)",
+     "time_label": "τ",
+     "width": 1400.0,
+     "height": 800.0,
+     "start": 0.0,
+     "stop": 60.0,
+     "stack_axes": true,
+     "right_axis": {
+      "label": "Im ψ"
+     }
+    }
+   }
+  }
+ ]
+}

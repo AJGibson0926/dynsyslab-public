@@ -9,6 +9,7 @@
 #include <dynsyslab/workflow/Plan.hpp>
 #include <dynsyslab/workflow/Postprocess.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -93,6 +94,23 @@ int main() {
         page.at("figure").at("fit_y_to") = json::parse("[0]");
         const auto fitted = workflow::detail::fitOrdinate(page).at("figure").at("y_range").array();
         require(fitted.size() == 2 && fitted[1].number() < 1.2 && fitted[0].number() > -1.2, "fit_y_to ignores the larger curve");
+
+        {   // presentation options reach the Viewer CLI: top legend, right-axis curves, stacked axes, spectra
+            const auto options = json::parse(R"({"kind":"viewer_figure","source":"t.npz","output":"x.png","figure":{
+                "legend":"top","stack_axes":true,"spectrum":true,"frequency_scale":2,"right_axis":{"label":"Im"},
+                "curves":[{"series":"re","label":"Re"},{"series":"im","label":"Im","axis":"right"}]}})");
+            const auto args = workflow::detail::viewerFigureArguments(options, root / "x.png");
+            const auto has = [&](const std::vector<std::string>& run) {
+                return std::search(args.begin(), args.end(), run.begin(), run.end()) != args.end();
+            };
+            require(has({"--legend", "top"}) && has({"--stack-axes"}) && has({"--spectrum"}) && has({"--frequency-scale", "2"})
+                    && has({"--curve", "im=Im"}) && has({"--curve-axis", "right"}) && has({"--right-axis-label", "Im"})
+                    && std::count(args.begin(), args.end(), "--curve-axis") == 1, "viewer_figure passes its presentation options");
+            auto wrong = options; wrong.at("figure").at("curves").array()[1].object()["axis"] = json::Value("middle");
+            bool refused = false;
+            try { (void)workflow::detail::viewerFigureArguments(wrong, root / "x.png"); } catch (const std::invalid_argument&) { refused = true; }
+            require(refused, "a curve axis is left or right");
+        }
 
         const auto spectrum = [&](const std::string& name, double shift, int matrixSize) {
             core::NpzRecord record;

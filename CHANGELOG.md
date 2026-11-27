@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.10.3 — 2026-11-27
+
+- **Data pack `rpe-psi-e-vs-xi-klqr-three-targets-2026-11-27`.** Regenerates the echo-only KLQR
+  comparison of ψ(e) against ψ(ξ₁, ξ₂) on the mild, strong and hard targets, with every figure
+  (radius and echo in time and frequency, and the controller's eigenfunction along each run),
+  from one job group and the native suite alone.
+- **`control_target` lifts a recorded trajectory over its own clock** when `time.start` or
+  `time.stop` is not given, so a run that ended early is lifted to where it ended.
+- `tools/Build-DataPackAssets.ps1` seals only the packs pinned to the release it runs with.
+
+- **Viewer: independent right axis, stacked axes, legend row, sharper zoomed spectra.**
+  `--curve-axis right` gives a curve its own fitted right ordinate, and `--stack-axes` puts the
+  right curves in a band below the left ones, each band with its own ticks and title (for
+  example Re ψ above, Im ψ below). The automatic legend goes in the first corner with no data
+  under it; a time or spectrum plot with data in every corner gets it as one row under the title
+  instead (`--legend top` forces the row, also for `render`). A single unlabelled series no
+  longer gets "| Component 1" in its title. `--spectrum` with `--x-range` keeps every bin in the
+  band before display thinning.
+- **SVG, HTML and the Viewer window share them.** SVG and HTML exports draw the right ordinate
+  (fitted or given), stacked bands and the legend in a clear corner or as a row; the HTML page
+  gained a legend. HTML and window readouts give right-axis curves in their own units.
+  `time-series` writes `.svg` and `.html` as `render` does.
+- **`viewer_figure` jobs reach these options and the frequency domain:** `"spectrum"`,
+  `"frequency_scale"`, `"legend"`, `"stack_axes"` and a curve's `"axis":"right"`.
+- **`figure_dataset` `psi` evaluates causal-history K-ROMs.** Rows may be the K-ROM's own
+  coordinates, such as ξ lifted by `control_target`, which a ψ(ξ) K-ROM requires
+  (`"domain":"state|coordinates"` overrides the choice).
+
 ## 0.10.2 — 2026-11-27
 
 - **Every shipped example runs from a fresh install.** `receiver-sensor-design` now solves its own

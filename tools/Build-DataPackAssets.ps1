@@ -1,4 +1,4 @@
-# Seals every pack in data-packs/ with a release's own binary and writes the release assets:
+# Seals each pack in data-packs/ pinned to this release with the release's own binary and writes the release assets:
 #   DynSysLab-datapack-<name>-<release-date>-v<version>.zip and SHA256SUMS-datapacks.txt.
 # Run it with the CLI from the published release ZIP, never a local development build.
 [CmdletBinding()]
@@ -12,7 +12,11 @@ $ErrorActionPreference = 'Stop'
 $source = Join-Path (Split-Path -Parent $PSScriptRoot) 'data-packs'
 New-Item -ItemType Directory -Force -Path $OutputDirectory, $Workspace | Out-Null
 $lines = [Collections.Generic.List[string]]::new()
+# Only packs pinned to this binary's release are sealed; the others belong to the release they name.
+$version = ((& $Cli capabilities | Out-String) | ConvertFrom-Json).version
 foreach ($pack in Get-ChildItem -LiteralPath $source -Directory) {
+    $pinned = (Get-Content -Raw (Join-Path $pack.FullName 'pack.json') | ConvertFrom-Json).release.version
+    if ($pinned -ne $version) { Write-Host "Skipping $($pack.Name): pinned to $pinned, not $version"; continue }
     $archives = Join-Path $Workspace ($pack.Name + '-run')
     $sealed = Join-Path $Workspace ($pack.Name + '-sealed')
     & $Cli datapack validate $pack.FullName

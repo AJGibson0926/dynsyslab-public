@@ -1,0 +1,26 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "postprocess",
+ "label": "psi(e) measured B short",
+ "archive": {
+  "enabled": true
+ },
+ "methods": [
+  {
+   "name": "input_map",
+   "settings": {
+    "krom": "${inputs.krom}",
+    "map": {
+     "representation": "constant",
+     "fit": "held_input",
+     "ridge": 1e-08
+    }
+   }
+  }
+ ],
+ "sources": [
+  "${inputs.a}",
+  "${inputs.b}",
+  "${inputs.c}"
+ ]
+}

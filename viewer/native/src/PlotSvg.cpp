@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <optional>
 #include <sstream>
 
 namespace dsl {
@@ -135,10 +136,35 @@ int pageCount(const Payload& payload) {
     return pages;
 }
 
+namespace {
+// Legend entries: labelled line or marker traces, at most eight, in trace order.
+struct SvgLegendEntry { std::string label, plain, color, style; };
+std::vector<SvgLegendEntry> svgLegendEntries(const Figure& figure) {
+    std::vector<SvgLegendEntry> entries;
+    for (std::size_t t = 0; t < figure.traces.size() && entries.size() < 8; ++t) {
+        const auto& trace = figure.traces[t];
+        if (trace.label.empty() || trace.heatmap) continue;
+        entries.push_back({trace.label, plainLabel(trace.label), trace.color.empty() ? kPalette[t % 10] : trace.color,
+                           trace.marker ? "markers" : trace.lineStyle});
+    }
+    return entries;
+}
+double svgTextWidth(const std::string& plain, double size) {  // average advance of the sans-serif face
+    std::size_t characters = 0;
+    for (const unsigned char c : plain) characters += (c & 0xC0) != 0x80;  // UTF-8 code points
+    return 0.56 * size * static_cast<double>(characters);
+}
+std::string svgLegendSample(const SvgLegendEntry& entry, double x, double y) {
+    if (entry.style == "markers" || entry.style == "open-markers")
+        return "<circle cx=\"" + number(x + 9) + "\" cy=\"" + number(y) + "\" r=\"3\" fill=\"" + entry.color + "\"/>";
+    return "<line x1=\"" + number(x) + "\" x2=\"" + number(x + 18) + "\" y1=\"" + number(y) + "\" y2=\"" + number(y)
+        + "\" stroke=\"" + entry.color + "\" stroke-width=\"2\"" + dashes(entry.style) + "/>";
+}
+}  // namespace
+
 std::string figureSvgBody(const Figure& figure, double left, double top, double width, double height) {
     std::ostringstream out;
     const auto scale = ordinateScale(figure);
-    const double plotLeft = left + 70, plotTop = top + 34, plotWidth = width - 90, plotHeight = height - 82;
     out << "<g class=\"figure\"><rect x=\"" << number(left) << "\" y=\"" << number(top) << "\" width=\""
         << number(width) << "\" height=\"" << number(height) << "\" fill=\"#FFFFFF\"/>"
         << "<text x=\"" << number(left + width / 2) << "\" y=\"" << number(top + 20)
@@ -161,8 +187,46 @@ std::string figureSvgBody(const Figure& figure, double left, double top, double 
     if (x1 <= x0) { x0 -= 0.5; x1 += 0.5; }
     if (y1 <= y0) { y0 -= 0.5; y1 += 0.5; }
     const double padY = 0.05 * (y1 - y0); y0 -= padY; y1 += padY;
-    const auto sx = [&](double x) { return plotLeft + (x - x0) / (x1 - x0) * plotWidth; };
-    const auto sy = [&](double y) { return plotTop + plotHeight - (y - y0) / (y1 - y0) * plotHeight; };
+    // A right ordinate (fitted or given) takes a margin on the right; it applies to linear plots.
+    const auto* right = figure.rightAxis && scale.kind == ValueScaleKind::linear && figure.kind != "three_d"
+        ? &*figure.rightAxis : nullptr;
+    const bool banded = right && right->leftBand && right->rightBand;
+    const double plotLeft = left + 70, plotWidth = width - 90 - (right ? 60 : 0);
+    double plotTop = top + 34, plotHeight = height - 82;
+    // Legend: inside, in the first corner with no data under it; a time or spectrum plot with data
+    // in every corner, or legendPlacement "top", gets one row under the title (as PlotLegend.cpp).
+    const auto entries = svgLegendEntries(figure);
+    double boxWidth = 0;
+    for (const auto& entry : entries) boxWidth = std::max(boxWidth, 26 + svgTextWidth(entry.plain, 11));
+    const double boxHeight = 16.0 * static_cast<double>(entries.size()) + 4;
+    std::optional<std::pair<double, double>> corner;  // top-left of the legend box
+    const auto sxAt = [&](double x, double l, double w) { return l + (x - x0) / (x1 - x0) * w; };
+    const auto syAt = [&](double y, double t, double h) { return t + h - (y - y0) / (y1 - y0) * h; };
+    bool row = !entries.empty() && figure.legendPlacement == "top";
+    if (!entries.empty() && !row) {
+        const std::array<std::pair<double, double>, 4> corners{{{plotLeft + plotWidth - boxWidth - 6, plotTop + 6},
+            {plotLeft + 6, plotTop + 6}, {plotLeft + plotWidth - boxWidth - 6, plotTop + plotHeight - boxHeight - 6},
+            {plotLeft + 6, plotTop + plotHeight - boxHeight - 6}}};
+        const bool searched = figure.kind == "time" || figure.kind == "fourier";
+        for (const auto& candidate : corners) {
+            bool clear = true;
+            for (const auto& trace : figure.traces) {
+                if (!searched || trace.heatmap) continue;
+                const auto p = projectedTrace(figure, trace);
+                for (std::size_t i = 0; i < p.x.size() && i < p.y.size() && clear; ++i) {
+                    const double px = sxAt(p.x[i], plotLeft, plotWidth), py = syAt(plotted(p.y[i]), plotTop, plotHeight);
+                    clear = !(px >= candidate.first - 4 && px <= candidate.first + boxWidth + 4
+                              && py >= candidate.second - 4 && py <= candidate.second + boxHeight + 4);
+                }
+                if (!clear) break;
+            }
+            if (clear || !searched) { corner = candidate; break; }
+        }
+        row = !corner && figure.legendPlacement.empty();
+    }
+    if (row) { plotTop += 20; plotHeight -= 20; }
+    const auto sx = [&](double x) { return sxAt(x, plotLeft, plotWidth); };
+    const auto sy = [&](double y) { return syAt(y, plotTop, plotHeight); };
     out << "<rect x=\"" << number(plotLeft) << "\" y=\"" << number(plotTop) << "\" width=\"" << number(plotWidth)
         << "\" height=\"" << number(plotHeight) << "\" fill=\"none\" stroke=\"#555555\"/>";
     for (const double tick : niceTicks(x0, x1))
@@ -170,19 +234,40 @@ std::string figureSvgBody(const Figure& figure, double left, double top, double 
             << "\" y2=\"" << number(plotTop + plotHeight) << "\" stroke=\"#E5E5E5\"/><text x=\"" << number(sx(tick))
             << "\" y=\"" << number(plotTop + plotHeight + 16) << "\" text-anchor=\"middle\" font-size=\"11\">"
             << number(tick) << "</text>";
-    for (const double tick : niceTicks(y0, y1))
+    const auto yTick = [&](double at, const std::string& text, bool onRight) {
         out << "<line x1=\"" << number(plotLeft) << "\" x2=\"" << number(plotLeft + plotWidth) << "\" y1=\""
-            << number(sy(tick)) << "\" y2=\"" << number(sy(tick)) << "\" stroke=\"#E5E5E5\"/><text x=\""
-            << number(plotLeft - 6) << "\" y=\"" << number(sy(tick) + 4) << "\" text-anchor=\"end\" font-size=\"11\">"
-            << number(figure.kind == "three_d" ? tick : scale.inverse(tick)) << "</text>";
+            << number(sy(at)) << "\" y2=\"" << number(sy(at)) << "\" stroke=\"#E5E5E5\"/><text x=\""
+            << number(onRight ? plotLeft + plotWidth + 6 : plotLeft - 6) << "\" y=\"" << number(sy(at) + 4)
+            << "\" text-anchor=\"" << (onRight ? "start" : "end") << "\" font-size=\"11\">" << text << "</text>";
+    };
+    const auto yTitle = [&](const std::string& text, double low, double high, bool onRight) {
+        if (text.empty()) return;
+        out << "<text transform=\"translate(" << number(onRight ? plotLeft + plotWidth + 52 : left + 16) << ' '
+            << number((sy(low) + sy(high)) / 2) << ") rotate(-90)\" text-anchor=\"middle\" font-size=\"12\">"
+            << label(text) << "</text>";
+    };
+    if (banded) {  // stacked axes: each band its own ticks, in its own units
+        for (const double tick : niceTicks(right->leftBand->first, right->leftBand->second)) yTick(tick, number(tick), false);
+        for (const double value : niceTicks((right->rightBand->first - right->offset) / right->scale,
+                                            (right->rightBand->second - right->offset) / right->scale))
+            yTick(right->offset + right->scale * value, number(value), true);
+        yTitle(figure.yLabel, right->leftBand->first, right->leftBand->second, false);
+        yTitle(right->label, right->rightBand->first, right->rightBand->second, true);
+    } else {
+        for (const double tick : niceTicks(y0, y1)) {
+            const double value = figure.kind == "three_d" ? tick : scale.inverse(tick);
+            yTick(tick, number(value), false);
+            if (right) out << "<text x=\"" << number(plotLeft + plotWidth + 6) << "\" y=\"" << number(sy(tick) + 4)
+                           << "\" font-size=\"11\">" << number((value - right->offset) / right->scale) << "</text>";
+        }
+        yTitle(figure.yLabel, y0, y1, false);
+        if (right) yTitle(right->label, y0, y1, true);
+    }
     out << "<text x=\"" << number(plotLeft + plotWidth / 2) << "\" y=\"" << number(top + height - 10)
-        << "\" text-anchor=\"middle\" font-size=\"12\">" << label(figure.xLabel) << "</text><text transform=\"translate("
-        << number(left + 16) << ' ' << number(plotTop + plotHeight / 2) << ") rotate(-90)\" text-anchor=\"middle\" font-size=\"12\">"
-        << label(figure.yLabel) << "</text>";
+        << "\" text-anchor=\"middle\" font-size=\"12\">" << label(figure.xLabel) << "</text>";
     out << "<svg x=\"" << number(plotLeft) << "\" y=\"" << number(plotTop) << "\" width=\"" << number(plotWidth)
         << "\" height=\"" << number(plotHeight) << "\" viewBox=\"" << number(plotLeft) << ' ' << number(plotTop) << ' '
         << number(plotWidth) << ' ' << number(plotHeight) << "\" overflow=\"hidden\">";
-    std::size_t legend = 0;
     for (std::size_t t = 0; t < figure.traces.size(); ++t) {
         const auto& trace = figure.traces[t];
         const std::string color = trace.color.empty() ? kPalette[t % 10] : trace.color;
@@ -221,14 +306,25 @@ std::string figureSvgBody(const Figure& figure, double left, double top, double 
             }
             out << "\"/>";
         }
-        if (!trace.label.empty() && legend < 8) {
-            out << "<rect x=\"" << number(plotLeft + plotWidth - 190) << "\" y=\"" << number(plotTop + 8 + 16 * legend)
-                << "\" width=\"12\" height=\"3\" fill=\"" << color << "\"/><text x=\"" << number(plotLeft + plotWidth - 172)
-                << "\" y=\"" << number(plotTop + 13 + 16 * legend) << "\" font-size=\"11\">" << label(trace.label) << "</text>";
-            ++legend;
+    }
+    out << "</svg>";
+    if (row) {  // one centred row between the title and the plot
+        double total = 0;
+        for (const auto& entry : entries) total += 26 + svgTextWidth(entry.plain, 11) + 18;
+        double x = left + std::max(8.0, (width - total + 18) / 2);
+        for (const auto& entry : entries) {
+            out << svgLegendSample(entry, x, top + 40) << "<text x=\"" << number(x + 24) << "\" y=\"" << number(top + 44)
+                << "\" font-size=\"11\">" << label(entry.label) << "</text>";
+            x += 26 + svgTextWidth(entry.plain, 11) + 18;
+        }
+    } else if (corner) {
+        for (std::size_t k = 0; k < entries.size(); ++k) {
+            const double y = corner->second + 10 + 16.0 * static_cast<double>(k);
+            out << svgLegendSample(entries[k], corner->first + 2, y) << "<text x=\"" << number(corner->first + 26)
+                << "\" y=\"" << number(y + 4) << "\" font-size=\"11\">" << label(entries[k].label) << "</text>";
         }
     }
-    out << "</svg></g>";
+    out << "</g>";
     return out.str();
 }
 

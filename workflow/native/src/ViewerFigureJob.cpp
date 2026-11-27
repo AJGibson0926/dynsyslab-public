@@ -139,6 +139,9 @@ std::vector<std::string> viewerFigureArguments(const json::Value& job, const std
         const auto width = styledLineWidth(curve, figure.at("style"));
         if (width > 0.0) { args.emplace_back("--line-width"); args.push_back(numberText(width)); }
         textOption(args, curve, "line_style", "--line-style");
+        const auto side = curve.at("axis").string("left");  // "right": its own fitted right ordinate
+        if (side != "left" && side != "right") throw std::invalid_argument("viewer_figure: curve axis must be left or right");
+        if (side == "right") { args.emplace_back("--curve-axis"); args.emplace_back("right"); }
     }
     for (const auto& axis : figure.at("axes").array()) { args.emplace_back("--axis"); args.push_back(axis.string()); }
     textOption(args, figure, "x_label", "--x-label");
@@ -148,6 +151,10 @@ std::vector<std::string> viewerFigureArguments(const json::Value& job, const std
     textOption(args, figure, "scale", "--scale");
     textOption(args, figure, "title", "--title");
     numberOption(args, figure, "columns", "--columns");
+    textOption(args, figure, "legend", "--legend");                      // "auto" | "top"
+    if (figure.at("stack_axes").boolean(false)) args.emplace_back("--stack-axes");
+    if (figure.at("spectrum").boolean(false)) args.emplace_back("--spectrum");  // Hann amplitude spectra
+    numberOption(args, figure, "frequency_scale", "--frequency-scale");
     if (!figure.at("right_axis").isNull()) {  // plotted = offset + scale * right-axis value
         textOption(args, figure.at("right_axis"), "label", "--right-axis-label");
         numberOption(args, figure.at("right_axis"), "scale", "--right-axis-scale");

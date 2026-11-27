@@ -1,0 +1,56 @@
+{
+ "archive": {
+  "data_role": "control_identification",
+  "enabled": true
+ },
+ "controller": {
+  "kind": "random_pulse",
+  "settings": {
+   "model_amplitude": 0.2,
+   "model_pulse_duration": 2,
+   "seed": 15
+  }
+ },
+ "initial_conditions": {
+  "clusters": 1,
+  "count": 1,
+  "mode": "explicit",
+  "ranges": [],
+  "seed": 0,
+  "values": [
+   [
+    1,
+    0
+   ]
+  ]
+ },
+ "kind": "solve",
+ "label": "rpe-echo-jet-klqr-rediscovery-20kpa / forced_training",
+ "schema": "dynsyslab.compute-job/v1",
+ "solver": {
+  "atol": 1e-09,
+  "max_step": 0.001,
+  "method": "BDF",
+  "rtol": 1e-09
+ },
+ "system": {
+  "name": "rpe",
+  "parameters": {
+   "ambient_pressure_pa": 100000,
+   "equilibrium_radius_m": 1e-05,
+   "kappa": 1.3333333333333333,
+   "mu_pa_s": 0.001,
+   "pressure_input_sign": -1,
+   "rho_kg_m3": 998,
+   "sigma_n_m": 0.0725,
+   "vapor_pressure_pa": 2330
+  },
+  "preset": "air_water_20c"
+ },
+ "time": {
+  "coordinate_system": "dimensionless",
+  "output_step": 0.001,
+  "start": 0,
+  "stop": 60
+ }
+}

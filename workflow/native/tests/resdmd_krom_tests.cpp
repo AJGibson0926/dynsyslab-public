@@ -138,6 +138,14 @@ int main() {
             check(!c::readNpz(hdmd).contains("eigenfunction_koopman_residual"), "H-DMD keeps no parallel residual array");
             check(!delay.spectrum().pseudospectrum() && delay.spectrum().continuous().empty(), "H-DMD has no pseudospectrum");
         }
+        {   // control_target lifts a recorded trajectory over its own clock when no time is given.
+            const auto lifted = c::readNpz(postprocess(free, R"([{"name":"control_target","settings":{"krom":")"
+                + sindy.generic_u8string() + R"(","state_target":{"kind":"trajectory","source":")" + free.generic_u8string()
+                + R"("}}}])", root).archives.front());
+            const auto clock = c::readNpz(free).at("time").doubles(), times = lifted.at("time").doubles();
+            check(std::abs(times.front() - clock.front()) < 1e-12 && std::abs(times.back() - clock.back()) < 2e-3
+                  && lifted.at("values").shape.front() == times.size(), "a trajectory target spans its own clock");
+        }
         {   // krom_extract keeps the selected pairs with their residuals (a child: they come from the parent).
             const auto extracted = postprocess(resdmd, R"([{"name":"krom_extract","settings":{"krom":")"
                 + resdmd.generic_u8string() + R"(","mode_selection":{"count":1,"rule":"oscillatory_pairs"}}}])", root).archives.front();

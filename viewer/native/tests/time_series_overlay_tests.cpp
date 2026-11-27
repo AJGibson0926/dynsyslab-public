@@ -57,6 +57,9 @@ int main() {
         const auto peak=std::max_element(line.y.begin(),line.y.end())-line.y.begin();
         require(spectrum.figures.front().kind=="fourier" && line.x.front()>0 && std::abs(line.x[peak]-30)<0.6,
                 "Spectrum peak frequency or scale");
+        spectral.frequencyRange=std::pair{20.0,40.0};  // a zoomed band keeps every bin inside it
+        const auto band=dsl::timeSeriesOverlay(wave,spectral).figures.front().traces.front();
+        require(band.x.front()>=20 && band.x.back()<=40 && band.x.size()>=35,"Spectrum cropped to the band before binning");
         fs::remove(wave);
         // A run truncated on failure: NaN after the last computed sample is not drawn.
         const auto cut=fs::temp_directory_path()/("viewer-overlay-truncated-"+std::to_string(
@@ -92,6 +95,25 @@ int main() {
         const auto axisPanel=dsl::timeSeriesOverlay(cut,axisReq).figures.front();
         require(axisPanel.rightAxis && axisPanel.rightAxis->label=="Echo e" && axisPanel.rightAxis->scale==0.25 &&
                 axisPanel.rightAxis->offset==1.0,"Right axis mapping reaches the panel");
+        // Independent right axis: the right curve is fitted onto the left curve's range (overlaid),
+        // or onto a band of the same height below it (stacked); the panel keeps the mapping.
+        dsl::TimeSeriesOverlay sides; sides.curves={{"truth","Left"},{"fit","Right"}};
+        sides.curves[1].rightAxis=true; sides.componentLabels={"Position","Velocity"};
+        sides.rightAxis=dsl::Figure::RightAxis{"Im psi"};
+        const auto extent=[](const dsl::Trace& trace) {
+            return std::pair{*std::min_element(trace.y.begin(),trace.y.end()),*std::max_element(trace.y.begin(),trace.y.end())};
+        };
+        const auto overlaid=dsl::timeSeriesOverlay(file,sides).figures.front();
+        const auto [l0,l1]=extent(overlaid.traces[0]); const auto [r0,r1]=extent(overlaid.traces[1]);
+        require(overlaid.rightAxis && overlaid.rightAxis->label=="Im psi" && !overlaid.rightAxis->leftBand &&
+                std::abs(r0-l0)<1e-9 && std::abs(r1-l1)<1e-9 && overlaid.traces[1].rightAxis,"Right curve fitted to the left range");
+        require(std::abs((r0-overlaid.rightAxis->offset)/overlaid.rightAxis->scale-0.5)<1e-9,"Right ticks read the right curve's values");
+        sides.stackAxes=true;
+        const auto stacked=dsl::timeSeriesOverlay(file,sides).figures.front();
+        const auto [s0,s1]=extent(stacked.traces[1]);
+        require(stacked.rightAxis->leftBand && stacked.rightAxis->rightBand && s1<stacked.rightAxis->leftBand->first &&
+                std::abs(s1-stacked.rightAxis->rightBand->second)<1e-9 && std::abs((s1-s0)-(l1-l0))<1e-9,
+                "Stacked right band sits below the left band with the same height");
         fs::remove(cut);
         fs::remove(file);return 0;
     } catch (const std::exception& e) { fs::remove(file);std::cerr<<e.what()<<'\n';return 1; }

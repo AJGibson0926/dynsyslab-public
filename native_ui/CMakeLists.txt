@@ -47,6 +47,7 @@ add_library(dynsyslab_ui_support STATIC
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotKromSelection.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotDragToolbar.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotLegend.cpp
+  ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotAxisBands.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotProbeOverlay.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotPanelChrome.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/ArchiveCatalog.cpp

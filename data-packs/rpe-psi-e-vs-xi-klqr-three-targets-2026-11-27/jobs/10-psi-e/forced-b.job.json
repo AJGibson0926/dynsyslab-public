@@ -1,0 +1,56 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "solve",
+ "label": "rpe-forced-bpsi-a02p05",
+ "system": {
+  "name": "rpe",
+  "preset": "air_water_20c",
+  "parameters": {
+   "ambient_pressure_pa": 100000,
+   "equilibrium_radius_m": 1e-05,
+   "kappa": 1.3333333333333333,
+   "mu_pa_s": 0.001,
+   "pressure_input_sign": -1,
+   "rho_kg_m3": 998,
+   "sigma_n_m": 0.0725,
+   "vapor_pressure_pa": 2330
+  }
+ },
+ "time": {
+  "coordinate_system": "dimensionless",
+  "output_step": 0.001,
+  "start": 0,
+  "stop": 60
+ },
+ "initial_conditions": {
+  "mode": "explicit",
+  "count": 1,
+  "clusters": 1,
+  "seed": 0,
+  "values": [
+   [
+    1,
+    0
+   ]
+  ],
+  "ranges": []
+ },
+ "controller": {
+  "kind": "random_pulse",
+  "settings": {
+   "model_amplitude": 0.2,
+   "model_pulse_duration": 0.5,
+   "seed": 12
+  }
+ },
+ "solver": {
+  "atol": 1e-09,
+  "max_step": 0.001,
+  "method": "BDF",
+  "rtol": 1e-09
+ },
+ "archive": {
+  "enabled": true,
+  "data_role": "control_identification"
+ }
+}

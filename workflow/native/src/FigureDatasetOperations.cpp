@@ -17,8 +17,18 @@ FigureSeries psiSeries(const json::Value& spec, const core::NpzRecord& source) {
     const auto model = core::loadKoopmanModel(std::filesystem::u8path(kromPath));
     const auto& states = source.at(spec.at("array").string("values"));
     const std::size_t columns = states.shape.size() == 2 ? states.shape[1] : 1;
-    if (columns != model.stateDimension())
-        throw std::invalid_argument("figure_dataset psi: the source rows are not states of the K-ROM");
+    // Rows are physical states, or the K-ROM's own coordinates (e, xi, ...): a causal-history
+    // K-ROM is evaluated only on its coordinates, since its state map needs the history window.
+    // "domain": "state" | "coordinates" overrides the choice.
+    auto domain = spec.at("domain").string();
+    if (domain.empty()) domain = model.requiresExternalCoordinates()
+        || (columns == model.coordinateDimension() && columns != model.stateDimension()) ? "coordinates" : "state";
+    if (domain != "state" && domain != "coordinates")
+        throw std::invalid_argument("figure_dataset psi domain must be state or coordinates");
+    const bool onCoordinates = domain == "coordinates";
+    if (columns != (onCoordinates ? model.coordinateDimension() : model.stateDimension()))
+        throw std::invalid_argument(std::string("figure_dataset psi: the source rows are not ")
+            + (onCoordinates ? "coordinates" : "states") + " of the K-ROM");
     std::vector<std::size_t> modes;
     for (const auto& mode : spec.at("modes").array()) modes.push_back(static_cast<std::size_t>(mode.number()));
     if (modes.empty()) for (std::size_t k = 0; k < model.eigenfunctionCount(); ++k) modes.push_back(k);
@@ -29,7 +39,8 @@ FigureSeries psiSeries(const json::Value& spec, const core::NpzRecord& source) {
     const std::size_t rows = values.size() / columns;
     FigureSeries series(modes.size(), std::vector<double>(rows));
     for (std::size_t r = 0; r < rows; ++r) {
-        const auto psi = model.evaluate(values.data() + r * columns);
+        const auto psi = onCoordinates ? model.evaluateCoordinates(values.data() + r * columns)
+                                       : model.evaluate(values.data() + r * columns);
         for (std::size_t k = 0; k < modes.size(); ++k) {
             if (modes[k] >= psi.size()) throw std::invalid_argument("figure_dataset psi mode is outside the K-ROM");
             const auto value = psi[modes[k]];

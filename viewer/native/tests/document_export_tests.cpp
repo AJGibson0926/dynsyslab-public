@@ -97,6 +97,29 @@ void exports(const fs::path& root) {
     const auto html = dsl::payloadHtml(payload, "sample </script> title");
     require(html.find("id=\"dsl-data\"") != std::string::npos && html.find("sample &lt;/script>") != std::string::npos,
             "HTML embeds the data and escapes the title");
+    {   // stacked axes and legend placement reach both exports
+        dsl::Payload axes{"memory", "time", "axes", 1};
+        dsl::Figure figure; figure.kind = "time"; figure.title = "psi"; figure.yLabel = "Re psi";
+        dsl::Trace re, im; re.label = "Re"; im.label = "Im"; im.rightAxis = true;
+        for (int i = 0; i < 80; ++i) {
+            re.x.push_back(i); re.y.push_back(std::sin(0.3 * i));  // fills the upper band, every corner of it
+            im.x.push_back(i); im.y.push_back(-3.0 + 0.5 * std::cos(0.3 * i));
+        }
+        figure.traces = {re, im};
+        figure.rightAxis = dsl::Figure::RightAxis{"Im psi", 0.5, -3.0, std::pair{-1.0, 1.0}, std::pair{-3.5, -2.5}};
+        axes.figures = {figure};
+        const auto stacked = dsl::payloadSvg(axes, 0, 900, 400);
+        require(stacked.find("Im psi") != std::string::npos && stacked.find("text-anchor=\"start\"") != std::string::npos,
+                "SVG draws the right ordinate with its own ticks and title");
+        const auto page = dsl::payloadHtml(axes, "axes");
+        require(page.find("\"right_band\"") != std::string::npos && page.find("\"right\":true") != std::string::npos
+                && page.find("\"legend\"") != std::string::npos, "HTML carries the right axis, its curves and the legend placement");
+        axes.figures[0].legendPlacement = "top";
+        const auto row = dsl::payloadSvg(axes, 0, 900, 400);
+        std::cerr << row.substr(0, 900) << '\n';
+        require(row.find("<rect x=\"70\" y=\"54\"") != std::string::npos,
+                "a legend row moves the plot below it");
+    }
 
     const auto spec = json::parse(R"({"schema":"dynsyslab.report/v1","title":"Report","footer":"test","pages":[
         {"title":"First","blocks":[{"kind":"paragraph","text":"Hello report."},

@@ -1,0 +1,29 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "postprocess",
+ "label": "H-DMD on echo short",
+ "archive": {
+  "enabled": true
+ },
+ "methods": [
+  {
+   "name": "hdmd",
+   "settings": {
+    "matrix_size": 2000,
+    "mode_sort": "terminal-amplitude-energy",
+    "observable": 0,
+    "rank": 0,
+    "sample_stride": 1,
+    "sampling_window": 20000,
+    "svd_tolerance": 1e-10,
+    "time_window": [
+     0,
+     25
+    ]
+   }
+  }
+ ],
+ "sources": [
+  "${inputs.src}"
+ ]
+}
