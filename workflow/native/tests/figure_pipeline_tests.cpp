@@ -160,10 +160,11 @@ int main() {
         require(rejected, "a failed clock check is an error");
 
         // The case-study experiments that replaced the shadow and tuning scripts plan: their sweeps read
-        // object-valued points (${sweep.setup.krom}) and their stages expand.
+        // object-valued points (${sweep.setup.krom}) and their stages expand. Case studies are
+        // private-only (export-ignore in .gitattributes), so a public checkout skips this check.
         const auto study = fs::path(__FILE__).parent_path().parent_path().parent_path().parent_path()
             / "examples/native/case-studies/rpe-echo-mode-selection-20261116";
-        for (const auto* file : {"closed-loop/shadow-experiment.json", "tuning/tuning-experiment.json"}) {
+        if (fs::is_directory(study)) for (const auto* file : {"closed-loop/shadow-experiment.json", "tuning/tuning-experiment.json"}) {
             const auto path = study / file;
             const auto plan = json::dump(workflow::planJob(workflow::bindJobFile(json::load(path.wstring()), path)));
             require(plan.find("${sweep.") == std::string::npos, "every sweep reference resolves");

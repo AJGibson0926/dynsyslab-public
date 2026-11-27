@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.1 — 2026-11-27
+
+- **Public checkouts pass quickstart.** 0.10.0 removed `archives/`'s Python files, so a fresh
+  clone had no `archives/` folder; the CLI did not recognize the checkout and `quickstart` could
+  not find its examples. `archives/README.md` is tracked again. The figure test skips its
+  private-only case-study check where those files are absent. 0.10.0 was tagged but never
+  released.
+
 ## 0.10.0 — 2026-11-26
 
 - **Eigenpairs, spectrum and pseudospectrum are core types.** New `core::Eigenpair` (an
