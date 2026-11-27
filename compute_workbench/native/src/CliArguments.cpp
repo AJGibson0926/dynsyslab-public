@@ -37,6 +37,17 @@ Arguments arguments(int count, wchar_t** values) {
             else result.auditSystems.push_back(std::move(name));
         } else if (value == L"--include-derived") {
             result.auditDerived = true;
+        } else if ((value == L"--campaign" || value == L"--compression" || value == L"--metadata-json"
+                    || value == L"--purpose") && index + 1 < count) {
+            auto item = dynsyslab::core::narrow(values[++index]);
+            if (value == L"--campaign") result.auditCampaign = std::move(item);
+            else if (value == L"--compression") result.compression = std::move(item);
+            else if (value == L"--metadata-json") result.metadataPatch = std::move(item);
+            else result.purpose = std::move(item);
+        } else if (value == L"--report" && index + 1 < count) {
+            result.report = dynsyslab::core::resolveOutputPath(std::filesystem::path(values[++index]));
+        } else if (value == L"--read-only") { result.readOnly = true;
+        } else if (value == L"--remove-source") { result.removeSource = true;
         } else if (value == L"--apply") {
             result.apply = true;
         } else if ((value == L"--map-system" || value == L"--preset"

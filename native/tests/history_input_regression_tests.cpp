@@ -27,7 +27,7 @@ int main() {
         const auto reconstructed=factor*(standard.offsets[0]+standard.operators[0]*z
             +standard.conjugateOperators[0]*std::conj(z));
         require(std::abs(reconstructed-fitted.evaluate(z))<1e-13,"canonical map conversion failed");
-        PooledHankelBasis basis; basis.delays=3; basis.rank=1;
+        HankelLeftBasis basis; basis.rows=3; basis.rank=1;
         basis.leftSingularVectors={0.2,0.3,0.4}; basis.singularValues={2};
         CausalHistoryProjector online(basis);
         online.append(1); online.append(2); require(!online.projectLatest(),"premature projection");

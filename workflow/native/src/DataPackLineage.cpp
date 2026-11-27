@@ -41,7 +41,7 @@ void walk(const std::filesystem::path& path, std::map<std::string, json::Value>&
     json::Value metadata;
     try { metadata = json::parse(index.metadataJson); }
     catch (const std::exception&) { gaps.emplace_back("unreadable metadata: " + key); return; }
-    const auto method = metadata.at("method").string(metadata.at("format").string() == "dynsyslab.solution/v1" ? "solve" : "");
+    const auto method = metadata.at("method").string(metadata.at("schema").string() == "dynsyslab.solution/v1" ? "solve" : "");
     std::set<std::string> parents;
     collectParents(metadata, parents);
     json::Value::Object node{{"method", json::Value(method)}, {"label", metadata.at("label")}};

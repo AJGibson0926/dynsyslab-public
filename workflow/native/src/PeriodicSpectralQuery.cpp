@@ -34,7 +34,7 @@ J auditJson(const math::PeriodicQuadratureAudit&a){A relativeErrors;
         {"scope","Normalized supplied orbit weights; finite Fourier products only, not omitted tails or transverse quadrature"}};}
 std::string identifier(const J&v){const auto s=v.string();if(s.empty()||s.size()>120||
     !std::all_of(s.begin(),s.end(),[](unsigned char c){return std::isalnum(c)||c=='_'||c=='-';}))throw std::invalid_argument("Group name needs letters, digits, hyphens or underscores");return s;}
-struct Model {std::string label,archive;std::vector<std::size_t>channels;std::vector<double>offsets;core::SpectralKROM model;bool legacy{};};
+struct Model {std::string label,archive;std::vector<std::size_t>channels;std::vector<double>offsets;core::SpectralKROM model;};
 }
 core::json::Value evaluatePeriodicSpectralQuery(const J&q){
     if(q.at("operation").string()=="packet_features"){
@@ -133,7 +133,6 @@ core::json::Value evaluatePeriodicSpectralQuery(const J&q){
     }else if(q.at("operation").string()=="spectral_compare"){
         if(array(q.at("models")).empty()||array(q.at("models")).size()>128)throw std::invalid_argument("Need 1..128 frozen models");
         for(const auto&v:array(q.at("models"))){Model m;m.label=v.at("label").string();m.channels=indices(v.at("channels"));m.offsets=reals(v.at("time_offsets"));m.archive=v.at("archive").string();
-            m.legacy=v.at("allow_unverified_coordinate_contract").boolean();
             m.model=v.at("model").isNull()?core::loadSpectralKrom(std::filesystem::u8path(m.archive)):core::spectralKromFromJson(v.at("model"));models.push_back(std::move(m));}
     }else throw std::invalid_argument("Unknown periodic spectral operation");
     if(models.empty()||models.size()>128)throw std::invalid_argument("Need 1..128 models");
@@ -145,7 +144,7 @@ core::json::Value evaluatePeriodicSpectralQuery(const J&q){
         references.emplace_back(O{{"channel",double(c)},{"name",name},{"density",values(ref.spectrum.density)},
             {"total_mass",ref.spectrum.totalMass},{"zero_harmonic_mass",ref.spectrum.zeroHarmonicMass},{"packet_rms",values(ref.packetRms)}});
         for(const auto&m:models){if(std::find(m.channels.begin(),m.channels.end(),c)==m.channels.end())continue;
-            const auto r=core::comparePeriodicDelaySpectrum(m.model,m.channels,m.offsets,validation,ref,m.legacy);
+            const auto r=core::comparePeriodicDelaySpectrum(m.model,m.channels,m.offsets,validation,ref);
             results.emplace_back(O{{"channel",double(c)},{"observable",name},{"model",m.label},{"rank",double(r.rank)},{"features",double(r.features)},
                 {"fitted_mass",r.fittedMass},{"density",values(r.density)},{"packet_rms",values(r.packetRms)},{"packet_error_rms",values(r.packetErrorRms)},
                 {"density_absolute_l2",r.densityErrorNorm},{"density_relative_l2",relative(r.densityErrorNorm,r.densityReferenceNorm)},
@@ -156,7 +155,7 @@ core::json::Value evaluatePeriodicSpectralQuery(const J&q){
     }
     for(const auto&m:models){O r{{"label",m.label},{"archive",m.archive},{"model_identity",core::spectralKromIdentity(m.model)},
         {"channels",values(m.channels)},{"time_offsets",values(m.offsets)},{"rank",double(m.model.rank)},
-        {"allow_unverified_coordinate_contract",m.legacy},{"coordinate_contract",m.model.coordinateContract}};
+        {"coordinate_contract",m.model.coordinateContract}};
         if(q.at("include_models").boolean())r["model"]=core::spectralKromJson(m.model);modelRecords.emplace_back(r);}
     return O{{"schema","dynsyslab.periodic-result/v1"},{"method","periodic-spectral-comparison"},
         {"angles",values(angles)},{"packet_centers",values(centers)},{"sample_interval",dt},{"bandwidth",width},{"order",double(order)},

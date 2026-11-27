@@ -1,7 +1,7 @@
 // H-SVD takes time-series records and emits a Hankel basis plus a coordinate time series that
 // H-DMD consumes directly; the state domain of that H-DMD resolves to the original solve by time.
 #include <dynsyslab/core/Archive.hpp>
-#include <dynsyslab/core/EigenfunctionArchive.hpp>
+#include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/core/HankelBasis.hpp>
 #include <dynsyslab/core/Json.hpp>
 #include <dynsyslab/workflow/Run.hpp>
@@ -48,7 +48,7 @@ int main() {
         source.arrays["time"] = core::NpyArray::fromDoubles({samples}, time);
         source.arrays["values"] = core::NpyArray::fromDoubles({samples, 2}, states);
         source.arrays["metadata_json"] = core::NpyArray::fromString(
-            R"({"format":"dynsyslab.trajectory/v1","label":"source","system":"duffing","system_preset":"double_well_reference","resolved_system_parameters":{},"integration_form":"dimensionless"})");
+            R"({"schema":"dynsyslab.trajectory/v1","label":"source","system":"duffing","system_preset":"double_well_reference","resolved_system_parameters":{},"integration_form":"dimensionless"})");
         core::writeNpzAtomic(sourcePath, source);
 
         // H-SVD on position only, causal windows, whitened coordinates.
@@ -77,9 +77,9 @@ int main() {
             {"observables", json::Value::Array{"hsvd[0]", "hsvd[1]"}}, {"matrix_size", 20.0}, {"sampling_window", 4.0},
             {"rank", 4.0}, {"svd_tolerance", 1.0e-12}}), root / "dmd");
         const auto dmd = core::readNpz(dmdRun.archives.front());
-        const auto set = core::readEigenfunctionSet(dmd, {"interpolation"});
-        require(set.representation("interpolation").domains().front() == "state", "the full state is the default domain");
-        const auto& points = core::interpolationOf(set).points();
+        const auto set = core::readKoopmanModel(dmd);
+        require(core::domainName(set.representation("interpolation").function->coordinates()) == "state", "the full state is the default domain");
+        const auto& points = set.interpolation().points();
         const auto t0 = set.samples().time.front();
         const auto row = std::size_t(std::lround(t0 / 0.05));
         require(std::abs(points[0] - states[2 * row]) < 1e-12, "base points come from the solve, found by time");
@@ -87,7 +87,7 @@ int main() {
             const auto onInput = dynsyslab::workflow::executeJob(job(svdRun.archives.front(), "hdmd", {
                 {"observables", json::Value::Array{"hsvd[0]", "hsvd[1]"}}, {"matrix_size", 20.0}, {"sampling_window", 4.0},
                 {"rank", 4.0}, {"svd_tolerance", 1.0e-12}, {"interpolation_domain", "input"}}), root / "dmd-input");
-            const auto inputSet = core::readEigenfunctionSet(core::readNpz(onInput.archives.front()), {"interpolation"});
+            const auto inputSet = core::readKoopmanModel(core::readNpz(onInput.archives.front()));
             require(inputSet.recognizeDomain({"hsvd[0]", "hsvd[1]"}) == "hsvd[0],hsvd[1]", "H-SVD coordinates name the input domain");
         }
         const auto errorsRun = dynsyslab::workflow::executeJob(job(dmdRun.archives.front(), "eigenfunction_errors", {
@@ -95,7 +95,7 @@ int main() {
                                                          json::Value::Object{{"name", "local_linear"}, {"neighbors", 12.0}}}},
             {"include_expansion", true}}), root / "errors");
         const auto errors = core::readNpz(errorsRun.archives.front());
-        require(errors.at("value_error").shape == std::vector<std::size_t>({3, set.size()}), "one error row per method plus the expansion");
+        require(errors.at("value_error").shape == std::vector<std::size_t>({3, set.liftedDimension()}), "one error row per method plus the expansion");
         require(json::parse(errors.metadataJson()).at("rows").array().size() == 3, "rows are named");
         std::filesystem::remove_all(root);
         std::cout << "hankel svd record tests passed\n";

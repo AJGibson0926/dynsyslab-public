@@ -1,8 +1,10 @@
 // View "observable_phase": an eigenfunction's values along a trajectory drawn on the trajectory's own
 // phase plane, coloured by argument (hue) and modulus (brightness), over the faint whole trajectory.
+#include "dynsyslab_viewer/ComparisonPayload.hpp"
 #include "dynsyslab_viewer/NativePayload.hpp"
 #include "../src/ObservablePhasePayload.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -40,7 +42,7 @@ int main() {
         c::NpzRecord trajectory;
         trajectory.arrays["time"] = c::NpyArray::fromDoubles({n}, time);
         trajectory.arrays["values"] = c::NpyArray::fromDoubles({n, 2}, states);
-        trajectory.arrays["metadata_json"] = c::NpyArray::fromString(R"({"system":"duffing","integration_form":"dimensionless"})");
+        trajectory.arrays["metadata_json"] = c::NpyArray::fromString(R"({"system":"duffing","integration_form":"dimensionless","data_role":"free_training"})");
         const auto trajectoryPath = root / "trajectory.npz";
         c::writeNpzAtomic(trajectoryPath, trajectory);
         c::NpzRecord series;
@@ -58,6 +60,11 @@ int main() {
         require(payload.figures.size() == 1 && payload.figures.front().kind == "phase", "one phase-plane figure");
         const auto& figure = payload.figures.front();
         require(figure.traces.size() == 2 && figure.traces[0].x.size() == n, "the whole trajectory underneath");
+        require(figure.traces[0].label == "training trajectory" && figure.traces[0].lineWidthPoints > 3
+                && figure.traces[1].lineWidthPoints > 3, "a training run is drawn bolder");
+        require(figure.traces[1].label.empty(), "the colour bar, not the legend, names the observable");
+        require(!figure.references.empty() && figure.references.front().label == "IC"
+                && !figure.references.front().equilibrium, "the initial condition is an open marker");
         const auto& coloured = figure.traces[1];
         require(coloured.encoding == "domain-color" && coloured.x.size() == psiTime.size(), "one coloured state per value");
         for (std::size_t k = 0; k < psiTime.size(); ++k) {
@@ -66,6 +73,50 @@ int main() {
                     "hue is the argument");
         }
         require(std::abs(coloured.magnitudes.front() - 1.0) < 1e-12, "brightness relative to the largest modulus");
+        require(figure.title.find("(expansion)") != std::string::npos, "a dictionary expansion keeps its name");
+
+        // A window map is stored as an "expansion" but shown as "time-delay".
+        c::NpzRecord object;
+        object.arrays["metadata_json"] = c::NpyArray::fromString(
+            R"({"krom":{"representations":[{"kind":"window_map","causal":true}]}})");
+        const auto objectPath = root / "eigenfunctions.npz";
+        c::writeNpzAtomic(objectPath, object);
+        meta["eigenfunction"] = dynsyslab::core::json::Value::Object{{"mode", 2.0}, {"representation", "expansion"},
+            {"object", objectPath.generic_u8string()}};
+        series.arrays["metadata_json"] = c::NpyArray::fromString(dynsyslab::core::json::dump(dynsyslab::core::json::Value(meta)));
+        const auto windowSeriesPath = root / "window-series.npz";
+        c::writeNpzAtomic(windowSeriesPath, series);
+        const auto windowPayload = dsl::buildNativePayload(windowSeriesPath, "observable_phase");
+        require(windowPayload.figures.front().title.find("(time-delay)") != std::string::npos,
+                "a window map is labelled time-delay");
+
+        // Overlaid runs (training and test trajectories) share one phase plane: each keeps its domain
+        // colouring and grey path, and brightness uses the largest modulus among all of them.
+        auto doubled = payload;
+        for (auto& m : doubled.figures.front().traces[1].magnitudes) m *= 2.0;
+        const auto overlay = dsl::comparePayloads({{"train", payload, "#1f77b4"}, {"test", doubled, "#d62728"}});
+        require(overlay.figures.size() == 1 && overlay.figures.front().traces.size() == 4, "one overlaid figure");
+        double largest = 0.0;
+        for (const double m : doubled.figures.front().traces[1].magnitudes) largest = std::max(largest, m);
+        for (const auto& trace : overlay.figures.front().traces) {
+            if (trace.role == "reference") require(trace.color == "#94a3b8" && trace.lineStyle.empty(), "grey path kept");
+            else require(trace.encoding == "domain-color" && std::abs(trace.magnitudeScale - largest) < 1e-12,
+                         "domain colouring kept with one shared brightness scale");
+        }
+        // One legend entry per kind of line; each run is named at its start marker.
+        std::size_t legend = 0;
+        for (const auto& trace : overlay.figures.front().traces) legend += !trace.label.empty();
+        const auto& markers = overlay.figures.front().references;
+        require(legend == 1, "one legend entry per kind of line, no run names");
+        require(overlay.figures.front().title.find("train") == std::string::npos, "no run names in the title");
+        std::size_t initial = 0, equilibria = 0;
+        for (const auto& marker : markers) {
+            if (marker.equilibrium) { ++equilibria; continue; }
+            ++initial;
+            require(marker.label == "IC" && std::abs(marker.x - 1.0) < 1e-12, "the initial condition is an IC marker");
+        }
+        require(initial == 1, "a shared initial condition is drawn once");
+        require(equilibria == payload.figures.front().references.size() - 1, "each equilibrium is drawn once");
         std::filesystem::remove_all(root);
         std::cout << "observable phase payload tests passed\n";
         return 0;

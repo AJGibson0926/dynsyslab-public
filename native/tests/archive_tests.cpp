@@ -22,7 +22,7 @@ void roundTrip() {
     source.arrays["values"] = dynsyslab::core::NpyArray::fromDoubles({3, 2},
         {1.0, 2.0, 3.0, 4.0, 5.0, 6.0});
     source.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(
-        R"({"format":"dynsyslab.solution/v1","system":"duffing"})");
+        R"({"schema":"dynsyslab.solution/v1","system":"duffing"})");
     dynsyslab::core::writeNpzAtomic(path, source);
     const auto index=dynsyslab::core::readNpzIndex(path);
     require(index.contains("time") && index.contains("values")
@@ -62,7 +62,7 @@ dynsyslab::core::NpzRecord solution(const std::vector<double>& values) {
     result.arrays["time"] = dynsyslab::core::NpyArray::fromDoubles({2}, {0.0, 1.0});
     result.arrays["values"] = dynsyslab::core::NpyArray::fromDoubles({2, 2}, values);
     result.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(
-        R"({"format":"dynsyslab.solution/v1","system":"duffing","coordinate_system":"dimensionless","time_span":[0,1]})");
+        R"({"schema":"dynsyslab.solution/v1","system":"duffing","coordinate_system":"dimensionless","time_span":[0,1]})");
     return result;
 }
 

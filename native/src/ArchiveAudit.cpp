@@ -186,6 +186,11 @@ json::Value duplicateJson(const ArchiveDuplicateGroup& group) {
     return json::Value(std::move(result));
 }
 
+std::string campaignOf(const std::filesystem::path& path) {
+    const auto text = readNpzIndexStored(path).metadataJson;
+    return text.empty() ? std::string{} : json::parse(text).at("campaign_id").string();
+}
+
 std::filesystem::path safeSection(const std::string& name) {
     const auto path = std::filesystem::u8path(name);
     if (name.empty() || path.is_absolute() || path.has_parent_path()
@@ -196,27 +201,45 @@ std::filesystem::path safeSection(const std::string& name) {
 
 }  // namespace
 
-ArchiveAuditReport auditArchives(const std::filesystem::path& root,
-                                 const ArchiveAuditScope& scope) {
-    ArchiveAuditReport report; report.root = std::filesystem::absolute(root);
-    std::map<std::string, std::vector<Record>> exact, plans;
+std::vector<std::filesystem::path> scopedArchives(const std::filesystem::path& root,
+                                                  const ArchiveAuditScope& scope,
+                                                  std::vector<ArchiveAuditIssue>* unreadable) {
+    std::vector<std::filesystem::path> result;
+    const auto base = std::filesystem::absolute(root);
     const auto now = std::chrono::system_clock::now();
     const auto sections = scope.sections.empty() ? std::vector<std::string>{"solutions"}
                                                   : scope.sections;
     for (const auto& section : sections) {
-        const auto base = report.root / safeSection(section);
-        if (!std::filesystem::exists(base)) continue;
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(base)) {
+        const auto folder = base / safeSection(section);
+        if (!std::filesystem::exists(folder)) continue;
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(folder)) {
             if (!entry.is_regular_file() || entry.path().extension() != ".npz") continue;
             try {
                 if (!selected(entry.path(), scope, now)) continue;
-                auto record = inspect(entry.path());
-                report.totalBytes += record.bytes; ++report.scannedFiles;
-                exact[record.exactKey].push_back(record);
-                plans[record.planKey].push_back(std::move(record));
+                if (!scope.campaignId.empty() && campaignOf(entry.path()) != scope.campaignId) continue;
+                result.push_back(entry.path());
             } catch (const std::exception& error) {
-                report.unreadableFiles.push_back({entry.path(), error.what()});
+                if (unreadable) unreadable->push_back({entry.path(), error.what()});
             }
+        }
+    }
+    std::sort(result.begin(), result.end());
+    result.erase(std::unique(result.begin(), result.end()), result.end());
+    return result;
+}
+
+ArchiveAuditReport auditArchives(const std::filesystem::path& root,
+                                 const ArchiveAuditScope& scope) {
+    ArchiveAuditReport report; report.root = std::filesystem::absolute(root);
+    std::map<std::string, std::vector<Record>> exact, plans;
+    for (const auto& path : scopedArchives(report.root, scope, &report.unreadableFiles)) {
+        try {
+            auto record = inspect(path);
+            report.totalBytes += record.bytes; ++report.scannedFiles;
+            exact[record.exactKey].push_back(record);
+            plans[record.planKey].push_back(std::move(record));
+        } catch (const std::exception& error) {
+            report.unreadableFiles.push_back({path, error.what()});
         }
     }
     report.exactDuplicateGroups = exactGroups(exact);
@@ -231,6 +254,7 @@ std::string archiveAuditJson(const ArchiveAuditReport& report,
         ? json::Value{} : json::Value(scope.modifiedWithinDays);
     scopeJson["sections"] = stringArray(scope.sections);
     scopeJson["systems"] = stringArray(scope.systems);
+    scopeJson["campaign_id"] = scope.campaignId.empty() ? json::Value{} : json::Value(scope.campaignId);
     scopeJson["include_derived"] = scope.includeDerived;
     json::Value::Array exact, plans, unreadable;
     for (const auto& group : report.exactDuplicateGroups) exact.push_back(duplicateJson(group));

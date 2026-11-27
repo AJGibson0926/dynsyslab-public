@@ -3,7 +3,7 @@
 // one envelope in metadata_json["data_object"]:
 //
 //   {"schema": "dynsyslab.data-object/v1",
-//    "kind": "eigenfunctions" | "reconstructions" | "koopman_model" | "time_series" | ...,
+//    "kind": "krom" | "dynamical_model" | "time_series" | ...,
 //    "produced_by": {"method": "hdmd", "settings": {...}, "inputs": [{"path", "sha256", "role"}]},
 //    "properties": {...}}
 //
@@ -22,14 +22,15 @@ inline constexpr const char* kDataObjectSchema = "dynsyslab.data-object/v1";
 
 // Object kinds the suite writes. A kind names the contract of the archive's arrays.
 namespace object_kind {
-inline constexpr const char* eigenfunctions = "eigenfunctions";    // spectrum + stand-alone eigenfunctions
-inline constexpr const char* reconstructions = "reconstructions";  // observables expanded over eigenfunctions
-inline constexpr const char* koopmanModel = "koopman_model";       // spectrum, eigenfunctions, readouts, input maps
+// A Koopman reduced-order model: spectrum and eigenfunctions, optionally input maps B and readouts C;
+// one that extends another references it as its parent (KoopmanArchive.hpp).
+inline constexpr const char* krom = "krom";
 inline constexpr const char* dynamicalModel = "dynamical_model";   // an identified vector field
 inline constexpr const char* timeSeries = "time_series";
 inline constexpr const char* coordinateMap = "coordinate_map";
 inline constexpr const char* matrix = "matrix";
 inline constexpr const char* field = "field";
+inline constexpr const char* figure = "figure";                    // animations and figure datasets
 inline constexpr const char* report = "report";                    // diagnostics and comparisons
 }  // namespace object_kind
 

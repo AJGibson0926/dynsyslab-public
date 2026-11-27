@@ -33,16 +33,16 @@ struct Loaded { SourceData source; c::IoDelayRecord record; };
 Loaded loadRecord(const std::filesystem::path& path, const std::string& observable, std::size_t decimation) {
     Loaded out{loadSource(path), {}};
     const auto& source = out.source;
-    if (source.inputs.empty() || source.inputDimension != 1)
+    if (source.inputs().empty() || source.inputDimension() != 1)
         throw std::invalid_argument("io_delay_model sources need a scalar control history: " + path.u8string());
     const auto system = c::createSystem(systemConfiguration(source));
     const auto measurement = system->observableCatalog().at(observable);
     if (measurement.outputDimension() != 1)
         throw std::invalid_argument("io_delay_model needs a scalar observable");
-    std::vector<double> y(source.samples);
-    for (std::size_t k = 0; k < source.samples; ++k)
-        y[k] = measurement.evaluateReal(source.values.data() + k * source.dimension).front();
-    out.record = c::decimateHeldRecord(y, source.inputs, decimation);
+    std::vector<double> y(source.samples());
+    for (std::size_t k = 0; k < source.samples(); ++k)
+        y[k] = measurement.evaluateReal(source.values().data() + k * source.dimension()).front();
+    out.record = c::decimateHeldRecord(y, source.inputs(), decimation);
     return out;
 }
 
@@ -106,7 +106,7 @@ std::filesystem::path runIoDelayModel(const std::vector<std::filesystem::path>& 
     for (const auto& pole : poles) radius = std::max(radius, std::abs(pole));
 
     json::Value::Object meta{
-        {"format", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("io-delay-model")},
+        {"schema", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("io-delay-model")},
         {"label", json::Value(label)}, {"observable", json::Value(observable)},
         {"source_archive", json::Value(sources.front().generic_u8string())},
         {"training_sources", json::Value(std::move(trainPaths))},
@@ -131,11 +131,12 @@ std::filesystem::path runIoDelayModel(const std::vector<std::filesystem::path>& 
     archive.arrays["open_loop_poles"] = c::NpyArray::fromComplex({poleValues.size()}, poleValues);
     archive.arrays["source_metadata_json"] = c::NpyArray::fromString(referenceMetadata);
     archive.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(json::Value(std::move(meta))));
-    const auto directory = objectFolder(root, "io-delay-model");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::dynamicalModel);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(sources.front().stem().u8string()
         + "__io-delay-model__d" + std::to_string(decimation) + "_ny" + std::to_string(model.ny)
         + "_nu" + std::to_string(model.nu) + "__" + timestamp()) + ".npz");
+    stampDataObject(archive, dynsyslab::core::object_kind::dynamicalModel, "io-delay-model", {});
     c::writeNpzAtomicNew(path, archive);
     return path;
 }

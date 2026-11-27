@@ -9,7 +9,7 @@ a local MCP client without exposing a listening network service.
 The initial server supplies read-only orientation tools only. It never exposes
 access keys, account metadata, arbitrary shell execution, archive mutation, or
 external cloud controls. Future write-capable tools must be explicit,
-capability-scoped, and delegate archive operations through Archiver.
+capability-scoped, and delegate archive operations to the native archive layer.
 
 ## Run locally
 

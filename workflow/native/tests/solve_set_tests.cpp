@@ -55,15 +55,15 @@ int main() {
             const auto metadata = dynsyslab::core::json::parse(
                 archive.at("metadata_json").string());
             const auto series = dynsyslab::core::loadTimeSeries(archive);
-            require(metadata.at("time_series_format").string() ==
-                    "dynsyslab.TimeSeries/v2" && series.sampleCount() == 3,
+            require(metadata.at("schema").string() ==
+                    "dynsyslab.solution/v1" && series.sampleCount() == 3,
                     "native solve did not publish a canonical TimeSeries");
             require(!archive.contains("frequencies") &&
                     !archive.contains("fourier_amplitudes"),
                     "native solve persisted derived Fourier data");
         }
         const auto manifest = dynsyslab::core::json::load(run.manifest.wstring());
-        require(manifest.at("format").string() == "dynsyslab.solve-set/v1",
+        require(manifest.at("schema").string() == "dynsyslab.solve-set/v1",
                 "solve-set manifest format");
         require(manifest.at("hierarchy_manifests").array().size() == 1,
                 "one hierarchy per batch");

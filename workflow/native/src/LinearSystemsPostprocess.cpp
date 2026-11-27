@@ -340,7 +340,7 @@ std::filesystem::path runLinearSystems(const std::filesystem::path& sourcePath, 
     auto serialized = json::dump(json::Value(details));
     out.arrays["metadata_json"] = NpyArray::fromString(metadata(source, "linear-systems", label,
         serialized.substr(1, serialized.size() - 2)));
-    return publish(root, source, "linear-systems", label, std::move(out));
+    return publishObject(root, source, dynsyslab::core::object_kind::report, "linear-systems", std::move(out));
 }
 
 }  // namespace dynsyslab::workflow::postprocess_detail

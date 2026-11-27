@@ -34,9 +34,9 @@ int main() {
         hankelOptions.oversampling = 2;
         hankelOptions.subspaceIterations = 6;
         const auto basis = dynsyslab::core::fitPooledHankelBasis(echoes, hankelOptions);
-        require(basis.trainingTrajectories == echoes.size(),
+        require(basis.trajectories == echoes.size(),
                 "pooled Hankel trajectory count changed");
-        require(basis.trainingWindows == echoes.size() * (samples - delays + 1),
+        require(basis.columns == echoes.size() * (samples - delays + 1),
                 "pooled Hankel crossed a trajectory boundary");
         require(basis.cumulativeEnergy.back() > 1.0 - 1.0e-9,
                 "rank-two sinusoid did not retain its Hankel energy");
@@ -92,8 +92,9 @@ int main() {
                 "native pooled EDMD one-pair residual is too large");
         const auto canonical = dynsyslab::core::selectedPolynomialEigenfunction(
             edmd, candidates.front());
-        require(canonical.stateDimension == 2 && canonical.featureCount == 3
-            && canonical.continuousEigenvalues.size() == 1,
+        require(canonical.functions.coordinates().dimension == 2
+            && canonical.functions.dictionary().size() == 3
+            && canonical.spectrum.size() == 1,
                 "selected native eigenfunction did not use the canonical contract");
         std::cout << "native causal-history and pooled Koopman tests passed\n";
         return 0;

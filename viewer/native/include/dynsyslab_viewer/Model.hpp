@@ -89,6 +89,9 @@ struct Trace {
     // Fixed colour range of a scalar heat map (e.g. one range for every frame of an animation);
     // empty: the range of this trace's values.
     std::optional<std::pair<double, double>> colorLimits;
+    // Brightness reference of a domain-coloured line (brightness = magnitude / scale). Zero: the
+    // trace's own largest magnitude. Overlaid runs of one function share one scale.
+    double magnitudeScale = 0.0;
 };
 
 struct DetailInset {
@@ -153,6 +156,9 @@ struct Figure {
     // Optional right ordinate for a curve plotted as offset + scale * value.
     struct RightAxis { std::string label; double scale = 1, offset = 0; };
     std::optional<RightAxis> rightAxis;
+    // Initial abscissa range (e.g. a spectrum's dominant band); the ordinate is fitted inside it.
+    // Resetting the axes returns to the full data range.
+    std::optional<std::pair<double, double>> focusX;
 };
 
 struct Payload {

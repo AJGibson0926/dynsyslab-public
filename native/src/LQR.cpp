@@ -27,22 +27,14 @@ std::vector<double> referenceValues(const KoopmanModel& model,const StateTargetF
 }
 }
 
-ContinuousLQRSolution solveContinuousLQR(
+numerics::ContinuousLqrResult solveContinuousLQR(
     const std::vector<double>& generator,const std::vector<double>& input,
     const std::vector<double>& statePenalty,
     const std::vector<double>& inputPenalty,
     std::size_t states,std::size_t inputs) {
     // One gain path for every LQR in DynSysLab: ControlDesign (CARE/DARE).
-    auto solved=designLQR(makeStateSpace(generator,input,{},{},states,inputs,0),
+    return designLQR(makeStateSpace(generator,input,{},{},states,inputs,0),
         statePenalty,inputPenalty);
-    ContinuousLQRSolution result;
-    result.riccati=std::move(solved.riccati);
-    result.gain=std::move(solved.gain);
-    result.closedLoopPoles=std::move(solved.closedLoopPoles);
-    result.relativeResidual=solved.relativeResidual;
-    result.stateDimension=states;
-    result.inputDimension=inputs;
-    return result;
 }
 
 KoopmanLQRController::KoopmanLQRController(
@@ -84,7 +76,7 @@ std::vector<double> KoopmanLQRController::valueFromLifted(double time,
     const auto lifted=model_->splitValues(values);
     return feedback(time,lifted,model_->realControlMap(model_->controlMapFromLifted(values,representation_)));
 }
-ContinuousLQRSolution solveContinuousLQI(
+numerics::ContinuousLqrResult solveContinuousLQI(
     const std::vector<double>& A,const std::vector<double>& B,const std::vector<double>& C,
     const std::vector<double>& Q,const std::vector<double>& Qi,const std::vector<double>& R,
     std::size_t n,std::size_t m,std::size_t p) {
@@ -251,17 +243,16 @@ void KoopmanLQRController::solveGain(const std::vector<double>& inputMap) const 
     if(!reduced.liftedClosedLoopStable)
         throw std::runtime_error("balanced_truncation: the order-"+std::to_string(reduced.reduction.order)
             +" KLQR gain does not stabilize the full KROM; raise balanced_truncation.order");
-    ContinuousLQRSolution result;
+    numerics::ContinuousLqrResult result;
     result.gain=std::move(reduced.liftedGain);
     result.closedLoopPoles=std::move(reduced.liftedClosedLoopPoles);
     result.relativeResidual=reduced.regulator.relativeResidual;
-    result.stateDimension=n;result.inputDimension=m;
     last_=std::move(result);
     lastReducedOrder_=reduced.reduction.order;
     lastReductionErrorBound_=reduced.reduction.errorBound;
 }
 
-const ContinuousLQRSolution& KoopmanLQRController::lastSolution() const noexcept {
+const numerics::ContinuousLqrResult& KoopmanLQRController::lastSolution() const noexcept {
     return last_;
 }
 

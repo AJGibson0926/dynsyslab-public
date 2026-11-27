@@ -61,6 +61,5 @@ PeriodicSpectralReference periodicSpectralReference(
 // coordinate readout is compared to the ORIGINAL observable, not its projection.
 PeriodicSpectralComparison comparePeriodicDelaySpectrum(const SpectralKROM&,
     const std::vector<std::size_t>&channels,const std::vector<double>&timeOffsets,
-    const std::vector<math::PeriodicSnapshotOrbit>&validation,const PeriodicSpectralReference&,
-    bool allowUnverifiedLegacyContract=false);
+    const std::vector<math::PeriodicSnapshotOrbit>&validation,const PeriodicSpectralReference&);
 }

@@ -27,7 +27,7 @@ struct DmdControlResult {
     std::vector<double> operatorMatrix; // rank x rank: reduced discrete A
     std::vector<double> controlMatrix;  // rank x inputDimension: reduced discrete B
     std::vector<double> augmentedSingularValues, outputSingularValues;
-    std::vector<std::complex<double>> discreteEigenvalues;
+    Spectrum spectrum;  // the reduced operator's multipliers mu (a zero mu has no continuous rate)
     std::vector<std::complex<double>> modes; // dimension x rank: P W
     std::vector<std::complex<double>> exactModes; // dimension x rank: A_hat P W
     // Rows L = W^-1 P^T, NOT right eigenvectors. psi(q) = L q.
@@ -38,8 +38,6 @@ struct DmdControlResult {
     // Export linear polynomials to the shared eigenfunction representation.
     // Uses principal log(mu)/dt; rejects zero multipliers/defective eigenbases.
     [[nodiscard]] EigenfunctionFitResult eigenfunctionSet() const;
-    // Compatibility export requires finite continuous rates (nonzero multipliers).
-    [[nodiscard]] KoopmanSINDyResult expansion() const;
 };
 
 // Explicit sample-major pairs support multiple trajectories without ever

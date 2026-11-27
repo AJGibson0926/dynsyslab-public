@@ -223,9 +223,7 @@ Programmatic callers may use `dynsyslab_client.NativeWorkflow` through the
 versioned C ABI. Python remains the caller; the compiled workflow owns solving,
 post-processing, control, progress, cancellation, and archiving.
 
-Historical Python scientific packages in the repository are migration-only
-reference evidence. They are not installed by the wheel and are not a second
-supported implementation. New systems and algorithms belong in separate native
+New systems and algorithms belong in the native core or in separate native
 extension DLLs using the installed SDK example.
 
 ## 10. Reproducibility checklist

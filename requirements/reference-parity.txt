@@ -1,7 +1,0 @@
-# Migration-only dependencies for historical Python comparison tests.
-# These are not product, native-runtime, or thin-client dependencies.
-numpy>=1.24
-scipy>=1.10
-threadpoolctl>=3
-tomli>=2; python_version < "3.11"
-mcp>=2,<3

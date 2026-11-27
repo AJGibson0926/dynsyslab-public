@@ -1,7 +1,6 @@
 #include "HdmdObjects.hpp"
 #include "SampledDomain.hpp"
 #include "TimeSeriesSource.hpp"
-#include <dynsyslab/core/EigenfunctionArchive.hpp>
 
 #include <algorithm>
 #include <stdexcept>
@@ -41,7 +40,7 @@ c::HankelWindowLayout recordWindowLayout(const HankelAnalysis& hankel, const c::
     return layout;
 }
 
-c::EigenfunctionSet hdmdEigenfunctionSet(const c::HankelDMDResult& result, const HdmdFitContext& context) {
+c::KoopmanModel hdmdEigenfunctions(const c::HankelDMDResult& result, const HdmdFitContext& context) {
     const auto& record = *context.record;
     const auto& settings = *context.settings;
     const auto& hankel = *context.hankel;
@@ -74,26 +73,24 @@ c::EigenfunctionSet hdmdEigenfunctionSet(const c::HankelDMDResult& result, const
     std::size_t neighbors = std::size_t(settings.at("interpolation_neighbors").number(8));
     const auto method = settings.at("interpolation_method").isNull() ? c::InterpolationMethod{}
         : c::interpolationMethodFromJson(settings.at("interpolation_method"), &neighbors);
-    auto interpolation = std::make_shared<c::SharedRepresentation>(c::interpolateSamples(sampled.states,
-        n, sampled.domain, samples->values, method, neighbors, "hdmd eigenfunctions at their training samples"));
-    auto window = c::WindowMapRepresentation::fromModes(layout,
-        std::make_shared<const std::vector<std::complex<double>>>(result.modes),
-        std::make_shared<const std::vector<std::complex<double>>>(result.modeGram), modes);
-    std::vector<std::shared_ptr<const c::EigenfunctionRepresentation>> representations;
+    std::shared_ptr<const c::FunctionRepresentation> interpolation = c::interpolateSamples(sampled.states,
+        n, sampled.domain, samples->values, method, neighbors, "hdmd eigenfunctions at their training samples");
+    // The time-delay representation: the window map T = G^-1 Phi^H, an expansion on the window domain.
+    std::shared_ptr<const c::FunctionRepresentation> window = c::windowMapFromModes(layout, result.modes, result.modeGram, modes);
+    std::vector<std::shared_ptr<const c::FunctionRepresentation>> representations;
     J requested = settings.at("representations");
-    if (!requested.isNull()) {  // "window_map" is the former name of the window expansion
+    if (!requested.isNull()) {  // former names of the window map
         J::Array names;
-        for (const auto& item : requested.array()) names.emplace_back(item.string() == "window_map" ? std::string("expansion") : item.string());
+        for (const auto& item : requested.array())
+            names.emplace_back(item.string() == "window_map" || item.string() == "time-delay" ? std::string("expansion") : item.string());
         requested = names;
     }
     for (const auto& name : orderedNames(requested, {"interpolation", "expansion"}, "representation"))
-        representations.push_back(name == "interpolation"
-            ? std::static_pointer_cast<const c::EigenfunctionRepresentation>(interpolation)
-            : std::static_pointer_cast<const c::EigenfunctionRepresentation>(window));
+        representations.push_back(name == "interpolation" ? interpolation : window);
 
-    auto spectrum = c::Spectrum::fromDiscrete(result.discreteEigenvalues, result.continuousEigenvalues,
-                                              result.deltaTime, origin);
-    return c::EigenfunctionSet(std::move(spectrum), *samples, std::move(origin), std::move(representations));
+    auto spectrum = result.spectrum;
+    spectrum.withOrigin(origin);
+    return c::KoopmanModel(std::move(spectrum), *samples, std::move(origin), std::move(representations));
 }
 
 }  // namespace dynsyslab::workflow::postprocess_detail

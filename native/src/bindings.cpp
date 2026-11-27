@@ -94,10 +94,7 @@ py::tuple integrateSystem(
     options.outputStep = outputStep;
     options.relativeTolerance = relativeTolerance;
     options.absoluteTolerance = absoluteTolerance;
-    if (method == "Euler") options.method = dynsyslab::core::IntegrationMethod::euler;
-    else if (method == "RK4") options.method = dynsyslab::core::IntegrationMethod::rk4;
-    else if (method == "RK45") options.method = dynsyslab::core::IntegrationMethod::dormandPrince45;
-    else throw std::invalid_argument("native system integration supports Euler, RK4, or RK45");
+    options.method = dynsyslab::core::integrationMethodFromName(method);
     std::vector<double> initialStates(static_cast<const double*>(initial.ptr),
         static_cast<const double*>(initial.ptr) + batch * dimension);
     dynsyslab::core::NativeSolution result;

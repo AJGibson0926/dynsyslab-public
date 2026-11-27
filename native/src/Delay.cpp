@@ -116,6 +116,9 @@ DelaySolution integrateMackeyGlass(
             history[active + 1] = history[active] + options.step
                 * (beta * delayed / (1.0 + std::pow(delayed, exponent))
                    - gamma * history[active]);
+            if (options.checkpoint && options.checkpointSteps && (step + 1) % options.checkpointSteps == 0
+                && step + 1 < steps)
+                options.checkpoint(trajectory, step + 2, result.time.data(), history.data() + lag);
         }
         std::copy(history.begin() + static_cast<std::ptrdiff_t>(lag), history.end(),
                   result.values.begin() + static_cast<std::ptrdiff_t>(trajectory * samples));

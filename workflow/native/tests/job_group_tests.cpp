@@ -1,6 +1,7 @@
 // Composite jobs, symbolic links, cleanup, resume, version pin, digests and the generic K-ROM and
 // figure-table stages, on a tiny self-contained pack.
 #include <dynsyslab/core/Archive.hpp>
+#include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/core/PortableNormal.hpp>
 #include <dynsyslab/core/Version.hpp>
 #include <dynsyslab/workflow/ArchiveDigest.hpp>
@@ -194,17 +195,17 @@ void testComparison(const fs::path& base) {
 
 void testKromEditing(const fs::path& base) {
     using C = std::complex<double>;
-    core::NpzRecord krom;
-    krom.arrays["coefficients"] = core::NpyArray::fromComplex({2, 3}, {C(1, 1), C(2, 0), C(0, 1), C(1, -1), C(2, 0), C(0, -1)});
-    krom.arrays["polynomial_exponents"] = core::NpyArray::fromInt64s({3, 2}, {1, 0, 0, 1, 2, 0});
-    krom.arrays["state_center"] = core::NpyArray::fromDoubles({2}, std::vector<double>{0.5, 0.0});
-    krom.arrays["state_scale"] = core::NpyArray::fromDoubles({2}, std::vector<double>{2.0, 1.0});
-    krom.arrays["continuous_eigenvalues"] = core::NpyArray::fromComplex({2}, {C(-1, 2), C(-1, -2)});
-    krom.arrays["reconstruction__y"] = core::NpyArray::fromComplex({1, 2}, {C(1, 0), C(1, 0)});
-    krom.arrays["reconstruction_offset__y"] = core::NpyArray::fromDoubles({1}, std::vector<double>{0.25});
-    krom.arrays["metadata_json"] = core::NpyArray::fromString("{}");
+    const std::vector<C> coefficients{C(1, 1), C(2, 0), C(0, 1), C(1, -1), C(2, 0), C(0, -1)};
+    core::PolynomialDictionary monomials{2, {1, 0, 0, 1, 2, 0}, {0.5, 0.0}, {2.0, 1.0}};
+    core::FunctionDomain plane;
+    plane.dimension = 2;
+    core::KoopmanModel krom(core::FunctionExpansion(std::move(monomials), coefficients, plane),
+                            core::Spectrum::fromContinuousRates({C(-1, 2), C(-1, -2)}));
+    core::ReconstructionResult readout{{C(1, 0), C(1, 0)}, 1, 2, 0.0, 0.0, 0.0};
+    readout.offset = {0.25};
+    krom.setReconstruction("y", std::move(readout));
     const auto source = base / "krom.npz";
-    core::writeNpzAtomic(source, krom);
+    core::saveKoopmanModel(source, krom);
     const auto run = [&](const char* method, const std::string& settings) {
         return workflow::executeJob(json::parse(R"({"schema":"dynsyslab.compute-job/v1","kind":"postprocess","label":"edit","sources":[")"
             + source.generic_u8string() + R"("],"methods":[{"name":")" + method + R"(","settings":)" + settings + "}]}"), base / "edit").archives.at(0);
@@ -213,8 +214,10 @@ void testKromEditing(const fs::path& base) {
         const double z0 = (x - cx) / 2.0, z1 = y;
         return k[m * 3] * z0 + k[m * 3 + 1] * z1 + k[m * 3 + 2] * (z0 * z0);
     };
-    const auto moved = core::readNpz(run("krom_recenter", R"({"target_state":[1.0,0.5]})"));
-    const auto before = krom.at("coefficients").complexDoubles(), after = moved.at("coefficients").complexDoubles();
+    const auto movedPath = run("krom_recenter", R"({"target_state":[1.0,0.5]})");
+    const auto moved = core::readNpz(movedPath);
+    const auto& before = coefficients;
+    const auto after = core::loadKoopmanModel(movedPath).expansion().coefficients();
     for (std::size_t m = 0; m < 2; ++m) {
         const auto shift = psi(before, 0.5, 1.0, 0.5, m);
         const auto expected = psi(before, 0.5, 1.7, -0.3, m) - shift;

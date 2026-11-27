@@ -101,6 +101,17 @@ public:
     [[nodiscard]] const std::shared_ptr<const FunctionRepresentation>& representation() const noexcept { return representation_; }
     // "expansion", "interpolation" or "evaluator".
     [[nodiscard]] std::string representationKind() const;
+    // Named representations. One observable may be represented several ways (an eigenfunction by a
+    // polynomial, an interpolation and a time-delay map); the first is the default that evaluation,
+    // Jacobians and derivatives use. Names come from representationName (FunctionRepresentation.hpp).
+    [[nodiscard]] std::vector<std::string> representationNames() const;
+    [[nodiscard]] std::string representationName() const;  // the default's; "evaluator" without one
+    // Adds another representation of this same observable (same outputs, its own domain);
+    // `asDefault` makes it the default. `name` defaults to representationName(representation).
+    [[nodiscard]] Observable withRepresentation(std::shared_ptr<const FunctionRepresentation> representation,
+        const ObservableCatalog* catalog = nullptr, bool asDefault = false, std::string name = {}) const;
+    // The same observable with the named representation as its default.
+    [[nodiscard]] Observable as(const std::string& name) const;
 
     [[nodiscard]] static Observable stateComponent(
         std::size_t stateDimension, std::size_t index,
@@ -121,6 +132,19 @@ private:
     Jacobian analyticJacobian_;
     std::vector<std::optional<std::size_t>> stateComponents_;
     std::shared_ptr<const FunctionRepresentation> representation_;
+    std::string representationName_;  // of the default; empty for an evaluator
+    // The representations other than the default, each with the evaluation it gives.
+    struct Alternative {
+        std::string name;
+        std::size_t stateDimension{};
+        Evaluator evaluator;
+        Jacobian jacobian;
+        std::vector<std::optional<std::size_t>> stateComponents;
+        std::shared_ptr<const FunctionRepresentation> representation;
+    };
+    std::vector<Alternative> alternatives_;
+    [[nodiscard]] Alternative current() const;
+    void use(Alternative alternative);
 };
 
 // Named first derivative on the system's native clock. Some formulas are

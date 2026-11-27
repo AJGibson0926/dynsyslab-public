@@ -1,5 +1,345 @@
 # Changelog
 
+## 0.10.0 — 2026-11-26
+
+- **Eigenpairs, spectrum and pseudospectrum are core types.** New `core::Eigenpair` (an
+  `Eigenvalue`, its `Eigenfunction` and an optional `EigenpairResidual {value, definition, scope}`)
+  and `core::Pseudospectrum` (grid points z with the minimum residual; `levelSet(ε)`); `core::Spectrum`
+  now holds the point part with each pair's residual, a continuous part of `SpectralMeasure`
+  components and an optional pseudospectrum, and `KoopmanModel::eigenpair(j)` joins them. The krom
+  stores them once on its spectrum (`eigenpair_residual`, `pseudospectrum_*`,
+  `continuous_spectrum_json`) and a spectral fit's invariance, wave packets, stochastic residuals and
+  RKHS adjoints as `spectral_diagnostics_json`; the separate `spectral_data_json` block, the copy in
+  the embedded operator contract, SINDy's `training_residual_rms` and `EigenfunctionFitDiagnostics`'
+  residual RMS are gone. ResDMD and the `koopman_spectral` family attach one-step residuals and the
+  `residual_grid` pseudospectrum (Colbrook & Townsend 2024), SINDy its generator residual of the
+  published eigenfunction (Kaiser, Kutz & Brunton 2021), history EDMD its successor-normalized
+  pair score, H-DMD (single and pooled) the one-step residual of its evaluated representation
+  along the training trajectory (Arbabi & Mezić 2017), replacing `eigenfunction_koopman_residual`;
+  DMD, EDMD and hand-given expansions leave residuals empty. `krom_extract` keeps the selected pairs'
+  residuals, and `KoopmanModel::pairs()` iterates the eigenpairs in mode order without copying. The Viewer's K-ROM spectrum shows each pair's residual and a
+  lattice pseudospectrum as a heat map. Kroms written before this keep loading, without residuals.
+
+- **SINDy given eigenfunctions fits the generator null space again.** Since 3dd2122 SINDy anchored
+  its fit to the eigenfunctions' sample values by default and took their scale. For H-DMD -> SINDy
+  on a decaying trajectory those values cover only the last window, near rest. The anchored
+  polynomial was then dense and no eigenfunction, with a residual of order its values, and it took
+  H-DMD's arbitrary scale. That broke KLQR in rpe-viscous-klqr-multisine. The default is now `fit:
+  "nullspace"` (Kaiser, Kutz & Brunton 2021); `anchored` stays opt-in. A mode that disagrees with
+  its references beyond `agreement_tolerance` keeps the unit-RMS normalization, recorded in
+  `agreement.calibration`.
+
+- **Side-car model families, pulses and input-map audits are native.** `core/FieldModels.hpp`
+  holds compact radial, local tangent-chart, paired amplitude/phase, second-order, pair-network and
+  damped-interior fields as JSON definitions, the filtered-library waveform fit, the waveform
+  objective and fixed-support shooting calibration. The pooled stage `field_model` (validation
+  rollouts, `calibrate`, replay `controls`) uses them (docs/architecture/FIELD_MODELS.md). New solve
+  input `pulse_branches` and initial conditions `archive_states`; stages `pulse_response` (paired
+  causal sensitivities) and `control_map_audit` (path representation error, design rank and
+  condition; core `ControlMapAudit.hpp`); `input_map fit: "symmetric_pulse"` reads pulse-branch
+  pairs. The named RPE identification policy is the experiment
+  examples/native/experiments/rpe-control-identification. Deleted: the side-car compact_field,
+  local_field/local_rhs, paired, structured, waveform_fit, waveform_objective, calibration,
+  sparse_stlsq, compat_rpe and audit modules; the echo_pulse programs; and
+  scripts/generate_rpe_control_identification_data.py.
+- **Remaining identification and eigenfunction rows are native.** `koopman_validation` gains
+  `segments` and the 2-D occupied-cell `binned_defect`; `krom_refit` gains `orient` and
+  `coefficient_summary`; `sindy_dynamics` gains `derivatives: central_high_order` and `monomials`
+  (Laurent) libraries; `svd`/`pca`/`pod` gain `amplitude_queries` (state-interpolated POD amplitudes
+  and reconstruction); `control_error_compare` adds `absolute_maximum`. New stages `delay_pairs` and
+  `delay_consistency`, and core `extendLockedBasis`, `historyEndpointDecoder` and `TangentReadout`.
+  The rpe-corrected-echo `echo_rate_fit` program is deleted; its job is a postprocess job.
+- **Second pass: K-ROM, solver and queue ledgers closed.** Multi-input `klqr`/`kmpc` through
+  `actuation: "additive_state"` with an n x m `B` (core `KoopmanModel::setAdditiveInputMatrix`). Solver:
+  native `rayleigh-plesset-dimensional-baseline`, `history.controller_call_log`,
+  `history.keep_partial_history_on_failure`, PDE `communication: "halo_exchange"` (optional
+  `DYNSYSLAB_WITH_MPI` transport) and adaptive repartitioning. Queue: checkpoint-before-deadline with
+  requeue and continuation, `history_policy`, `queue.reuse: "extend"`, `queue.staging` with digests,
+  `campaign restructure` and `campaign review`; `checkpoint_profile: recoverable` checkpoints inside
+  one integration. Retired: the MATLAB `.mat` `U_source` path and the Python Duffing bilinear
+  campaign (`operations/duffing_bilinear`, `scripts/search_duffing_bilinear_krom.py`), replaced by
+  `krom_control_search`; the Antenna link and the policy `audit` stay thin Python by decision.
+- **Remaining identification and eigenfunction rows are native.** `koopman_validation` gains
+  `segments` and the 2-D occupied-cell `binned_defect`; `krom_refit` gains `orient` and
+  `coefficient_summary`; `sindy_dynamics` gains `derivatives: central_high_order` and `monomials`
+  (Laurent) libraries; `svd`/`pca`/`pod` gain `amplitude_queries` (state-interpolated POD amplitudes
+  and reconstruction); `control_error_compare` adds `absolute_maximum`. New stages `delay_pairs` and
+  `delay_consistency`, and core `extendLockedBasis`, `historyEndpointDecoder` and `TangentReadout`.
+  The rpe-corrected-echo `echo_rate_fit` program is deleted; its job is a postprocess job.
+- **Shadow KLQE→KLQR study and KLQE tuning sweep are experiments.** `control_score` gains
+  `estimation` scores: per-component estimate error, bias and relative error, innovation relative
+  size and whiteness at time lags, and the force error of a shadow controller. The reference signal
+  is optional with them, and `run_values` stores a per-run abscissa. Experiment sweeps read fields of
+  object-valued points (`${sweep.setup.krom}`). `viewer_figure` gains `fit_y_to` (model-scale pages),
+  `time_key` and `scale`. The Viewer adds the `solenoid_suspension` and `cycle_clock` research figures
+  and animates phase covers over time. The rpe-echo-mode-selection shadow and tuning Python scripts
+  and their generated jobs are removed.
+- **Case-study programs become experiments.** The forced-EDMDc, forced-EDMDc validation, manual
+  and retrained PDF eigenfunction and joint H-DMD/KLQE case studies are experiment jobs
+  (`examples/native/case-studies/*/experiment.json`); their C++ programs are deleted. New for them:
+  `dmdc`/`edmdc` `pool_sources` and `validation_sources`, `krom_refit` `gauge_reference`,
+  `linear_analysis` `klqe-assessment` `role: validation`, `select` `stands_for`, and
+  `state_readout` mode `affine`.
+- **Viewer reports, export and result documents are native (phase H).** `DynSysLabViewerCli render`
+  writes SVG (`--output plot.svg`) or a self-contained interactive HTML page of every page
+  (`--output plot.html`: hover, zoom, pan, page tabs). `DynSysLabViewerCli report SPEC.json` renders
+  multi-page `dynsyslab.report/v1` reports (paragraphs, tables, Viewer figures, images) to HTML or PDF,
+  and `dynsyslab-cli experiment report MANIFEST` builds one for an experiment: stage graph, method
+  tables, results and Viewer plots. The Viewer opens periodic spectral comparison results, phase-cover
+  geometry and `dynsyslab.research-figure/v1` documents (finite-cycle spectra, cocycles, coordinate
+  reconstruction, clock changes) directly. New: analytic query `phase_cover` with its clock-ratio
+  check; pipeline methods `bifurcation_points` (post-transient maxima) and
+  `observable_spectrum_comparison`; `figure_dataset` operations norm, difference, diff and psi;
+  `viewer_figure` curves with their own source and clock; Koopman-mode participation, observer poles
+  and the estimation-error norm in the observability view; spectra that open on their dominant
+  band; per-system default views and cameras; automatic archive refresh; campaign type labels
+  (docs/architecture/VIEWER_REPORTS_AND_EXPORT.md). Removed: the Python Viewer research and
+  presentation modules, notebook packaging, `tools/experiment_report.py`,
+  `postprocessing/formal_report.py` and `postprocessing/koopman/phase_covers.py`.
+- **Experiment sweeps and validation-only selection; receiver arrays; trajectory kernels.**
+  Experiments gain `sweep` stages (a block of stages repeated per point of its variables) and
+  `select` stages (the best point by a held-out score, with a selection record), and
+  `${id.archives}` lists. New methods: `orbit_geometry` (cross-orbit crossings, peak closure and
+  state ambiguity of coordinate charts), `receiver_signals`, `state_readout` and `ring_errors`
+  (retarded multi-receiver echoes, neighbour and linear delay readouts, per-ring errors; the
+  receiver side-car is removed), `affine_dynamics` (A, c and exact propagation), `prehistory`,
+  `clock_audit` and `run_invariant` (a conserved polynomial from run identity). Derivative method
+  `central_high_order`, `sindy_dynamics` library families (bounded, rational, localized, gated,
+  paired_gated, harmonic) and `dmdc`/`edmdc` windows from record metadata
+  (docs/architecture/TRAJECTORY_KERNELS.md, RECEIVER_ARRAYS.md, EXPERIMENTS.md).
+- **Identification methods are native (phase D).** `hdmd` and `sindy` pool several trajectories
+  (`additional_sources`) with no window or difference across a boundary; SINDy trains on a
+  state-space `domain` grid or `domain_points`, and takes `rescale`, `sparsification_policy`
+  (`single-absolute`), `directional_derivative` (`finite-difference`), any `dictionary` (radial,
+  trigonometric, expression terms) and `readout_transfer` (keep a parent krom's C behind a validation
+  gate, else refit). `sindy_dynamics` adds `ridge`, `sample_weights`, `speed_scale` and weak-form
+  `weak_durations`; `dynamics_validation` scores rollouts on their own clock with peak matching
+  (`peak_prominence`) and a `kinematics` chain-rule check. New:
+  coordinate kind `delay_taps` (physical-time lags, quintic delay jets), IC `mode: "file"` with a
+  SHA-256 check, HAVOK `derivative_order`, per-step `svd_driver` and `analysis_coordinates`,
+  eigenvalue summaries (`growth_rate`, `angular_frequency`, `cyclic_frequency`, `quality_factor`)
+  and empirical spectral weights. `examples/native/duffing-hdmd-sindy-sop.json` is the Duffing
+  H-DMD to SINDy procedure (docs/architecture/IDENTIFICATION.md).
+- **K-ROM control and estimation tools are native.** Classical in-loop estimators (`lqe`,
+  `luenberger`, `static_map`) and KLQE design reuse (`design_archive`); multi-input `lqr`/`mpc`/
+  `pid`, SDRE with user factorisations, PCHIP, `expression` and lifted targets, and the KLQR/KMPC
+  `target_domain_policy` with an archived domain report. Post-processing gains mode rules
+  `state_observability`, `nearest_frequency` and `validation_score`; validation windows, binned
+  defects and the psi history; a held-out quality gate for `observable_reconstruction`;
+  symmetric-pulse B_psi estimation; p95 error fields; and the methods `control_error_compare`,
+  `krom_rollout`, `pod_galerkin`, `krom_refit` (fixed-multiplier refit, gauge, pruning) and
+  `reconstruction_transfer`. `control_score` adds tone/harmonic fits, settling time, low-pass
+  drive error, estimate RMSE, innovation whiteness and run differences; `linear_analysis` adds
+  `modal-gramian` and `klqe-assessment`; `krom-audit` adds `control_map_path`. The K-ROM control
+  search takes an explicit schedule, closure-weighted ordering, map variants on path, arc-length
+  and tube samples, and `resume_from`. `dynsyslab-cli krom-training-plan` designs fingerprinted
+  training-domain plans from targets and probes (RPE preset included). Presets for the RPE
+  clean-isolation KLQR and training screening are tracked under examples/native/presets. The
+  Python K-ROM training planners, their screening and `rom.pod_galerkin` are removed
+  (docs/architecture/KROM_TOOLS.md).
+- **Phase B finished.**
+  - The `coordinate_transform` kind `resample` resamples any post-processing source (PCHIP,
+    linear, cubic or nearest) and publishes a record that names its source.
+  - Mackey-Glass and lattice solves write checkpoint archives (`history.checkpoint_interval`).
+  - The Python copies now covered natively are deleted: `postprocessing/resampling.py`,
+    `postprocessing/koopman/resampling.py`, `solver/checkpoints.py`, and the controlled-training
+    generators in `postprocessing/koopman/workflows.py`.
+  - Their users now run native jobs through `operations/native_controlled_training.py`.
+  - Python fixed-lag methods point non-uniform sources to the native resample kind.
+- **Native Lagrangian coherent structures and spectral submanifolds.** The `ftle` method computes
+  forward and backward FTLE fields from the flow-map Cauchy-Green tensor on a grid of initial
+  conditions, their second-derivative ridges and variational LCS (strainlines), as a grid field
+  Viewer draws. The `ssm` method computes spectral submanifolds and their reduced dynamics by the
+  parameterization method about an equilibrium (normal-form or graph style, exact Taylor
+  coefficients by power-series arithmetic), or fits them from trajectories (SSMLearn style), and
+  publishes the reduced model as a `dynamical_model` with its backbone curve as a field
+  (docs/architecture/LCS_AND_SSM.md). The placeholder `postprocessing/lcs` and `postprocessing/ssm`
+  MATLAB-toolbox adapters are removed.
+- **The native job queue schedules like a batch system.** Jobs take a `queue` block: `retry_limit`,
+  `depends_on` with `afterok`/`afterany`/`afternotok`/`aftercorr`, `resources`, `wall_time_seconds`,
+  `hold` (side tray), `reuse: "identical"` and spec claims (no two runs of one scientific spec at
+  once). `execution.max_threads`/`max_memory_mib` and `--max-threads`/`--max-memory-mib` set
+  execution limits. Campaign jobs submit as job arrays chunked by `systems_per_job` with
+  `max_concurrent`; `queue serve` runs them with pool admission (`--max-running`, `--pool-threads`,
+  `--pool-memory-mib`), a pause watchdog that quarantines unresponsive workers, and an optional
+  `--command-template` for SSH or scheduler submission. `queue pause|resume|tray|release|remove|
+  watchdog|resources` complete the queue. Campaigns gain linspace and `driver.*` axes, quality,
+  execution and checkpoint profiles, cycle-based time (`transient_cycles`, `retained_cycles`,
+  `samples_per_cycle`, Lyapunov cycle profiles), a campaign registry and `campaign
+  list|status|validate|repair|profiles`. Progress files carry a heartbeat and remaining-time
+  estimate; derived archives record stage timing; post-processing plans report Hankel and SINDy
+  geometry and refuse jobs over their memory budget before allocating. `dynsyslab-cli benchmark`
+  and `benchmark gate` replace the Python `performance` harness; `template solve|postprocess|
+  estimate` emits starter jobs (docs/architecture/JOB_QUEUE.md).
+- **Native solver: phase B of the port.** New ODE methods: RK23 (Bogacki-Shampine), DOP853,
+  Radau IIA, CVODE Adams, and LSODA-style Adams/BDF switching. They run in one integrator driver
+  that also handles:
+  - arbitrary output times (`time.output_times`);
+  - state guards (`solver.state_bounds`, `max_state_magnitude`) and a per-trajectory step budget;
+  - `on_failure: "reject"`;
+  - post-solve resampling with monotone PCHIP or nearest (`time.sample_times`, keeping `raw_*`
+    arrays);
+  - checkpoints, pause and resume (`history.checkpoint_interval`, `pause_file`, `resume_jobs` in
+    `<manifest>.outcome.json`);
+  - continuation into linked child archives (IC mode `continue_from`);
+  - dimensional integration of RPE and Marmottant (`time.coordinate_system: "dimensional"`);
+  - vector, additive-state actuation (`actuation: "additive_state"`).
+
+  `ScalarControlPolicy` is now `ControlPolicy`. Also new:
+  - designed inputs `tabulated`, `command_tape`, `telegraph_multisine` and `symmetric_pulse`
+    (archived `input_design` with `pair_id` and `polarity`);
+  - IC modes `stratified`, `target_tube` and `concatenate`, with `repeat` and `clip`;
+  - the Marmottant `shell_law` sigmoid and Gompertz;
+  - preset drivers, references and processing metadata;
+  - method-of-steps delay rollout;
+  - the adaptive method of lines for PDEs;
+  - extension entry points for delay, field and lattice models.
+
+  See `docs/architecture/NATIVE_SOLVER.md`.
+- **A K-ROM is one class and one data object.** `core::KoopmanModel` is a spectrum and its
+  eigenfunctions (sample values, origin and named representations, the first evaluated), optionally
+  with input maps B and readouts C; it absorbs `core::Eigenfunctions`, which is gone. Every fitting
+  method (H-DMD, SINDy, DMD, EDMD, history EDMD, the `koopman_spectral` family including ResDMD,
+  boundary and hand-given eigenfunctions, polynomial fits, mode selection) publishes one data-object
+  kind, `krom` (`objects/krom/`, schema `dynsyslab.krom/v1`), with its readouts where it fits them.
+  Steps that add to a K-ROM (`observable_reconstruction`, `input_map`, `control_regression`,
+  `history_control_regression`, `krom_extract`, SINDy on a K-ROM, polynomial fits) publish a child
+  krom that references its parent (path, SHA-256, modes) and stores only what it adds;
+  `loadKoopmanModel` reads any krom, following parents. A K-ROM without B says so when control needs
+  one. The kinds `eigenfunctions`, `reconstructions` and `koopman_model` and the `reconstructions`
+  step setting are gone; regenerate old archives (docs/architecture/DATA_OBJECTS.md).
+
+- **Archive management is native.** Archives can be written with LZMA, deflate or stored ZIP
+  entries (`--compression`, or `DYNSYSLAB_COMPRESSION`), and `dynsyslab-cli archive recompress`
+  re-encodes existing ones losslessly. Archives that keep their time mesh in a shared grid
+  (`time_grid_ref`) read natively, and `archive share-time-grids` writes such grids. `archive
+  edit-metadata` writes a new archive with patched metadata and records the edit. `archive audit`
+  gains `--campaign` scope and `--report DIR` (JSON and Markdown files); `archive campaigns` lists
+  every campaign from its manifests and solution metadata. `dynsyslab-cli storage` registers
+  storage locations, copies with SHA-256 verification and relocates a campaign. The CLI honours
+  `DYNSYSLAB_ARCHIVE_DIR` (docs/ARCHIVE_MANAGEMENT.md). The Python `archiver` audit, deduplication
+  and CLI, `recompress_archive`, `rewrite_archive_metadata`, `deduplicate_solution_time_grids` and
+  `recompress_derived` are removed; `archiver.storage` is a thin client over the CLI.
+- **Measured data and external control maps are usable again.** `measurement_origin: "external"`
+  lets laboratory data with no recorded system drive a physical K-ROM in estimation, and
+  `control_map_origin: "external"` attaches a control map that records no K-ROM identity. Both are
+  recorded in the results. Control regressions again accept inputs held per sample or per interval
+  whatever the record's alignment flag says.
+- **Type aliases removed.** Code names the real types: `numerics::ContinuousLqrResult` (was
+  `RegulatorDesign`), `numerics::FiniteHorizonLqrResult` (was `FiniteHorizonLQRSolution`),
+  `HankelLeftBasis` (was `PooledHankelBasis`), the `Eigenfunction*` validation types (were
+  `Koopman*` aliases), and `ObservabilityMethod`/`ObservabilityOptions` for controllability, the
+  dual problem (were `Controllability*` aliases).
+- **One in-memory time-series container.** The workflow's `SourceData` now holds a
+  `core::TimeSeriesRecord` (series, inputs, channels, origin) instead of its own sample arrays,
+  and `core::ControlledData` is removed: control regressions take a `TimeSeriesRecord` whose
+  `inputs` are per sample or per interval. The `timeSeriesRecord`/`sourceView` converters are gone.
+- **The Python application layer is retired; its capabilities are native.** Every capability of
+  the legacy Python packages, the MATLAB parity scripts and the side-car experiments was ported into
+  the C++ core and job pipeline first (see `docs/architecture/native-port/`, every row COVERED), and
+  then the Python copies were removed: `postprocessing`, `rom`, `control`, `estimation`, `dynsyslib`,
+  `solver`, `job_manager`, `campaigner`, `archiver`, `archives`, `spectral`, `infrastructure`,
+  `analysis_data`, `performance`, the Python Viewer, the Tk `gui`, `app.py`, `hierarchy.py`,
+  `time_series.py`, `provenance.py`, the Python job executor, `scripts/`, the computational and
+  presentation scripts in `tools/`, and `tools/experiments/`. Python is now the installable thin
+  client `dynsyslab_client`, the `python -m dynsyslab` front door (native CLI and workflow
+  adapters, `ui`/`viewer` launch the built executables), the audit (which forbids NumPy/SciPy in
+  client packages), the test runner, the MCP harness and the diagram and maintenance tools. The
+  pinned Colbrook upstream manifest moved to `docs/provenance/colbrook/`.
+- **One schema key.** Every versioned document, native or Python, names its contract under `schema`; archive and
+  manifest metadata no longer write `format`, K-ROMs and DMDc/EDMDc archives no longer write
+  `model_schema`, and solves no longer write `time_series_format`. A method that names its own
+  contract (for example `dynsyslab.koopman-model/v3`) keeps it; other post-processing archives are
+  `dynsyslab.derived/v1`. Archives written before this change are not read as K-ROMs.
+- **Last compatibility switches retired.** `unverified_transform_reason`,
+  `unverified_legacy_reason` on estimation sources, and `allow_unverified_coordinate_contract` on
+  periodic spectral comparisons are gone: a K-ROM without a measurement-map identity, a physical
+  K-ROM measured from a source with no physical system, and an unreadable coordinate contract are
+  refused. Display coordinates no longer special-case Python-reference archives.
+- **Legacy paths retired.** The unverified-legacy binding (`allowUnverifiedLegacy`,
+  `unverified_legacy_reason` on K-ROM loads) is gone: an archive that records no physical system
+  binds to the system its caller names, with status `requested-system`. An external control map
+  that records no K-ROM identity is refused (`unverified_control_map_reason` is gone). The Viewer
+  and the archive index no longer read `dynsyslab.hierarchy/v1` manifests.
+- **Duplicate types merged.** One LQR result (`RegulatorDesign`, the numerics backend's
+  `ContinuousLqrResult`) replaces `ContinuousLQRSolution`; `FiniteHorizonLQRSolution` is the
+  backend's finite-horizon result. The real-split bilinear form of a K-ROM's bilinear map is a
+  `BilinearKrom` (A, B0, Bᵢ) instead of `ContinuousBilinearSplit`. Pooled history bases are
+  `HankelLeftBasis` (`PooledHankelBasis` is now its alias; `delays` → `rows`, `trainingWindows` →
+  `columns`, `totalHankelEnergy` → `totalEnergy`, `trainingTrajectories` → `trajectories`). Archive
+  keys are unchanged.
+- **A K-ROM references its eigenfunctions.** A `koopman_model` (`dynsyslab.koopman-model/v3`) names
+  an eigenfunctions object (path, SHA-256, modes, representation) and stores only its own readouts,
+  input maps, spectral diagnostics and dataset references; nothing of the eigenfunctions or their
+  spectrum is copied. Every step that makes a K-ROM publishes the eigenfunctions object first, so
+  those steps now publish two archives. Older K-ROM archives are refused with a message to
+  regenerate them, and the legacy loaders (`loadPolynomialKoopmanModel`,
+  `savePolynomialKoopmanModel`, `loadKoopmanEigenfunctionModel`) are gone. An extracted or
+  regressed K-ROM no longer copies its parent's training states, eigenfunction values or spectrum.
+- **One spectrum encoding.** Every archive that stores eigenvalues writes the same keys
+  (`continuous_eigenvalues`, `discrete_eigenvalues`, `sample_interval`, `logarithm_branches`,
+  `eigenvalue_domain`; `SpectrumArchive.hpp`), and readers use them only; the duplicate
+  `eigenvalues` array is gone. `DMDResult`, `HankelDMDResult`, `EDMDResult` and `DmdControlResult`
+  hold a `Spectrum` (`result.spectrum`) in place of separate eigenvalue vectors. `Spectrum` moved to
+  the foundation library. The Viewer reads a K-ROM's spectrum through its eigenfunctions reference
+  and classifies K-ROMs by their declared kind only.
+- **One fit result.** `KoopmanSINDyResult` is gone. SINDy, EDMD, DMDc, history EDMD and manual
+  coefficients (`polynomialEigenfunctions`) all return `EigenfunctionFitResult`. Removed with it:
+  `KoopmanModel::eigenfunctions()`, `evaluatePolynomialEigenfunction`,
+  `gradientPolynomialEigenfunction`, `DmdControlResult::expansion()` and
+  `EdmdControlResult::expansion()` (use `eigenfunctionSet()`), and the SINDy option
+  `materializeTrainingValues`.
+- **Data-object kinds are declared, never inferred.** Every writer names its object's kind
+  (`publishObject`, `stampDataObject`, `withDataObject`); the name-to-kind table is gone, and every
+  archive is stamped when it is written. An archive's `method` is its step's name (`hdmd`, `sindy`),
+  the same as `data_object.produced_by.method`. Readers check kinds and contents instead of
+  method names, and the Viewer catalogue classifies by kind. Fixed: the DMDc/EDMDc fits are
+  `dynamical_model`s, `specrkhs` output is a `report`, history transforms are `coordinate_map`s, the
+  mode-selection K-ROM is a `koopman_model`, the validated K-ROM is filed and registered, and H-DMD's
+  saved Hankel matrix (one builder with `hankel_matrix`) can be reread with `hankel_archive`.
+  `DataObject` and `TimeSeriesRecord` moved to the foundation library. Old K-ROM layouts are no
+  longer recognized by the catalogue.
+- **SINDy adds representations to existing eigenfunctions.** SINDy accepts eigenvalues, a spectrum,
+  eigenfunctions, a K-ROM, or training data alone. Given eigenfunctions (H-DMD → SINDy), it fits a
+  polynomial anchored to their values, calibrates its scale, records the agreement per mode, and
+  publishes the same eigenfunctions with the polynomial added: one object, three representations
+  (`polynomial`, the default; `interpolation`; `time-delay`). It extends H-DMD's object by
+  reference, copying nothing. Given training data alone, it also finds the eigenvalues (Kaiser,
+  Kutz & Brunton 2021, Algorithm 1). Representations now have unique names. `krom_extract` takes
+  `eigenfunction_representation`, and a time-delay K-ROM is refused. Earlier SINDy archives still
+  read. H-DMD → SINDy experiments now produce extensions, so their SINDy stage results change.
+- **One eigenfunction, all its representations.** An `Observable` can hold several named
+  representations (`withRepresentation`, `as`, `representationNames`); the first is its default.
+  `Eigenfunctions` (formerly `EigenfunctionSet`, the in-memory eigenfunctions object) holds named
+  `FunctionRepresentation`s directly, and `eigenfunctions.eigenfunction(j)` returns mode j with every
+  representation. The wrappers `EigenfunctionRepresentation`, `SharedRepresentation` and
+  `WindowMapRepresentation` are gone: H-DMD's window map is an ordinary expansion on the window
+  domain (`windowMapFromModes`). `readEigenfunctionSet`/`writeEigenfunctionSet` are now
+  `readEigenfunctions`/`writeEigenfunctions`. Archives are unchanged.
+- **Stage reuse checks the pipeline.** An experiment reuses a stage only when the same pipeline
+  computed it: the manifest records each stage's `pipeline`, a SHA-256 over the running DynSysLab
+  binaries. After a rebuild, rerunning an experiment recomputes it and shows the change. Before
+  this, an identical job reused results from older code.
+- **Staged studies are experiments.** The pipeline is DynSysLab's modules and data objects; a job
+  that chains stages into a study is an *experiment* that uses it. The job kind `"pipeline"` is now
+  `"experiment"` (the old kind is refused with a message to rename it). Runs record
+  `archives/campaigns/experiments/<label>__<utc>.experiment.json` (`dynsyslab.experiment/v1`), and
+  stage reuse reads only those records, so the first run of an existing experiment recomputes its
+  stages. The examples moved to `examples/native/experiments/`, the guide to
+  `docs/architecture/EXPERIMENTS.md` and the report tool to `tools/experiment_report.py`.
+- **Hankel windows are causal by default.** `window_alignment` now defaults to `"end"` for the
+  legacy keys (`matrix_size`, `sampling_window`) as well as the `window` object: a window is
+  labelled by its newest sample, so an eigenfunction's value at time t uses only history. Jobs that
+  relied on the old legacy default, `"start"`, change their time labels; give `"window_alignment":
+  "start"` to keep them.
+- The Viewer's phase-plane view names a window-map eigenfunction "time-delay". Several runs of
+  one observable overlay on one phase plane (`--compare-source`). Each keeps its domain colouring,
+  brightness uses one modulus scale for all runs, and the legend names no runs. Training runs are
+  drawn bolder than test runs, from the trajectory's recorded data role.
+- Every colour plot has a vertical colour bar right of the plot (time, scalar values, or phase from
+  −π to π). Phase portraits mark each initial condition with an open circle labelled with its
+  coordinates, and verified equilibria with filled circles; crowded labels move to a clear row.
+
 ## 0.9.0 — 2026-11-25
 
 A maintenance release that brings the public tree up to date before a larger release. It contains
@@ -256,7 +596,7 @@ data and runs with an empty archive folder; numerical results live only in `arch
 
 This project follows [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.10.0 — 2026-11-26
 
 - Consolidated the Solver's physical parameters, dimensionless groups, and
   derived scales into one divided, vertically scrollable parameter book, and

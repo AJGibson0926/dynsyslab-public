@@ -20,12 +20,12 @@ void testDmd() {
     }
     const auto result = dynsyslab::core::dynamicModeDecomposition(states, 20, 2, 0.1);
     std::vector<double> spectrum;
-    for (const auto value : result.discreteEigenvalues) spectrum.push_back(value.real());
+    for (const auto value : result.spectrum.values()) spectrum.push_back(value.real());
     std::sort(spectrum.begin(), spectrum.end());
     require(spectrum.size() == 2, "DMD spectrum size");
     require(std::abs(spectrum[0] - 0.7) < 1e-10 && std::abs(spectrum[1] - 0.9) < 1e-10,
             "DMD discrete eigenvalues");
-    require(result.continuousEigenvalues.size() == result.discreteEigenvalues.size(),
+    require(result.spectrum.continuousRates().size() == result.spectrum.values().size(),
             "continuous spectrum conversion");
 }
 void testHankel() {
@@ -46,7 +46,7 @@ void testHankel() {
         for(std::size_t j=0;j<result.rank;++j) {
             prediction+=result.reconstructionMatrix[j]*result.coordinates[k*result.rank+j];
             if(k)require(std::abs(result.coordinates[k*result.rank+j]
-                -result.discreteEigenvalues[j]*result.coordinates[(k-1)*result.rank+j])<1e-9,
+                -result.spectrum.values()[j]*result.coordinates[(k-1)*result.rank+j])<1e-9,
                 "oscillatory modal propagation");
         }
         require(std::abs(prediction-std::cos(.2*k))<1e-9,"oscillatory modal reconstruction");
@@ -86,7 +86,7 @@ void testJoint() {
         for(std::size_t sample=0;sample+1<fit.samples;++sample)
             for(std::size_t mode=0;mode<fit.rank;++mode)
                 require(std::abs(fit.coordinates[(sample+1)*fit.rank+mode]
-                    -fit.discreteEigenvalues[mode]*fit.coordinates[sample*fit.rank+mode])<1e-9,
+                    -fit.spectrum.values()[mode]*fit.coordinates[sample*fit.rank+mode])<1e-9,
                     "joint eigenfunction propagation");
     }
     options.snapshotStride=3;options.samplingWindow=4;options.matrixSize=12;
@@ -98,7 +98,7 @@ void testJoint() {
     for(std::size_t k=1;k<strided.samples;++k)for(std::size_t j=0;j<strided.rank;++j) {
         const double dt=.01*(strided.coordinateSampleOffsets[k]-strided.coordinateSampleOffsets[k-1]);
         require(std::abs(strided.coordinates[k*strided.rank+j]
-            -std::exp(strided.continuousEigenvalues[j]*dt)*strided.coordinates[(k-1)*strided.rank+j])<1e-9,
+            -std::exp(strided.spectrum.continuousRates()[j]*dt)*strided.coordinates[(k-1)*strided.rank+j])<1e-9,
             "snapshot stride confused with operator time step");
     }
     bool rejected=false;

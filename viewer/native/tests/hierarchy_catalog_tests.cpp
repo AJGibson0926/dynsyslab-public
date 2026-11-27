@@ -68,7 +68,7 @@ void writeSolution(const std::filesystem::path& path) {
     record.arrays["values"] = dynsyslab::core::NpyArray::fromDoubles(
         {2, 2}, {1.0, 0.0, 0.9, -0.1});
     record.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(
-        R"({"format":"dynsyslab.solution/v1","system":"duffing"})");
+        R"({"schema":"dynsyslab.solution/v1","system":"duffing"})");
     dynsyslab::core::writeNpzAtomic(path, record);
 }
 
@@ -178,63 +178,6 @@ void portableHierarchyReference() {
     std::filesystem::remove_all(root, ignored);
 }
 
-void legacyHierarchyReference() {
-    const auto root = std::filesystem::temp_directory_path() /
-        "dynsyslab-native-legacy-hierarchy";
-    std::error_code ignored;
-    std::filesystem::remove_all(root, ignored);
-    const auto archiveRoot = root / "archives";
-    const auto solution = archiveRoot / "solutions" / "duffing" / "legacy.npz";
-    const auto manifest = archiveRoot / "hierarchies" / "legacy.npz";
-    writeSolution(solution);
-    dynsyslab::core::NpzRecord record;
-    const std::string metadata =
-        R"({"format":"dynsyslab.hierarchy/v1","job":{"job_id":"legacy-job","label":"legacy batch","tags":{}},"systems":[{"label":"legacy Duffing","dynamical_system":{"name":"duffing","preset":{"description":"reference"},"driver":null},"clusters":[{"label":"legacy cluster","trajectories":[{"label":"legacy trajectory","initial_condition":[1,0],"metadata":{"status":"complete","solver_metadata":{"integration_form":"dimensionless"}},"solution_archive":")" +
-        solution.generic_u8string() + R"("}]}]}]})";
-    record.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(metadata);
-    dynsyslab::core::writeNpzAtomic(manifest, record);
-
-    const auto catalog = dsl::Catalog::scan(root, archiveRoot);
-    const int batchIndex = catalog.indexOf("legacy-batch-legacy-job");
-    require(batchIndex >= 0, "legacy completed batch is absent from archive tree");
-    const auto& batch = catalog.items[static_cast<std::size_t>(batchIndex)];
-    require(batch.category == "Archived solves" && batch.parentId.empty(),
-        "legacy batch is not an archive-tree root");
-    const int systemIndex = catalog.indexOf("legacy-batch-legacy-job-system-0000");
-    require(systemIndex >= 0 &&
-        catalog.items[static_cast<std::size_t>(systemIndex)].parentId == batch.id,
-        "legacy system is not nested beneath its batch");
-    const std::string clusterId = "legacy-batch-legacy-job-system-0000-cluster-0000";
-    const int clusterIndex = catalog.indexOf(clusterId);
-    require(clusterIndex >= 0 && catalog.items[static_cast<std::size_t>(clusterIndex)]
-        .parentId == catalog.items[static_cast<std::size_t>(systemIndex)].id,
-        "legacy cluster is not nested beneath its system");
-    const int trajectoryIndex = catalog.indexOf(clusterId + "-trajectory-0000");
-    require(trajectoryIndex >= 0 && catalog.items[static_cast<std::size_t>(trajectoryIndex)]
-        .parentId == clusterId, "legacy trajectory is not nested beneath its cluster");
-    require(std::none_of(catalog.items.begin(), catalog.items.end(), [&](const auto& item) {
-        return item.kind == "trajectory" &&
-            std::filesystem::u8path(item.source) == manifest;
-    }), "legacy hierarchy container leaked into the tree as a trajectory");
-    const auto update = dynsyslab::core::reconcileArchiveIndex(archiveRoot);
-    require(update.indexed == 2, "legacy hierarchy index fixture was not published");
-    const auto indexed = dsl::Catalog::indexed(root, archiveRoot);
-    require(indexed.indexOf("legacy-batch-legacy-job") >= 0 &&
-            indexed.indexOf(clusterId + "-trajectory-0000") >= 0,
-            "indexed legacy hierarchy summary does not reproduce the archive tree");
-    const auto snapshot = dynsyslab::core::loadArchiveCatalogSnapshot(
-        archiveRoot, "dynsyslab.viewer.native", 11);
-    require(snapshot.has_value(), "indexed catalog was not retained for startup reuse");
-    const auto cached = dsl::Catalog::indexed(root, archiveRoot);
-    require(cached.items.size() == indexed.items.size() &&
-            cached.indexOf(clusterId + "-trajectory-0000") >= 0,
-            "retained catalog snapshot does not reproduce indexed contents");
-    const auto payload = dsl::buildHierarchyPayload(
-        batch, "ensemble_phase", root, archiveRoot);
-    require(payload.figures.size() == 1 && payload.figures.front().traces.size() == 1,
-        "legacy hierarchy aggregate phase payload is incomplete");
-    std::filesystem::remove_all(root, ignored);
-}
 
 }  // namespace
 
@@ -244,7 +187,7 @@ int main() {
                 dsl::canonicalSystemLabel("Rayleigh-Plesset") == "Rayleigh-Plesset" &&
                 dsl::canonicalSystemLabel("RPE") == "Rayleigh-Plesset",
                 "Rayleigh-Plesset aliases do not share one catalog identity");
-        portableHierarchyReference(); legacyHierarchyReference();
+        portableHierarchyReference();
     }
     catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

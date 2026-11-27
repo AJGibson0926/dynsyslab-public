@@ -3,6 +3,8 @@
 #include "BalancedTruncationSettings.hpp"
 #include "KlqeProcessCovariance.hpp"
 #include "SensorBinding.hpp"
+#include "ClassicalEstimator.hpp"
+#include "KlqeDesignReuse.hpp"
 
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/core/ReducedOrderEstimation.hpp>
@@ -70,6 +72,8 @@ KlqeBinding bindKlqe(const json::Value& spec, const core::KoopmanModel& model, c
     const auto V = square(spec.at("measurement_covariance"), p, "measurement covariance");
     b.design = core::designKoopmanLQEFromMeasurements(model, b.measurement, W, V, b.output,
         spec.at("require_detectable").boolean(true));
+    if (!spec.at("design_archive").isNull())  // a verified, previously published klqe design
+        b.processCovariance = reuseKlqeDesign(b.design, spec.at("design_archive").string(), model);
     if (const auto reduction = parseBalancedTruncation(spec.at("balanced_truncation")))
         b.reduction = balancedTruncationEvidence(core::reduceKoopmanLQEDesign(b.design, *reduction, W, V).reduction);
     const auto catalog = system.observableCatalog();
@@ -125,10 +129,11 @@ EstimatorSetup buildEstimator(const json::Value& spec, const json::Value& solver
     EstimatorSetup result;
     if (spec.isNull()) return result;
     const auto kind = spec.at("kind").string("klqe");
-    if (kind != "klqe") throw std::invalid_argument("Unknown estimator kind: " + kind);
     if (!count) throw std::invalid_argument("estimator needs a trajectory");
     const double dt = spec.at("sample_time").number(solver.at("control_sample_time").number(defaultStep));
     if (!std::isfinite(dt) || dt <= 0) throw std::invalid_argument("estimator sample_time must be positive");
+    if (detail::isClassicalEstimator(kind)) return detail::buildClassicalEstimator(spec, dt, system, count);
+    if (kind != "klqe") throw std::invalid_argument("Unknown estimator kind: " + kind);
     const auto path = spec.at("krom").string();
     if (path.empty()) throw std::invalid_argument("KLQE estimator requires a KROM archive");
     std::vector<std::size_t> selected;

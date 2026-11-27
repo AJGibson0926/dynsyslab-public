@@ -30,7 +30,7 @@ int main() {
             states.push_back(-std::sin(t));
         }
         auto metadata = j::parse(
-            R"({"format":"dynsyslab.solution/v1","system":"harmonic_oscillator","integration_form":"dimensional","label":"Analytic and phase context fixture"})");
+            R"({"schema":"dynsyslab.solution/v1","system":"harmonic_oscillator","integration_form":"dimensional","label":"Analytic and phase context fixture"})");
         core::NpzRecord record;
         record.arrays["values"] = core::NpyArray::fromDoubles({time.size(), 2}, states);
         record.arrays["time"] = core::NpyArray::fromDoubles({time.size()}, time);

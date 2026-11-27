@@ -28,7 +28,7 @@ BoundBilinearCertificate bindBilinearCertificate(const json::Value& settings, co
     if (path.empty()) throw std::invalid_argument("bilinear_certificate must be an archive path");
     const auto archive = c::readNpz(c::wide(path));
     const auto meta = json::parse(archive.metadataJson());
-    if (meta.at("method").string() != "koopman-bilinear-certificate")
+    if (meta.at("bilinear_certificate").isNull())
         throw std::invalid_argument("bilinear_certificate is not a bilinear certificate archive");
     const auto& record = meta.at("bilinear_certificate");
     const auto status = record.at("status").string();
@@ -41,11 +41,11 @@ BoundBilinearCertificate bindBilinearCertificate(const json::Value& settings, co
 
     const auto split = c::continuousBilinearSplit(model, representation);
     const auto n = split.stateDimension, m = split.inputDimension;
-    if (required(archive, "continuous_generator", n * n) != split.generator
-        || required(archive, "continuous_offsets", n * m) != split.offsets)
+    if (required(archive, "continuous_generator", n * n) != split.A
+        || required(archive, "continuous_offsets", n * m) != split.B0)
         throw std::invalid_argument("bilinear_certificate generator or input offset differs from this K-ROM");
     std::vector<double> operators;
-    for (const auto& matrix : split.operators) operators.insert(operators.end(), matrix.begin(), matrix.end());
+    for (const auto& matrix : split.B) operators.insert(operators.end(), matrix.begin(), matrix.end());
     if (required(archive, "continuous_operators", m * n * n) != operators)
         throw std::invalid_argument("bilinear_certificate bilinear operators differ from this K-ROM");
 

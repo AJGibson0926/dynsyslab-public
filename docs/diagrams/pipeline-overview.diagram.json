@@ -1,7 +1,7 @@
 {
  "schema": "dynsyslab.architecture-diagram/v1",
- "title": "DynSysLab pipeline: training solve to K-ROM control on (r, ṙ)",
- "description": "One RPE control run on state-space eigenfunctions. Settings are those of examples/native/pipelines/rpe-viscous-klqr-multisine/base-r.json; every stage is a job, and later stages name earlier ones (${train.archive}).",
+ "title": "The base-r experiment on the DynSysLab pipeline: training solve to K-ROM control on (r, ṙ)",
+ "description": "One RPE control experiment on state-space eigenfunctions, drawn as the pipeline modules it uses. Settings are those of examples/native/experiments/rpe-viscous-klqr-multisine/base-r.json; every stage is a job, and later stages name earlier ones (${train.archive}).",
  "root": {
   "id": "pipeline", "kind": "group", "layout": "row", "gap": 60,
   "children": [

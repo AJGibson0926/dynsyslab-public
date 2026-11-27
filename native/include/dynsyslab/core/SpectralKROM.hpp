@@ -1,6 +1,8 @@
 #pragma once
 #include <dynsyslab/core/Json.hpp>
 #include <dynsyslab/core/Observable.hpp>
+#include <dynsyslab/core/Pseudospectrum.hpp>
+#include <dynsyslab/core/SpectralMeasure.hpp>
 #include <complex>
 #include <cstddef>
 #include <map>
@@ -21,18 +23,13 @@ struct SpectralDictionary {
     std::size_t size() const;
     std::vector<double> evaluate(const std::vector<double>& points) const;
 };
-struct SpectralMeasure {
-    std::string name, domain{"unit-circle"}, method, assumptions;
-    std::vector<double> grid, density, atomLocations, atomMasses;
-    std::vector<std::complex<double>> moments;
-    double totalMass{}, bandwidth{};
-    std::size_t order{};
-};
+// A spectral fit's residuals: one per eigenpair (the krom keeps them on its Spectrum's eigenpairs) and,
+// on a requested grid, the pseudospectrum (Colbrook & Townsend, Comm. Pure Appl. Math. 77, 2024). The
+// koopman_spectral family uses the one-step definition (Eigenpair.hpp).
 struct SpectralResiduals {
     std::string scope{"empirical-training"}, definition;
-    std::vector<double> eigenpair, minimum;
-    std::vector<std::complex<double>> grid, minimizingCoefficients;
-    std::size_t features{};
+    std::vector<double> eigenpair;
+    Pseudospectrum pseudospectrum;  // same definition and scope; empty without a grid
 };
 struct SpectralInvariance {
     std::vector<double> principalAngles;
@@ -60,13 +57,19 @@ struct RkhsAdjointSpectrum {
     SpectralResiduals residuals;
     std::string assumptions;
 };
-struct SpectralData {
-    std::vector<SpectralMeasure> measures;
+// What a spectral fit computes beyond its spectrum and eigenfunctions, kept on a krom under this name:
+// invariance of the trial space, wave packets, stochastic residuals and RKHS adjoint spectra.
+struct SpectralDiagnostics {
     StochasticSpectralResiduals stochastic;
     std::vector<RkhsAdjointSpectrum> rkhsAdjoints;
-    SpectralResiduals residuals;
     SpectralInvariance invariance;
     std::vector<SpectralWavePackets> wavePackets;
+};
+// A spectral fit's whole output: its diagnostics, plus the parts a krom keeps on its Spectrum (measures
+// as continuous components; residuals on the eigenpairs and as the pseudospectrum).
+struct SpectralData : SpectralDiagnostics {
+    std::vector<SpectralMeasure> measures;
+    SpectralResiduals residuals;
 };
 struct SpectralReconstruction {
     std::size_t outputs{};
@@ -93,6 +96,10 @@ json::Value spectralDictionaryJson(const SpectralDictionary&);
 SpectralDictionary spectralDictionaryFromJson(const json::Value&);
 json::Value spectralDataJson(const SpectralData&);
 SpectralData spectralDataFromJson(const json::Value&);
+json::Value spectralDiagnosticsJson(const SpectralDiagnostics&);
+SpectralDiagnostics spectralDiagnosticsFromJson(const json::Value&);
+json::Value spectralMeasureJson(const SpectralMeasure&);
+SpectralMeasure spectralMeasureFromJson(const json::Value&);
 json::Value spectralKromJson(const SpectralKROM&);
 SpectralKROM spectralKromFromJson(const json::Value&);
 } // namespace dynsyslab::core

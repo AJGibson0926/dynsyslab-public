@@ -14,22 +14,32 @@ std::optional<SampleStates> statesAtSamples(const c::TimeSeriesRecord& record, c
     if (!record.stateSource) return std::nullopt;
     const auto source = loadSource(std::filesystem::u8path(record.stateSource->path));
     SampleStates out;
-    out.dimension = source.dimension;
+    out.dimension = source.dimension();
     out.system = systemConfiguration(source);
-    out.values.reserve(times.size() * source.dimension);
+    out.values.reserve(times.size() * source.dimension());
     for (const double t : times) {
         const double tolerance = 1e-9 * std::max(1.0, std::abs(t));
-        const auto found = std::lower_bound(source.time.begin(), source.time.end(), t - tolerance);
-        const auto row = std::size_t(found - source.time.begin());
-        if (row >= source.samples || std::abs(source.time[row] - t) > tolerance)
+        const auto found = std::lower_bound(source.time().begin(), source.time().end(), t - tolerance);
+        const auto row = std::size_t(found - source.time().begin());
+        if (row >= source.samples() || std::abs(source.time()[row] - t) > tolerance)
             throw std::invalid_argument("state source " + record.stateSource->path + " has no sample at a training time");
-        out.values.insert(out.values.end(), source.values.begin() + std::ptrdiff_t(row * source.dimension),
-                          source.values.begin() + std::ptrdiff_t((row + 1) * source.dimension));
+        out.values.insert(out.values.end(), source.values().begin() + std::ptrdiff_t(row * source.dimension()),
+                          source.values().begin() + std::ptrdiff_t((row + 1) * source.dimension()));
     }
     return out;
 }
 
-SampleStates trainingStates(const c::EigenfunctionSet& set) {
+SampleStates trainingStates(const c::KoopmanModel& set) {
+    // An interpolation on the physical state stores the states at the samples themselves.
+    for (const auto& rep : set.representations())
+        if (const auto* fi = dynamic_cast<const c::FunctionInterpolation*>(rep.function.get());
+            fi && fi->coordinates().isPhysicalState() && fi->data().samples == set.samples().samples() && set.samples().samples()) {
+            SampleStates out;
+            out.values = fi->points();
+            out.dimension = fi->coordinateDimension();
+            if (set.hasPhysicalSystem()) out.system = set.systemConfiguration();
+            return out;
+        }
     std::vector<std::filesystem::path> inputs;
     for (const auto& input : set.origin().inputs)
         if (input.role == "time_series") inputs.push_back(std::filesystem::u8path(input.path));

@@ -2,7 +2,6 @@
 #include "HdmdObjects.hpp"
 #include "SampledDomain.hpp"
 #include "TimeSeriesSource.hpp"
-#include <dynsyslab/core/EigenfunctionArchive.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <algorithm>
 #include <dynsyslab/core/Spectral.hpp>
@@ -24,12 +23,11 @@ std::size_t countSetting(const json::Value& settings,const char* name,double fal
 std::filesystem::path runHdmd(const SourceData& full, const json::Value& settings,
                               const std::filesystem::path& root, const std::string& label) {
     namespace c = dynsyslab::core;
+    // Several trajectories ("additional_sources"): one pooled fit (HdmdPooled.cpp).
+    if(!settings.at("additional_sources").array().empty())return runPooledHdmd(full,settings,root,label);
     // Input: one or more time series on a common clock, and nothing else.
-    std::vector<c::TimeSeriesRecord> parts{timeSeriesRecord(full)};
-    for (const auto& path : settings.at("additional_time_series").array())
-        parts.push_back(timeSeriesRecord(loadSource(std::filesystem::u8path(path.string()))));
-    const auto record = c::joinTimeSeriesRecords(parts);
-    const auto view = sourceView(record, full);
+    const auto view = joinedTimeSeries(full, settings);
+    const auto& record = view.record;
 
     c::HankelDMDOptions options;
     // "time_window" [start, stop] restricts the Hankel matrix to that stretch of the record.
@@ -52,40 +50,39 @@ std::filesystem::path runHdmd(const SourceData& full, const json::Value& setting
         options.optimalHardThreshold=rule=="optimal_hard_threshold";
     }
     options.terminalAmplitudeEnergySort=settings.at("mode_sort").string("terminal-amplitude-energy")!="none";
-    // H-DMD publishes data objects only: the eigenfunctions (with their spectrum and properties),
-    // the reconstructions written over them, and on request the Hankel matrix it read.
-    c::NpzRecord archive, reconstructions, matrix;
-    if(settings.at("save_matrix").boolean()) archiveHankelLayout(matrix,input,true);
+    // H-DMD publishes data objects only: its K-ROM (spectrum, eigenfunctions, the readouts C of its
+    // channels and requested observables) and on request the Hankel matrix it read.
+    c::NpzRecord archive, matrix;
+    if(settings.at("save_matrix").boolean()) matrix=hankelMatrixObject(source,input,label);
     const std::size_t labelOffset=input.alignEnd?input.matrix.ends.at(0)-input.matrix.starts.at(0):0;
     // The fit consumes the matrix data; input.matrix.window and input.provenance keep the layout.
     const auto result=c::fitHankelDMD(std::move(input.matrix),input.names,uniformDeltaTime(source),options);
 
     const HdmdFitContext context{&record,first,labelOffset,&input,&settings};
-    const auto set=hdmdEigenfunctionSet(result,context);
-    auto objects=c::writeEigenfunctionSet(archive,set,record.channels);
+    auto set=hdmdEigenfunctions(result,context);
     archive.arrays["sample_interval"]=c::NpyArray::fromDoubles({1},{result.deltaTime});
 
     // Errors of the default representation on its default domain (first in each list).
-    const auto errors=set.errors({}, {}, &record);
+    const auto errors=set.errors({}, &record);
     archive.arrays["eigenfunction_value_error"]=c::NpyArray::fromDoubles({result.rank},errors.valueRelative);
-    archive.arrays["eigenfunction_koopman_residual"]=c::NpyArray::fromDoubles({result.rank},errors.koopmanResidual);
-    objects.object()["errors"]=json::Value::Object{{"representation",errors.representation},
+    // Each eigenpair carries H-DMD's one-step residual of the evaluated representation along the training
+    // trajectory, ||psi(x_k+1) - mu psi(x_k)|| / ||psi(x_k)|| (core/Eigenpair.hpp, "one-step"; Arbabi &
+    // Mezic, SIAM J. Appl. Dyn. Syst. 16, 2017; the residual of Colbrook & Townsend 2024).
+    for(std::size_t mode=0;mode<errors.koopmanResidual.size();++mode)
+        set.setResidual(mode,c::EigenpairResidual{errors.koopmanResidual[mode],c::residual_definition::oneStep,
+            c::residual_scope::empiricalTraining});
+    const json::Value errorBlock=json::Value::Object{{"representation",errors.representation},
         {"domain",errors.domain},{"samples",double(errors.samples)},
-        {"arrays",json::Value::Array{json::Value("eigenfunction_value_error"),json::Value("eigenfunction_koopman_residual")}}};
+        {"arrays",json::Value::Array{json::Value("eigenfunction_value_error")}},{"residual","eigenpair_residual"}};
 
     const auto channels=result.observableNames.size();
-    reconstructions.arrays["reconstruction_matrix"]=c::NpyArray::fromComplex({channels,result.rank},result.reconstructionMatrix);
-    std::string reconstructionNames;
+    archive.arrays["reconstruction_matrix"]=c::NpyArray::fromComplex({channels,result.rank},result.reconstructionMatrix);
     std::set<std::string> keys;
-    for(std::size_t channel=0;channel<channels;++channel) {
+    for(std::size_t channel=0;channel<channels;++channel) {  // C of each channel the matrix read
         const auto& name=result.observableNames[channel];
-        const auto key=safeArrayKey(name);
-        if(!keys.insert(key).second)throw std::invalid_argument("observable archive keys collide");
-        if(!reconstructionNames.empty())reconstructionNames+="\n";
-        reconstructionNames+=name;
-        reconstructions.arrays["reconstruction__"+key]=c::NpyArray::fromComplex({1,result.rank},
-            std::vector<std::complex<double>>(result.reconstructionMatrix.begin()+channel*result.rank,
-                result.reconstructionMatrix.begin()+(channel+1)*result.rank));
+        if(!keys.insert(safeArrayKey(name)).second)throw std::invalid_argument("observable archive keys collide");
+        set.setReconstruction(name,{std::vector<std::complex<double>>(result.reconstructionMatrix.begin()+channel*result.rank,
+            result.reconstructionMatrix.begin()+(channel+1)*result.rank),1,result.rank});
     }
     if(!settings.at("reconstruction_observables").array().empty()) {
         // Catalog observables are functions of the state, found through the input record's origin,
@@ -104,13 +101,9 @@ std::filesystem::path runHdmd(const SourceData& full, const json::Value& setting
             const auto fitted=c::fitObservableReconstruction(result.coordinates,
                 result.samples,result.rank,values,observable.outputDimension(),
                 settings.at("reconstruction_ridge").number());
-            reconstructions.arrays["reconstruction__"+key]=c::NpyArray::fromComplex({fitted.outputs,result.rank},fitted.matrix);
-            reconstructions.arrays["reconstruction_error__"+key]=c::NpyArray::fromDoubles(
-                {3},{fitted.residualRms,fitted.residualMaximum,fitted.relativeResidual});
-            reconstructionNames+="\n"+name;
+            set.setReconstruction(name,fitted);
         }
     }
-    reconstructions.arrays["reconstruction_names"]=c::NpyArray::fromString(reconstructionNames);
     archive.arrays["hankel_singular_values"]=c::NpyArray::fromDoubles({result.singularValues.size()},result.singularValues);
     archive.arrays["terminal_modal_amplitudes"]=c::NpyArray::fromComplex({result.rank},result.modalAmplitudes);
     std::vector<double> indices; for (auto value : result.sourceModeIndices) indices.push_back(static_cast<double>(value));
@@ -125,7 +118,7 @@ std::filesystem::path runHdmd(const SourceData& full, const json::Value& setting
         + ",\"gradient_backend\":\"finite-difference\",\"interpolation_neighbors\":"
         + std::to_string(std::size_t(settings.at("interpolation_neighbors").number(8)))
         + ",\"gradient_relative_step\":0.000001"
-        + ",\"eigenfunction_provenance\":\"H-DMD eigenfunction objects (dynsyslab.eigenfunction-objects/v1)\""
+        + ",\"eigenfunction_provenance\":\"H-DMD K-ROM (dynsyslab.krom/v1)\""
         + ",\"hankel_window\":"+json::dump(input.provenance)
         + ",\"delta_t\":" + json::dump(json::Value(result.deltaTime))
         + ",\"sampling_window\":" + std::to_string(options.samplingWindow)
@@ -139,27 +132,18 @@ std::filesystem::path runHdmd(const SourceData& full, const json::Value& setting
         + ",\"delay_count\":"+std::to_string(result.delayCount)
         + ",\"sample_stride\":"+std::to_string(options.sampleStride)
         + ",\"rank\":" + std::to_string(result.rank)));
-    meta.object()["eigenfunction_objects"]=std::move(objects);
+    meta.object()["eigenfunction_errors"]=errorBlock;
     // Properties of the eigenfunctions as H-DMD produced them (per eigenfunction, except the input's
     // Hankel singular values, which describe the data the method read).
     meta.object()["object_properties"]=json::Value::Object{
-        {"per_eigenfunction",json::Value::Array{"eigenfunction_value_error","eigenfunction_koopman_residual",
+        {"per_eigenfunction",json::Value::Array{"eigenfunction_value_error",
                                                  "terminal_modal_amplitudes","energy_sort_source_indices"}},
         {"of_input",json::Value::Array{"hankel_singular_values"}}};
-    archive.arrays["metadata_json"]=c::NpyArray::fromString(json::dump(meta));
-    const auto eigenfunctions=publish(root, source, "koopman-hankel-dmd", label, std::move(archive));
-
-    auto reconstructionMeta=json::parse(metadata(source,"hankel-dmd-reconstructions",label,""));
-    reconstructionMeta.object()["reconstructions"]=c::reconstructionsBlock(eigenfunctions,result.rank);
-    reconstructions.arrays["metadata_json"]=c::NpyArray::fromString(json::dump(reconstructionMeta));
-    registerAdditionalObject(publish(root,source,"reconstructions",label,std::move(reconstructions)));
+    const auto krom=publishKrom(root,source,set,"koopman-hankel-dmd",json::dump(meta),std::move(archive.arrays),record.channels);
     if(!matrix.arrays.empty()){
-        auto matrixMeta=json::parse(metadata(source,"hankel-matrix",label,""));
-        matrixMeta.object()["hankel_window"]=input.provenance;
-        matrix.arrays["metadata_json"]=c::NpyArray::fromString(json::dump(matrixMeta));
-        registerAdditionalObject(publish(root,source,"hankel_matrix",label,std::move(matrix)));
+        registerAdditionalObject(publishObject(root, source, dynsyslab::core::object_kind::matrix, "hankel_matrix",std::move(matrix)));
     }
-    return eigenfunctions;
+    return krom;
 }
 
 

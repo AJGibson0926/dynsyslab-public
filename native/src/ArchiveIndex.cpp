@@ -305,7 +305,7 @@ std::string summarizeArchiveMetadata(const std::string& metadataJson) {
         const auto source = json::parse(metadataJson);
         json::Value::Object summary;
         constexpr const char* fields[]{
-            "label", "system_label", "system", "method", "analysis", "format",
+            "label", "system_label", "system", "method", "analysis", "schema",
             "system_preset", "equations_version", "equations_fingerprint",
             "integration_form", "krom_mode_count", "eigenfunction_representation",
             "control_map_time_domain", "control_coordinate_system", "control_maps",
@@ -316,11 +316,6 @@ std::string summarizeArchiveMetadata(const std::string& metadataJson) {
             "training_archives", "validation_archives", "test_archives", "validated_krom",
             "value_space", "eigenfunction"};
         for (const auto* field : fields) copyField(summary, source, field);
-        if (source.at("format").string() == "dynsyslab.hierarchy/v1") {
-            copyField(summary, source, "job");
-            copyField(summary, source, "systems");
-            copyField(summary, source, "tier");
-        }
         copyPath(summary, source, "system_configuration", "identifier");
         copyPath(summary, source, "data_object", "kind");
         if (!source.at("analysis_metadata").at("krom").isNull())

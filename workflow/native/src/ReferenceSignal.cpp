@@ -154,12 +154,13 @@ std::filesystem::path runReferenceSignal(const std::vector<std::filesystem::path
     record.arrays["inverse_drive"] = c::NpyArray::fromDoubles({n, 1}, drive);
     record.arrays["matching_residual"] = c::NpyArray::fromDoubles({n}, residual);
     record.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(json::Value(json::Value::Object{
-        {"format", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("reference-signal")},
+        {"schema", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("reference-signal")},
         {"label", json::Value(label)}, {"system", json::Value(system->descriptor().identifier)},
         {"target", targetSpec}, {"data_role", json::Value("reference_signal")}})));
-    const auto directory = objectFolder(root, "reference-signal");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::timeSeries);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(label + "__" + timestamp()) + ".npz");
+    stampDataObject(record, dynsyslab::core::object_kind::timeSeries, "reference-signal", {});
     c::writeNpzAtomicNew(path, record);
     return path;
 }

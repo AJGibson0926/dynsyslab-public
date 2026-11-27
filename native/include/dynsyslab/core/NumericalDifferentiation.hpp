@@ -11,6 +11,9 @@
 //
 // Offline methods
 //   central             2nd-order central difference (no smoothing; the baseline)
+//   central_high_order  central difference of accuracy order points-1 (points: odd stencil width,
+//                       default 9 = 8th order), one-sided stencils of the same width at the ends;
+//                       weights by Fornberg 1988, Math. Comp. 51:699-706
 //   savitzky_golay      local least-squares polynomial (window, order), derivative of the fit
 //   gaussian            convolution with the derivative of a Gaussian (sigma)
 //   holoborodko         smooth noise-robust differentiator (N points, stride): exact on cubics,
@@ -60,6 +63,12 @@ struct DerivativeSpec {
     std::size_t despike{0};      // offline only: Hampel filter half-window (samples) applied first; 0 = off
     double despikeThreshold{3};  // replace samples farther than this many robust std (MAD) from the window median
 };
+
+// Weights w_j with f^(m)(0) ~ sum_j w_j f(x_j) on distinct nodes x_j (Fornberg 1988); for nodes on an
+// integer grid of step h divide by h^m.
+[[nodiscard]] std::vector<double> differenceWeights(const std::vector<double>& nodes, std::size_t derivativeOrder);
+// dy/dt of a uniformly sampled signal by the central_high_order stencils.
+[[nodiscard]] std::vector<double> highOrderCentralDifference(const std::vector<double>& y, double dt, std::size_t points = 9);
 
 // Hampel despiking (median / MAD outlier replacement) used by DerivativeSpec::despike.
 [[nodiscard]] std::vector<double> despike(const std::vector<double>& y, std::size_t halfWindow, double threshold = 3);

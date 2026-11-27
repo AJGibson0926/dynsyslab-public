@@ -1,6 +1,6 @@
 {
   "schema": "dynsyslab.compute-job/v1",
-  "kind": "pipeline",
+  "kind": "experiment",
   "label": "Koopman action demos",
   "description": "The Koopman operator acting on a state-component observable, U^t g = g o Phi^t, for the undamped pendulum (g = angle), double-well Duffing (g = position) and Rayleigh-Plesset bubble (g = radius), each animated beside its phase portrait; plus the push-forward of the bubble radius into the far-field echo coordinates (e, e').",
   "reuse_identical_stages": false,

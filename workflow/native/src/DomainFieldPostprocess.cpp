@@ -129,10 +129,10 @@ std::filesystem::path runDomainField(const std::filesystem::path& sourcePath, co
     // The domain: the state space, or the K-ROM's own coordinates when the state cannot give them.
     auto f = operation == "pull_back" ? Function{} : function(settings.at("function"), *system, stateNames);
     const bool external = !f.observable && operation != "pull_back";
-    auto domain = external ? c::FunctionDomain::supplied(f.dimension) : c::FunctionDomain::physicalState(source.dimension);
+    auto domain = external ? c::FunctionDomain::supplied(f.dimension) : c::FunctionDomain::physicalState(source.dimension());
     if (!external) domain.names = stateNames;
     if (external && operation != "evaluate") throw std::invalid_argument("domain_field " + operation + " needs a function of the state");
-    const auto g = grid(settings.at("domain"), domain, external ? std::vector<double>{} : source.values);
+    const auto g = grid(settings.at("domain"), domain, external ? std::vector<double>{} : source.values());
 
     c::GridFieldSeries series;
     auto target = [&]() {
@@ -183,7 +183,7 @@ std::filesystem::path runDomainField(const std::filesystem::path& sourcePath, co
     meta.object()["domain_field_settings"] = settings;
     if (!settings.at("animation").isNull()) meta.object()["animation"] = settings.at("animation");  // frame_seconds, loop, autoplay
     series.metadata = std::move(meta);
-    return publish(root, source, "domain-field", label, c::gridFieldArchive(series));
+    return publishObject(root, source, dynsyslab::core::object_kind::field, "domain-field", c::gridFieldArchive(series));
 }
 
 }  // namespace dynsyslab::workflow::postprocess_detail

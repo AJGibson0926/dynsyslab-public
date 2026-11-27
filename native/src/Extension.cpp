@@ -3,6 +3,7 @@
 #include <dynsyslab/core/Json.hpp>
 #include <dynsyslab/core/Text.hpp>
 #include <dynsyslab/extension_api.h>
+#include "ExtensionModels.hpp"
 
 #include <algorithm>
 #include <array>
@@ -258,7 +259,7 @@ std::string ExtensionRegistry::load(const std::filesystem::path& path) {
     }
     const dsl_extension_v1* extension = entry();
     if (!extension || extension->abi_version != DSL_EXTENSION_ABI_VERSION
-        || extension->struct_size < sizeof(dsl_extension_v1)
+        || extension->struct_size < DSL_EXTENSION_V1_CORE_SIZE
         || !extension->identifier || !extension->identifier[0])
     {
         closeModule(handle);
@@ -312,6 +313,22 @@ std::unique_ptr<ODESystem> ExtensionRegistry::createSystem(
     }
     if (selected) return std::make_unique<ExtensionSystem>(*selected,configuration);
     return {};
+}
+
+std::vector<ExtensionModel> ExtensionRegistry::models() const {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    std::vector<ExtensionModel> result;
+    for (const auto& module : impl_->modules) {
+        auto models = detail::extensionModels(*module.extension);
+        result.insert(result.end(), models.begin(), models.end());
+    }
+    return result;
+}
+
+std::optional<ExtensionModel> ExtensionRegistry::model(const std::string& identifier) const {
+    for (auto& candidate : models())
+        if (candidate.identifier == identifier) return candidate;
+    return std::nullopt;
 }
 
 std::string ExtensionRegistry::execute(const std::string& extension,

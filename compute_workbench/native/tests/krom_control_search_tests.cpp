@@ -15,13 +15,13 @@ std::string escape(const std::string& value){std::string result;for(char item:va
     if(item=='\\'||item=='"')result.push_back('\\');result.push_back(item);}return result;}
 
 std::filesystem::path makeKrom(const std::filesystem::path& root){
-    dynsyslab::core::KoopmanSINDyResult fit;fit.continuousEigenvalues={{-1.0,0.0}};
-    fit.coefficients={{1.0,0.0}};fit.exponents={0,1};fit.center={0,0};fit.scale={1,1};
-    fit.stateDimension=2;fit.featureCount=1;dynsyslab::core::SystemConfiguration system;
+    auto fit=dynsyslab::core::polynomialEigenfunctions(2,{0,1},{{1.0,0.0}},
+        dynsyslab::core::Spectrum::fromContinuousRates({{-1.0,0.0}}),{0,0},{1,1});
+    dynsyslab::core::SystemConfiguration system;
     system.identifier="duffing";system.preset="double_well_reference";
     dynsyslab::core::KoopmanModel model(std::move(fit),system);
     model.setReconstruction("state",{{{0,0},{1,0}},2,1,0,0,0});const auto path=root/"velocity-krom.npz";
-    dynsyslab::core::savePolynomialKoopmanModel(path,model);return path;}
+    dynsyslab::core::saveKoopmanModel(path,model);return path;}
 
 dynsyslab::core::json::Value searchJob(const std::filesystem::path& krom,
     const std::filesystem::path& controlled){return dynsyslab::core::json::parse(

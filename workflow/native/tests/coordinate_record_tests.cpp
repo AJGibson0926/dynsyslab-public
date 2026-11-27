@@ -48,7 +48,7 @@ int main() {
         source.arrays["time"] = core::NpyArray::fromDoubles({samples}, time);
         source.arrays["values"] = core::NpyArray::fromDoubles({samples, 2}, states);
         source.arrays["metadata_json"] = core::NpyArray::fromString(
-            R"({"format":"dynsyslab.trajectory/v1","label":"source","system":"duffing","system_preset":"double_well_reference","resolved_system_parameters":{"delta":0},"integration_form":"dimensionless"})");
+            R"({"schema":"dynsyslab.trajectory/v1","label":"source","system":"duffing","system_preset":"double_well_reference","resolved_system_parameters":{"delta":0},"integration_form":"dimensionless"})");
         core::writeNpzAtomic(sourcePath, source);
 
         // An observable map: stored as metadata and a record only; reading replays it.

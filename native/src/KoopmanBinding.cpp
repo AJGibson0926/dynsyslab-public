@@ -6,11 +6,9 @@ namespace dynsyslab::core::detail {
 namespace {
 SystemConfiguration readSystem(const json::Value& metadata);
 bool coordinateOnly(const NpzRecord& a) {
-    if (a.contains("polynomial_contract_json"))
-        return !json::parse(a.at("polynomial_contract_json").string()).at("physical_system_attached").boolean();
-    // Expansion eigenfunctions of data with no producing system are functions of their coordinates only.
-    return a.contains("expansion_coefficients") && !a.metadataJson().empty()
-        && readSystem(json::parse(a.metadataJson())).identifier.empty();
+    // A K-ROM or eigenfunctions object of data with no producing system is a function of its
+    // coordinates only.
+    return a.metadataJson().empty() || readSystem(json::parse(a.metadataJson())).identifier.empty();
 }
 SystemConfiguration readSystem(const json::Value& metadata) {
     const auto& encoded=metadata.at("system_configuration");
@@ -55,9 +53,9 @@ ArchiveBinding resolveArchiveBinding(const NpzRecord& a,
     }
     const bool known=!archived.identifier.empty()&&!archived.parameters.empty();
     if(!known) {
-        if(!options.allowUnverifiedLegacy&&!meaningful(options.unverifiedLegacyReason))
-            throw std::invalid_argument("KROM lacks verified physical provenance; supply unverified_legacy_reason explicitly");
-        if(requested.identifier.empty())throw std::invalid_argument("Legacy KROM requires an explicit physical system");
+        // An archive that names no physics (e.g. eigenfunctions computed from measured channels of a
+        // solve) is bound to the system the caller names, and the binding says so.
+        if(requested.identifier.empty())throw std::invalid_argument("this archive records no physical system; name one explicitly");
         // Even partial metadata must not be contradicted without an explicit transfer.
         if(!archived.identifier.empty()) {
             auto partial=requested;partial.identifier=archived.identifier;
@@ -67,8 +65,7 @@ ArchiveBinding resolveArchiveBinding(const NpzRecord& a,
             if(!differences.empty()&&!meaningful(options.systemTransferReason))
                 requireCompatibleSystems(partial,requested);
         }
-        evidence["status"]="unverified-legacy";
-        evidence["reason"]=options.unverifiedLegacyReason;
+        evidence["status"]="requested-system";
         evidence["transfer_reason"]=options.systemTransferReason;
         evidence["requested_system"]=koopmanSystemJson(requested);
         return {requested,json::dump(evidence)};

@@ -5,6 +5,7 @@
 #include "PlotLegend.hpp"
 #include "PlotSeries.hpp"
 #include "PlotHeatmap.hpp"
+#include "PlotColorbar.hpp"
 #include "MathTextDrawing.hpp"
 #include "dynsyslab_viewer/MathText.hpp"
 #include "dynsyslab_viewer/PlotPresentation.hpp"
@@ -85,9 +86,13 @@ Gdiplus::RectF plotArea(const Figure& figure, const Gdiplus::RectF& card, const 
     const bool redundantTitle = figure.title == "Phase space" ||
         figure.title == "Control history" ||
         (figure.kind == "time" && figure.title.find(" versus time") != std::string::npos);
-    const float top = (figure.kind == "observable_heatmap" || figure.kind == "krom_heatmap" || figure.kind == "domain_field" || figure.kind == "krom_time" && !figure.colorLabel.empty()) ? 70.0f : !figure.colorLabel.empty() ? 36.0f : (redundantTitle ? 10.0f : 44.0f);
+    // Domain-coloured figures carry a caption under the title; colour bars sit right of the plot.
+    const bool domainCaption = std::any_of(figure.traces.begin(), figure.traces.end(),
+        [](const Trace& trace) { return trace.encoding == "domain-color"; });
+    const float top = domainCaption ? 56.0f : (redundantTitle ? 10.0f : 44.0f);
+    const float right = (figure.rightAxis ? 192 : 130) + plotColorbarReserve(figure);
     Gdiplus::RectF plot(card.X + 90*scale, card.Y + top*scale,
-        std::max(1.0f, card.Width - (figure.rightAxis ? 192 : 130)*scale), std::max(1.0f, card.Height - (top+62)*scale));
+        std::max(1.0f, card.Width - right*scale), std::max(1.0f, card.Height - (top+62)*scale));
     return figure.square && figure.kind != "phase" ? squareInside(plot) : plot;
 }
 
@@ -107,7 +112,6 @@ PlotTransform renderTransform(const Figure& figure, const Gdiplus::RectF& card,
     return {plot.X, plot.Y, plot.Width, plot.Height,
             xr.low, xr.high, yr.low, yr.high, ordinateScale(figure)};
 }
-
 
 void grid(Gdiplus::Graphics& graphics, const Gdiplus::RectF& area,
           const Range& xr, const Range& yr, const Figure& figure,
@@ -417,8 +421,8 @@ void figureCard(Gdiplus::Graphics& graphics, const Figure& figure,
         drawMathText(graphics, wide(scientificMathLabel(figure.title)), {card.X + 14, card.Y + 5,
             card.Width - 28, 30}, fonts.heading,
             figure.titleColor.empty() ? theme::plotText : colorRef(figure.titleColor,0));
-    if (!figure.traces.empty() && figure.traces.front().encoding == "domain-color")
-        drawText(graphics,figure.kind == "krom_time" ? L"Hue: phase; height: magnitude" : L"Hue: phase; brightness: relative magnitude",{card.X+14,card.Y+31,card.Width-28,20},fonts.caption,theme::plotMuted);
+    if (std::any_of(figure.traces.begin(), figure.traces.end(), [](const Trace& t) { return t.encoding == "domain-color"; }))
+        drawText(graphics,figure.kind == "krom_time" ? L"Hue: phase; height: magnitude" : L"Hue: phase; brightness: relative magnitude",{card.X+14,card.Y+34*scientificTextScale(fonts.body),card.Width-28,20},fonts.caption,theme::plotMuted);
     const Gdiplus::RectF plot(static_cast<float>(transform.left),
         static_cast<float>(transform.top), static_cast<float>(transform.width),
         static_cast<float>(transform.height));
@@ -427,7 +431,7 @@ void figureCard(Gdiplus::Graphics& graphics, const Figure& figure,
         drawPlot3D(graphics, figure,
             {transform.left, transform.top, transform.width, transform.height},
             camera3D ? *camera3D : fallback, hovered3DControl, fonts);
-        drawTimeColorbar(graphics, figure, plot, fonts);
+        drawPlotColorbar(graphics, figure, plot, fonts);
         // Non-trajectory 3-D plots (stem plots) with several labelled series get a
         // legend. The camera controls occupy the top right and the interaction hint the
         // bottom edge, so it sits bottom right, just above the hint.
@@ -458,8 +462,7 @@ void figureCard(Gdiplus::Graphics& graphics, const Figure& figure,
             else drawPlotSeries(graphics, trace, index, transform, trajectoryTimeRange(figure));
         }
     drawPlotReferences(graphics, figure, transform, fonts);
-    drawTimeColorbar(graphics, figure, plot, fonts);
-    drawScalarColorbar(graphics, figure, plot, fonts);
+    drawPlotColorbar(graphics, figure, plot, fonts);
     const bool ordinaryLegend = figure.kind != "krom_spectrum" && figure.kind != "stem"
         && !(figure.kind == "krom_time" && figure.traces.size() == 1)
         && !figure.traces.empty() && !figure.traces.front().heatmap;

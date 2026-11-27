@@ -18,6 +18,14 @@ namespace dynsyslab::workflow::detail {
 //                       "line_style":"solid"}]}}
 [[nodiscard]] std::vector<std::string> viewerFigureArguments(const json::Value& job,
                                                              const std::filesystem::path& output);
+// Curves with their own "source" and "clock", and "figure.clock" (ViewerFigureSources.cpp):
+//   "curves":[{"series":"values","source":"${inputs.other}","clock":"estimator_time",
+//               "interpolation":"linear"}], "clock":{"source":"${inputs.table}","array":"time"}
+// Every curve is resampled onto the figure clock into one scratch archive before rendering.
+[[nodiscard]] bool hasCurveSources(const json::Value& job);
+[[nodiscard]] json::Value assembleCurveSources(const json::Value& job, const std::filesystem::path& scratch);
+// "figure.fit_y_to":[curve indices]: the ordinate range of a model-scale page (ViewerFigureSources.cpp).
+[[nodiscard]] json::Value fitOrdinate(const json::Value& job);
 [[nodiscard]] json::Value planViewerFigure(const json::Value& job);
 [[nodiscard]] RunResult executeViewerFigure(const json::Value& job, const std::filesystem::path& archiveRoot);
 

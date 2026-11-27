@@ -1,5 +1,6 @@
 #pragma once
 
+#include <dynsyslab/core/EigenfunctionFit.hpp>
 #include <dynsyslab/core/SINDy.hpp>
 #include <dynsyslab/core/HistoryObservation.hpp>
 
@@ -23,7 +24,7 @@ struct PooledHankelOptions {
 };
 
 
-[[nodiscard]] PooledHankelBasis fitPooledHankelBasis(
+[[nodiscard]] HankelLeftBasis fitPooledHankelBasis(
     const std::vector<std::vector<double>>& observations,
     const PooledHankelOptions& options = {});
 
@@ -37,7 +38,9 @@ struct PooledPolynomialEDMDOptions {
 };
 
 struct PooledPolynomialEDMD {
-    KoopmanSINDyResult eigenfunctions;
+    PolynomialDictionary basis;  // normalized monomials of the history coordinates xi1, xi2, ...
+    std::vector<std::complex<double>> coefficients;  // mode x feature, one row per discrete eigenvalue
+    std::size_t samples{};
     std::vector<std::complex<double>> discreteEigenvalues;
     std::vector<double> operatorMatrix; // feature x feature, row-major
     std::vector<double> featureScale;
@@ -83,7 +86,7 @@ struct EDMDModeCandidate {
 // contract used by KoopmanModel, archive I/O, validation, reconstruction and
 // control. The history transform remains a separate, stateful observation
 // provider.
-[[nodiscard]] KoopmanSINDyResult selectedPolynomialEigenfunction(
+[[nodiscard]] EigenfunctionFitResult selectedPolynomialEigenfunction(
     const PooledPolynomialEDMD& model,
     const EDMDModeCandidate& candidate);
 

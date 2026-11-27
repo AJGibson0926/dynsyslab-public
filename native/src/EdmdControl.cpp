@@ -106,22 +106,12 @@ std::vector<std::complex<double>> evaluateEdmdControlEigenfunctions(
 
 EigenfunctionFitResult EdmdControlResult::eigenfunctionSet() const {
     validateDictionary(dictionary);
-    if(!lifted.hasEigenfunctions||lifted.discreteEigenvalues.size()!=lifted.rank)
+    if(!lifted.hasEigenfunctions||lifted.spectrum.size()!=lifted.rank)
         throw std::invalid_argument("EDMDc has no exportable polynomial eigenbasis");
     FunctionDomain q;q.dimension=dictionary.dimension;
     return {FunctionExpansion({dictionary.dimension,dictionary.exponents,dictionary.center,dictionary.scale},
         lifted.eigenfunctionCoefficients,q),
-        Spectrum::fromDiscreteMultipliers(lifted.discreteEigenvalues,lifted.deltaTime),{}};
-}
-
-KoopmanSINDyResult EdmdControlResult::expansion() const {
-    validateDictionary(dictionary);
-    if(!lifted.hasEigenfunctions||lifted.discreteEigenvalues.size()!=lifted.rank
-        ||!std::isfinite(lifted.deltaTime)||lifted.deltaTime<=0)
-        throw std::invalid_argument("EDMDc has no exportable polynomial eigenbasis");
-    return KoopmanSINDyResult::fromDiscreteCoefficients(dictionary.dimension,dictionary.exponents,
-        lifted.eigenfunctionCoefficients,lifted.discreteEigenvalues,lifted.deltaTime,
-        dictionary.center,dictionary.scale);
+        lifted.spectrum,{}};
 }
 
 std::vector<double> predictEdmdControl(const EdmdControlResult& model,

@@ -1,4 +1,4 @@
-#include <dynsyslab/core/EigenfunctionArchive.hpp>
+#include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/workflow/Solve.hpp>
 #include <dynsyslab/workflow/Run.hpp>
 #include <dynsyslab/workflow/Postprocess.hpp>
@@ -58,7 +58,7 @@ void solveAndArchive() {
     require(std::filesystem::is_regular_file(root / "progress.json"), "progress record");
     require(std::filesystem::is_regular_file(result.hierarchyManifest), "hierarchy manifest");
     const auto hierarchy = dynsyslab::core::json::load(result.hierarchyManifest.wstring());
-    require(hierarchy.at("format").string() == "dynsyslab.hierarchy/v2", "hierarchy schema");
+    require(hierarchy.at("schema").string() == "dynsyslab.hierarchy/v2", "hierarchy schema");
     require(hierarchy.at("systems").array().size() == 1, "one system run");
     require(hierarchy.at("systems").array().front().at("clusters").array().size() == 1,
             "one trajectory cluster");
@@ -235,7 +235,7 @@ void solveAndArchive() {
             "campaign progress maps child execution monotonically");
     const auto delayCampaignManifest = dynsyslab::core::json::load(
         delayCampaign.manifest.wstring());
-    require(delayCampaignManifest.at("format").string() == "dynsyslab.campaign/v3",
+    require(delayCampaignManifest.at("schema").string() == "dynsyslab.campaign/v3",
             "generic campaign schema");
     const auto firstDelayHierarchy = dynsyslab::core::json::load(
         std::filesystem::u8path(delayCampaignManifest.at("points").array()[0]
@@ -324,30 +324,29 @@ void solveAndArchive() {
         "\"archive\":{\"enabled\":true}}";
     const auto post = dynsyslab::workflow::executePostprocess(dynsyslab::core::json::parse(postJson), root,
                                                               root / "post-progress.json");
-    require(post.archives.size() == 8, "native post-processing archives");  // H-DMD and SINDy: eigenfunctions + reconstructions
+    require(post.archives.size() == 6, "native post-processing archives");  // DMD, H-DMD, SINDy, EDMD (kroms), HAVOK, SVD
     const auto spectrum = dynsyslab::core::readNpz(post.archives.front());
     require(spectrum.contains("discrete_eigenvalues"), "DMD discrete spectrum");
     require(spectrum.contains("continuous_eigenvalues"), "DMD continuous spectrum");
-    const auto sindy = dynsyslab::core::readNpz(post.archives[3]);
-    const auto sindyReadouts = dynsyslab::core::readNpz(post.archives[4]);
+    const auto sindy = dynsyslab::core::readNpz(post.archives[2]);
+    const auto& sindyReadouts = sindy;  // C belongs to the krom
     require(sindy.contains("expansion_coefficients"), "SINDy expansion coefficients");
     require(!sindy.contains("training_states"), "SINDy copies no training states");
     {
-        const auto set = dynsyslab::core::readEigenfunctionSet(sindy);
-        require(set.representation().domainObservables(set.representation().domains().front())
+        const auto set = dynsyslab::core::readKoopmanModel(sindy);
+        require(set.representation().function->coordinates().names
                     == std::vector<std::string>{"position", "velocity"}, "SINDy observable coordinates");
     }
     require(sindyReadouts.at("reconstruction_names").string()=="state"
             && sindyReadouts.at("reconstruction__state").shape[0]==2,
             "SINDy observable reconstruction C");
     const auto hdmd=dynsyslab::core::readNpz(post.archives[1]);
-    const auto hdmdReadouts=dynsyslab::core::readNpz(post.archives[2]);
-    require(hdmd.contains("eigenfunction_values") && hdmdReadouts.contains("reconstruction_matrix"),
-            "H-DMD eigenfunctions and reconstructions objects");
-    const auto edmd=dynsyslab::core::readNpz(post.archives[5]);
+    require(hdmd.contains("eigenfunction_values") && hdmd.contains("reconstruction_matrix")
+            && hdmd.contains("reconstruction_names"), "H-DMD krom with its readouts");
+    const auto edmd=dynsyslab::core::readNpz(post.archives[3]);
     require(edmd.contains("eigenfunction_coefficients")&&edmd.contains("operator"),
             "native EDMD contract");
-    const auto havok=dynsyslab::core::readNpz(post.archives[6]);
+    const auto havok=dynsyslab::core::readNpz(post.archives[4]);
     require(havok.contains("A")&&havok.contains("B")&&havok.contains("forcing"),
             "native HAVOK contract");
     const auto controlledCopy=root / "controlled-copy.npz";
@@ -357,8 +356,7 @@ void solveAndArchive() {
         "\"kind\":\"postprocess\",\"label\":\"native-regression-test\",\"sources\":[\""
         + jsonEscape(result.archives.front().u8string()) + "\"],\"methods\":[{"
         "\"name\":\"control_regression\",\"enabled\":true,\"settings\":{\"krom\":\""
-        + jsonEscape(post.archives[3].u8string()) + "\",\"reconstructions\":\""
-        + jsonEscape(post.archives[4].u8string()) + "\",\"additional_sources\":[\""
+        + jsonEscape(post.archives[2].u8string()) + "\",\"additional_sources\":[\""
         + jsonEscape(controlledCopy.u8string())
         + "\"],\"grid_columns\":9,\"grid_rows\":7}}],"
         "\"archive\":{\"enabled\":true}}";
@@ -373,25 +371,24 @@ void solveAndArchive() {
     require(regressed.contains("control_bilinear_operators"), "bilinear control regression");
     require(regressed.at("bilinear_relative_error").shape ==
             std::vector<std::size_t>({7,9}), "control regression error map");
-    require(regressed.contains("reconstruction__state"),
-            "control regression preserves KROM reconstruction maps");
+    require(!regressed.contains("reconstruction__state")
+            && dynsyslab::core::loadKoopmanModel(regression.archives.front()).hasReconstruction("state"),
+            "control regression is a child krom: it keeps its parent's readouts by reference");
     const auto regressionMetadata=dynsyslab::core::json::parse(regressed.metadataJson());
     require(regressionMetadata.at("constant_regression_method").string()=="multistep-output",
             "control regression method provenance");
     require(regressionMetadata.at("controlled_trajectory_count").number()==2.0,
             "control regression pools trajectory archives");
 
-    dynsyslab::core::KoopmanSINDyResult fit;
-    fit.continuousEigenvalues = {{-1.0,0.0}}; fit.coefficients = {{1.0,0.0}};
-    fit.exponents = {0,1}; fit.center = {0,0}; fit.scale = {1,1};
-    fit.stateDimension = 2; fit.featureCount = 1;
+    auto fit = dynsyslab::core::polynomialEigenfunctions(2, {0,1}, {{1.0,0.0}},
+        dynsyslab::core::Spectrum::fromContinuousRates({{-1.0,0.0}}), {0,0}, {1,1});
     dynsyslab::core::SystemConfiguration configuration;
     configuration.identifier = "duffing"; configuration.preset = "double_well_reference";
     const auto kromPath = root / "velocity-krom.npz";
     dynsyslab::core::KoopmanModel velocityModel(std::move(fit), configuration);
     velocityModel.setReconstruction("velocity",{{{1.0,0.0}},1,1,0.0,0.0,0.0});
     velocityModel.setReconstruction("state",{{{0.0,0.0},{1.0,0.0}},2,1,0.0,0.0,0.0});
-    dynsyslab::core::savePolynomialKoopmanModel(kromPath,velocityModel);
+    dynsyslab::core::saveKoopmanModel(kromPath,velocityModel);
     const std::string estimationJson = "{\"schema\":\"dynsyslab.compute-job/v1\","
         "\"kind\":\"postprocess\",\"label\":\"native-estimation-test\",\"sources\":[\""
         + jsonEscape(result.archives.front().u8string()) + "\"],\"methods\":[{"

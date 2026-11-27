@@ -131,24 +131,5 @@ class SpectralKoopmanTest(unittest.TestCase):
             self.assertLess(max(model["spectral"]["residuals"]["eigenpair"]), 1e-10)
             self.assertAlmostEqual(model["model"]["sample_interval"], .1)
 
-    @unittest.skipUnless((ROOT / "build/colbrook-reference-parity.mat").is_file(), "Run pinned MATLAB reference script")
-    def test_pinned_matlab_mp_and_rigged_parity(self):
-        from scipy.io import loadmat
-        reference = loadmat(ROOT / "build/colbrook-reference-parity.mat")
-        angles = reference["TH"].ravel().tolist()
-        result = self.fit("mpedmd", settings={"rigged_measures": [
-            {"name": f"cos{order}", "coefficients": [1, 0], "angles": angles, "bandwidth": .08, "order": order}
-            for order in (1, 4)]})
-        model = result["model"]
-        basis = np.array(model["basis"]).reshape(2, 2)
-        action = np.array(model["action"]).reshape(2, 2)
-        np.testing.assert_allclose(basis@action@np.linalg.inv(basis), reference["mpK"], atol=2e-12)
-        for index, order in enumerate((1, 4)):
-            measure = model["spectral"]["measures"][index]
-            np.testing.assert_allclose(measure["density"], reference[f"xi{order}"].ravel(), atol=2e-10)
-            coeff = np.array(model["spectral"]["wave_packets"][index]["coefficients"])
-            coeff = (coeff[:, 0]+1j*coeff[:, 1]).reshape(-1, 2)
-            np.testing.assert_allclose(coeff.T, reference[f"g{order}"], atol=2e-10)
-
 if __name__ == "__main__":
     unittest.main()

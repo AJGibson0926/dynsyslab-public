@@ -13,11 +13,12 @@ belong in caller-selected output/research folders, not these modules.
 | Matched fitting and frozen packet comparisons | `dynsyslab_spectral`, `PeriodicSpectralComparison.hpp` |
 | Reused Schur factorization | `dynsyslab_numerics`, `Eigensystem.hpp` |
 | Native orchestration and immutable archives | `workflow/native/src/PeriodicSpectralQuery.cpp` |
-| Optional thin clients and analytic sampling orchestration | `postprocessing.koopman.periodic_spectral`, `dynsyslab_client.periodic` |
-| Separate observable/family/angle pages | `viewer.periodic_spectra` |
+| Optional thin client | `dynsyslab_client.periodic` |
+| Analytic orbit sampling | `dynsyslab-cli analytic` (`periodic`, `histories` operations) |
+| Separate observable/family/angle pages | native Viewer (`viewer/native/src/DocumentPayload.cpp`) |
 
-All scientific algorithms execute in C++. Python transports requests or
-composes presentation data. Viewer never fits, renormalizes, clips, interpolates,
+All scientific algorithms execute in C++. The optional Python client only
+transports requests. Viewer never fits, renormalizes, clips, interpolates,
 or smooths the scientific values.
 
 ```console
@@ -85,8 +86,8 @@ The methods reuse the same native fitting implementation and equivalent weighted
 feature rows, so controlled comparisons can keep the trial space/data fixed.
 
 The C++ entry is `fitPeriodicDelayModel`; `fitPeriodicDelaySpectrum` retains its
-mpEDMD-only contract for packet analysis. Python exposes `fit_delay_model`
-through the thin client and postprocessing adapter. An optional `output_archive`
+mpEDMD-only contract for packet analysis. The optional Python client exposes
+it as `dynsyslab_client.periodic.fit_delay_model`. An optional `output_archive`
 creates an immutable standard spectral KROM, with `periodic_fit_provenance_json`
 containing the bank digest, source, coordinate contract and fitting settings.
 The result always includes model identity, rank, original sample/feature counts
@@ -160,7 +161,8 @@ horizons use cached binary matrix powers across long gaps, avoiding unused
 Fourier/time output columns. No eigenbasis, matrix logarithm or interpolation
 is used. Powers and ordinary repeated steps can differ by roundoff; this is
 tested independently. The shared power cache has a fifty-million-entry limit.
-The Python entry point is `audit_delay_forecast`. The model must retain its
+The optional Python client entry point is
+`dynsyslab_client.periodic.audit_delay_forecast`. The model must retain its
 verified coordinate/clock contract and an unnormalized linear dictionary.
 No fitting occurs. Offsets are shifted so their maximum is zero; the newest
 coordinate is reconstructed at each native time step, including step zero.
@@ -207,25 +209,24 @@ Higher-order kernel densities may have negative lobes. A finite-width packet is
 not an unsmoothed delta distribution. Amplitude agreement does not imply phase
 agreement, off-orbit prediction, or closed-loop control.
 
-## Python and Viewer
+## CLI, client and Viewer
 
-```python
-from postprocessing.koopman.periodic_spectral import (
-    sample_bank, spectral_sweep, spectral_compare, quadrature_audit,
-)
-from viewer.periodic_spectra import (
-    write_comparison_dashboard, render_comparison_pages,
-)
-
-result = spectral_sweep(job, executable=native_cli)
-payload = write_comparison_dashboard(result, new_display_directory)
-images = render_comparison_pages(payload, executable=native_viewer_cli)
+```console
+dynsyslab-cli periodic-analysis sweep.json > comparison.json
 ```
 
-`sample_bank(system, initial_states, observables, weights=..., samples=...,
-maximum_harmonic=..., families=..., parameters=...)` orchestrates the registered
-analytic sampler. It preserves requests, resolved parameters, equation
-fingerprints and coefficient-source descriptions. Native qualification rejects
+The optional client (`dynsyslab_client.periodic.spectral_sweep`,
+`spectral_compare`, `quadrature_audit`) sends the same request to the compiled
+CLI and returns its JSON result.
+
+The native Viewer opens the saved result directly: `DynSysLabViewerCli render --source
+comparison.json --page N --output page.png` (or `.svg`, or `.html` for every page,
+interactive); `--view parameter` uses orbit parameters as the abscissa.
+
+Fourier orbit banks for registered analytic systems come from the native
+analytic sampler (`dynsyslab-cli analytic`, operation `periodic`; client
+`dynsyslab_client.periodic.sample`), which preserves requests, resolved
+parameters, equation fingerprints and coefficient-source descriptions. Native qualification rejects
 unavailable periodic analytic solutions. FFT quadrature of an analytic orbit
 is distinct from an exact closed-form Fourier formula. Independently derived
 Fourier banks can be supplied directly.
@@ -248,9 +249,7 @@ and export; display payloads remain disposable and separate from primary data.
 
 Native tests cover exact rotations, changed validation amplitude, redundant
 dictionaries, repeated invariant eigenvalues, complex delay readouts and an
-aliased harmonic. Python contracts exercise compiled sweeps, frozen replay,
-immutability, coordinate/clock mismatch, quadrature rejection, separate Viewer
-pages and native rendering. No private dataset is required by these tests.
+aliased harmonic. No private dataset is required by these tests.
 Streaming tests additionally cover weighted blocks, a nearly dependent column,
 irregular and regular delay grids, changed orbit weights, residuals, packet
 fields and free rollouts against the dense fitter. Forecast phase integrals

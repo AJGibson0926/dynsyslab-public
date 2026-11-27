@@ -173,7 +173,7 @@ derivatives. The new dictionaries are useful approximation spaces; their finite
 size or orthogonality does not bypass that obstruction.
 
 The pinned source copies are in ignored `build/reference_sources/colbrook`,
-with revisions in the [manifest](../../tools/experiments/miscellaneous_computes/references/colbrook/repositories.json).
+with revisions in the pinned manifest ([manifest](../provenance/colbrook/repositories.json)).
 The formulas above were independently implemented using standard recurrences,
 not by embedding MATLAB or copying unlicensed source.
 

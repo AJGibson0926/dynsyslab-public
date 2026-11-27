@@ -27,6 +27,11 @@ public:
         shellElasticity_ = resolvedParameter(configuration_, "shell_elasticity_n_m", shellElasticity_);
         liquidSoundSpeed_ = resolvedParameter(configuration_, "liquid_sound_speed_m_s", liquidSoundSpeed_);
         gasSoundSpeed_ = resolvedParameter(configuration_, "gas_sound_speed_m_s", gasSoundSpeed_);
+        // shell_law: 0 linear (Marmottant et al. 2005), 1 cubic sigmoid, 2 Gompertz.
+        const double law = resolvedParameter(configuration_, "shell_law", 0.0);
+        if (law != 0.0 && law != 1.0 && law != 2.0)
+            throw std::invalid_argument("Marmottant shell_law must be 0 (linear), 1 (sigmoid) or 2 (gompertz)");
+        shellLaw_ = static_cast<int>(law);
         if (!(radius0_ > 0.0 && ambient_ > 0.0 && shellViscosity_ > 0.0
               && bucklingRadius_ > 0.0 && criticalTension_ > 0.0 && shellElasticity_ > 0.0))
             throw std::invalid_argument("Marmottant physical parameters must be positive");
@@ -139,6 +144,8 @@ private:
             {"natural_frequency_hz", "Hz"}, {"characteristic_time_s", "s"}};
         configuration_.coordinateScaling = {scaling.timeScale, ambient_, true, true,
             "tau", "p_control/p0", "Pa"};
+        configuration_.coordinateScaling.physicalStatePerModelState = {scaling.radius, scaling.radius / scaling.timeScale};
+        configuration_.coordinateScaling.physicalStateUnits = {"m", "m/s"};
     }
 
     double surfaceTension(double radius, bool update) const {
@@ -147,13 +154,35 @@ private:
             else if (radius >= breaking_) ruptured_ = true;
         }
         if (radius < buckling_) return 0.0;
-        if (radius <= rupture_)
-            return shellElasticity_ * (std::pow(radius / buckling_, 2.0) - 1.0);
-        if (radius < breaking_)
-            return ruptured_ ? medium_.surfaceTension
-                : shellElasticity_ * (std::pow(radius / buckling_, 2.0) - 1.0);
+        if (radius <= rupture_) return elasticTension(radius);
+        if (radius < breaking_) {
+            // The smoothed laws keep the legacy Bubble.m branch here: no elastic tension
+            // between rupture and break (the linear law keeps its hysteresis latch).
+            if (shellLaw_ != 0) return 0.0;
+            return ruptured_ ? medium_.surfaceTension : elasticTension(radius);
+        }
         if (radius > breaking_) return medium_.surfaceTension;
         return 0.0;
+    }
+
+    // Elastic-regime tension between buckling and rupture radii. Linear: Marmottant et al.,
+    // J. Acoust. Soc. Am. 118 (2005) 3499-3505, sigma = chi ((R/Rb)^2 - 1). The sigmoid (a
+    // symmetric cubic smoothstep from 0 to sigma_water) and the Gompertz form
+    // sigma_water exp(-b exp(c (1 - R/Rb))) are the smoothed shell laws of the MATLAB Bubble.m
+    // reference (ported from dynsyslib/lib/marmottant.py, which records no source paper for
+    // the two smoothings; Gompertz 1825, Phil. Trans. R. Soc. 115:513, for the function).
+    double elasticTension(double radius) const {
+        if (shellLaw_ == 0) return shellElasticity_ * (std::pow(radius / buckling_, 2.0) - 1.0);
+        const double sigma = medium_.surfaceTension;
+        if (shellLaw_ == 1) {
+            const double scaled = (radius - buckling_) / (rupture_ - buckling_);
+            const auto shape = [](double value) { return std::pow(value, 3.0) / std::pow(0.5, 2.0); };
+            return sigma * (scaled <= 0.5 ? shape(scaled) : 1.0 - shape(1.0 - scaled));
+        }
+        const double c = (2.0 * shellElasticity_ * std::exp(1.0) / sigma)
+            * std::sqrt(1.0 + sigma / (2.0 * shellElasticity_));
+        const double b = -std::log(0.5) / std::exp(c * (1.0 - 1.0 / buckling_));
+        return sigma * std::exp(-b * std::exp(c * (1.0 - radius / buckling_)));
     }
 
     std::vector<double> observableTerms(const double* state) const {
@@ -178,6 +207,7 @@ private:
     double liquidSoundSpeed_{1480.0}, gasSoundSpeed_{0.0};
     double liquidMach_{}, gasMach_{}, euler_{}, viscosity_{}, gasPressureRatio_{};
     double shellViscosityGroup_{}, buckling_{}, rupture_{}, breaking_{};
+    int shellLaw_{0};
     mutable bool ruptured_{false};
 };
 

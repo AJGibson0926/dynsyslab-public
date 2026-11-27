@@ -12,12 +12,17 @@
 - [Lie algebra and Koopman representation analysis](architecture/LIE_ALGEBRA.md) - central research question, exact algorithms, public APIs and control-paper links.
 
 - [Spectral KROM and native Koopman analysis](architecture/SPECTRAL_KROM.md) - methods, typed measures, observable references, Post-Processor and API.
+- [Identification options](architecture/IDENTIFICATION.md) - pooled H-DMD and SINDy, domain SINDy, SINDy fit options, weak-form and weighted vector-field SINDy, delay taps, IC tables, spectrum comparison.
 - [Colbrook native adaptation provenance](provenance/COLBROOK_NATIVE_ADAPTATION.md) - pinned references and redistribution notices.
 
 - [Coordinate transforms and dynamics SINDy](architecture/COORDINATE_DYNAMICS_SINDY.md) - shared modules, vector-field fits and validation.
+- [Lagrangian coherent structures and spectral submanifolds](architecture/LCS_AND_SSM.md) - FTLE fields, ridges and variational LCS; SSMs, backbone curves and data-driven SSMs (`ftle`, `ssm`).
+- [Field models](architecture/FIELD_MODELS.md) - data-driven vector fields beyond one dictionary: compact radial, local tangent-chart, paired amplitude/phase, structured second-order; waveform fit and shooting calibration (`field_model`).
+- [Trajectory kernels, orbit geometry and model libraries](architecture/TRAJECTORY_KERNELS.md) - cross-orbit injectivity, affine propagation, prehistory, clock audits, high-order differences, SINDy library families.
+- [Receiver arrays](architecture/RECEIVER_ARRAYS.md) - retarded multi-receiver echoes, neighbour and linear state readouts, ring errors, sensor-design experiments.
 
 - [Native pipeline boundaries and runtime APIs](architecture/PIPELINE_BOUNDARY_REFACTOR_2026-10-31.md)
-- [Pipeline jobs](architecture/PIPELINE_JOBS.md) - one submitted deterministic study: stages, references, parameters, extends/overrides, provenance manifest.
+- [Experiments](architecture/EXPERIMENTS.md) - one submitted deterministic study: stages, references, parameters, extends/overrides, provenance manifest.
 
 Start with [Start here](START_HERE.md). The categories below distinguish
 operating guides, architecture contracts, scientific workflow references, and
@@ -25,9 +30,11 @@ dated evidence. Case studies are reproducibility records, not default policy.
 
 ## Use DynSysLab
 
-- [Overview](OVERVIEW.md) — the suite at a glance: modules, pipelines and diagrams.
+- [Overview](OVERVIEW.md) — the suite at a glance: modules, experiments and diagrams.
 - [Install DynSysLab](INSTALL.md) — verified prebuilt Windows release, Codex setup, and first solve.
 - [Data packs](DATA_PACKS.md) - version-pinned job files that regenerate published data and figures offline.
+- [Archive management](ARCHIVE_MANAGEMENT.md) - archive root, compression, shared time grids, audit, metadata edits, storage locations and relocation.
+- [Viewer reports and export](architecture/VIEWER_REPORTS_AND_EXPORT.md) - SVG/HTML export, multi-page reports, experiment reports, result documents and research figures.
 - [Start here](START_HERE.md) — five-minute human and AI-agent entry point.
 - [Native build and SDK](BUILD_NATIVE.md) — compiled installation, release
   gates, incremental builds, and extension development.

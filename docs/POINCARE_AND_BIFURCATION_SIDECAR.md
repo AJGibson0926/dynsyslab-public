@@ -143,8 +143,8 @@ IDs and SHA-256 digests are preserved in
 `docs/provenance/phase-space-class-sources.json`; the peer repository remains
 unchanged.
 
-Legacy campaign bifurcation plots remain independent parameter-response
-sweeps. They are not silently relabeled as continuation branches.
+Campaign bifurcation plots (solve-job campaign axes shown in Viewer) remain
+independent parameter-response sweeps. They are not silently relabeled as continuation branches.
 
 ## Arbitrary forcing-section derivatives and periodic cocycles
 
@@ -166,7 +166,9 @@ internal Koopman matrix. Inadequate independent directions are rejected.
 These are local approximations; fitting only the points on a settled orbit
 does not identify transverse derivatives.
 
-`viewer.cocycle_analysis` presents supplied branch multipliers, perturbation
-rollouts, truncation diagnostics and finite residue-partition geometry. It
-contains no fitting or integration. Public examples and documentation contain
+The native Viewer presents supplied branch multipliers, perturbation
+rollouts, truncation diagnostics and finite residue-partition geometry as
+`dynsyslab.research-figure/v1` documents (`multiplier_branch`, `perturbation`,
+`truncation_amplitude`, `cyclic_partition`; docs/architecture/VIEWER_REPORTS_AND_EXPORT.md).
+It contains no fitting or integration. Public examples and documentation contain
 generic contracts; private experiments and derived reports stay outside Git.

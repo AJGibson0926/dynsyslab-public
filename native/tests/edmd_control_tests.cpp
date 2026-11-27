@@ -30,14 +30,16 @@ void defaultsAndSharedRepresentation() {
     require(fit.snapshotOneStepRelativeError<1e-10,"degree-one snapshot decoder failed");
     require(fit.lifted.oneStepRelativeError>1e-5,"input-dependent lifting error was hidden");
     require(fit.lifted.hasEigenfunctions,"expected nondefective eigenbasis");
-    const auto polynomial=fit.expansion();
+    const auto polynomial=fit.eigenfunctionSet();
     const auto values=core::evaluateEdmdControlEigenfunctions(fit,x,count);
-    require(polynomial.samples==0&&polynomial.residualRms.empty(),"fabricated SINDy fit diagnostics");
+    require(polynomial.diagnostics.sampleCount==0&&!polynomial.spectrum.hasResiduals(),
+        "fabricated SINDy fit diagnostics");
+    const auto multipliers=polynomial.spectrum.discreteMultipliers();
     for(std::size_t mode=0;mode<fit.lifted.rank;++mode) {
-        require(std::abs(polynomial.discreteEigenvalues()[mode]-fit.lifted.discreteEigenvalues[mode])<1e-10,
+        require(std::abs(multipliers[mode]-fit.lifted.spectrum.values()[mode])<1e-10,
             "shared spectrum conversion failed");
         for(std::size_t k=0;k<10;++k)
-            require(std::abs(core::evaluatePolynomialEigenfunction(polynomial,mode,x.data()+2*k)
+            require(std::abs(polynomial.functions.evaluate(mode,x.data()+2*k)
                 -values[k*fit.lifted.rank+mode])<1e-10,"shared polynomial evaluator disagrees");
     }
     // Out-of-sample evaluation must use frozen training normalization.
@@ -96,7 +98,7 @@ void freePolynomialSemigroup() {
     for(int k=0;k<30;++k) {
         const auto observed=core::evaluateEdmdControlEigenfunctions(fit,{state},1);
         for(std::size_t j=0;j<fit.lifted.rank;++j)
-            require(std::abs(observed[j]-initial[j]*std::pow(fit.lifted.discreteEigenvalues[j],k))<1e-10,
+            require(std::abs(observed[j]-initial[j]*std::pow(fit.lifted.spectrum.values()[j],k))<1e-10,
                 "held-out free eigenfunction did not follow its complex exponential");
         state*=.8;
     }

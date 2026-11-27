@@ -41,7 +41,7 @@
     ]},
    {"id": "output", "kind": "data", "label": "SINDy archive (polynomial K-ROM pool)", "icon": "archive",
     "notes": ["continuous_eigenvalues λ_j", "coefficients ξ_j, polynomial_exponents", "state_center, state_scale",
-              "coordinate_observable_names", "training_coordinates = q(x)", "training_residual_rms"],
+              "coordinate_observable_names", "training_coordinates = q(x)", "eigenpair_residual (generator)"],
     "flags": ["training_states = (r, ṙ)"]},
    {"id": "next", "kind": "module", "label": "krom_extract (next module)", "icon": "krom",
     "notes": ["selects the modes to keep"]}

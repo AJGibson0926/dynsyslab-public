@@ -2,6 +2,7 @@
 #include "DisplayCoordinates.hpp"
 #include "TrajectoryPresentation.hpp"
 
+#include <dynsyslab/core/Extrema.hpp>
 #include <dynsyslab/core/TimeSeriesArchive.hpp>
 
 #include <algorithm>
@@ -138,6 +139,9 @@ Payload buildFourierPayload(const std::filesystem::path& source,
                       frequencyLabel, "amplitude", false};
         figure.valueScale = "linear";  // log on request (--scale log or the Log toggle)
         figure.traces.push_back(amplitudeTrace(*transform, component));
+        // Open on the dominant band (99.5% of the amplitude, at least 1.25x the peak).
+        if (const auto band = dynsyslab::core::dominantFrequencyRange(figure.traces.back().x, figure.traces.back().y);
+            band.size() == 2 && band[1] > band[0]) figure.focusX = std::make_pair(band[0], band[1]);
         payload.figures.push_back(std::move(figure));
     }
     decorateTrajectory(payload, metadata, displayed.coordinates, {});

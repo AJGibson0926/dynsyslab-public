@@ -1,4 +1,5 @@
 #include <dynsyslab/core/Archive.hpp>
+#include <dynsyslab/core/DataObject.hpp>
 #include <dynsyslab/core/Json.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/workflow/Run.hpp>
@@ -79,11 +80,13 @@ int main() {
         for (std::size_t run = 0; run < 3; ++run) sources.push_back(source(root, run));
         const auto result = dynsyslab::workflow::executeJob(
             job(sources), root / "archives", {});
-        require(result.archives.size() == 1,
-                "pooled echo-history stage must publish one model archive");
-        const auto archive = core::readNpz(result.archives.front());
-        require(archive.at("coordinate_provider").string() == "causal-history"
-            && archive.at("left_singular_vectors").shape
+        std::vector<std::filesystem::path> kroms;  // the stage publishes one krom
+        for(const auto& path:result.archives)
+            if(core::dataObjectKind(core::readNpz(path).metadataJson())==core::object_kind::krom)kroms.push_back(path);
+        require(result.archives.size() == 1 && kroms.size() == 1,
+                "pooled echo-history stage must publish one krom");
+        const auto archive = core::readNpz(kroms.front());
+        require(archive.at("left_singular_vectors").shape
                 == std::vector<std::size_t>({80,2})
             && archive.at("training_trajectory_offsets").elementCount() == 3,
                 "native echo-history archive contract is incomplete");
@@ -91,7 +94,7 @@ int main() {
         require(metadata.at("native_history_pipeline").boolean()
             && !metadata.at("execution_backend").at("python_required").boolean(true),
                 "echo-history native provenance is incomplete");
-        const auto model = core::loadPolynomialKoopmanModel(result.archives.front());
+        const auto model = core::loadKoopmanModel(kroms.front());
         require(model.requiresExternalCoordinates()
             && model.coordinateDimension() == 2 && model.liftedDimension() == 1,
                 "history KROM did not load through the canonical model contract");

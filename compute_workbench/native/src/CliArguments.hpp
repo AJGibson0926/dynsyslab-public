@@ -21,6 +21,12 @@ struct Arguments {
     std::vector<std::string> auditSections;
     std::vector<std::string> auditSystems;
     bool auditDerived{};
+    std::string auditCampaign;           // archive --campaign ID
+    std::filesystem::path report;        // archive audit --report DIR
+    std::string compression;             // --compression deflate|lzma|stored (archives written)
+    std::string metadataPatch;           // archive edit-metadata --metadata-json JSON
+    bool readOnly{}, removeSource{};     // storage register --read-only, storage copy --remove-source
+    std::string purpose{"solutions"};    // storage register --purpose
     bool apply{};
     std::string importSystem,importPreset,importCoordinates{"unknown"};
     std::string importLabel{"legacy-dynbatch-import"},importParameters{"{}"};

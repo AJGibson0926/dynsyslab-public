@@ -10,16 +10,14 @@ bool storedInDimensionalUnits(const json::Value& meta) {
     if(identifier!="rpe"&&identifier!="rayleigh-plesset"&&identifier!="marmottant")return false;
     const auto stored=meta.at("archive_coordinate_system").string(
         meta.at("stored_coordinate_system").string());
-    const bool legacy=meta.at("execution_backend").at("name").string()=="python-reference"
-        ||meta.at("time_series_format").string()=="dynsyslab.TimeSeries/v1";
-    return stored=="dimensional"||(stored.empty()&&legacy);
+    return stored=="dimensional";
 }
 
 void normalizeSourceCoordinates(SourceData& source) {
     if(source.metadataJson.empty())return;
     auto meta=json::parse(source.metadataJson);
     if(!storedInDimensionalUnits(meta))return;
-    if(source.dimension!=2)throw std::invalid_argument("bubble archive conversion requires two state components");
+    if(source.dimension()!=2)throw std::invalid_argument("bubble archive conversion requires two state components");
     const auto configuration=systemConfiguration(source);
     const auto system=dynsyslab::core::createSystem(configuration);
     const double radius=system->configuration().parameters.at("equilibrium_radius_m");
@@ -27,21 +25,25 @@ void normalizeSourceCoordinates(SourceData& source) {
         meta.at("time_scale_to_seconds").number(system->coordinates().secondsPerModelTime));
     if(!(radius>0)||!(timeScale>0)||!std::isfinite(timeScale))
         throw std::invalid_argument("bubble archive lacks valid coordinate scales");
-    for(auto& t:source.time)t/=timeScale;
-    for(std::size_t row=0;row<source.samples;++row) {
-        source.values[2*row]/=radius;
-        source.values[2*row+1]*=timeScale/radius;
+    auto time=source.time();auto values=source.values();
+    for(auto& t:time)t/=timeScale;
+    for(std::size_t row=0;row<source.samples();++row) {
+        values[2*row]/=radius;
+        values[2*row+1]*=timeScale/radius;
     }
-    if(!source.inputs.empty()) {
+    if(source.record.inputs) {
+        auto inputs=source.inputs();
         const auto& history=meta.at("control_history");
         const auto convention=history.at("coordinate_system").string();
         const auto units=history.at("units").string();
         if(convention=="dimensional"||units=="Pa") {
             const auto ambient=system->configuration().parameters.at("ambient_pressure_pa");
-            for(auto& input:source.inputs)input/=ambient;
+            for(auto& input:inputs)input/=ambient;
         } else if(convention!="dimensionless"&&units!="p_control/p0")
             throw std::invalid_argument("legacy controlled archive must declare its input units");
+        source.record.inputs=inputSeries(time,std::move(inputs),source.inputDimension(),source.record.inputsOnIntervals);
     }
+    source.record.series=dynsyslab::core::TimeSeries(std::move(time),std::move(values),source.dimension());
     meta.at("system")=system->descriptor().identifier;
     meta.at("source_archive_coordinate_system")="dimensional";
     meta.at("archive_coordinate_system")="dimensionless";

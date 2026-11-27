@@ -6,6 +6,7 @@
 #include "dynsyslab_viewer/NativePayload.hpp"
 
 #include <dynsyslab/core/Archive.hpp>
+#include <dynsyslab/core/Extrema.hpp>
 #include <dynsyslab/core/Json.hpp>
 #include <dynsyslab/core/System.hpp>
 
@@ -179,7 +180,7 @@ void appendManifest(const CatalogItem& item, const std::filesystem::path& projec
     json::Value root;
     try { root = json::load(manifest.wstring()); }
     catch (...) { warnings.push_back("Could not read hierarchy " + manifest.u8string()); return; }
-    if (root.at("format").string() != "dynsyslab.hierarchy/v2") return;
+    if (root.at("schema").string() != "dynsyslab.hierarchy/v2") return;
     if (item.kind == "forcing_campaign" &&
         root.at("campaign_id").string() != item.properties.at("campaign id")) return;
     if (item.kind == "batch" && root.at("id").string() != item.id) return;
@@ -205,62 +206,13 @@ void appendManifest(const CatalogItem& item, const std::filesystem::path& projec
     }
 }
 
-void appendLegacyManifest(const CatalogItem& item,
-                          const std::filesystem::path& projectRoot,
-                          const std::filesystem::path& archiveRoot,
-                          const std::filesystem::path& manifest,
-                          std::vector<Trajectory>& trajectories,
-                          std::vector<std::string>& stateNames,
-                          std::string& coordinates, std::vector<std::string>& warnings) {
-    json::Value root;
-    try {
-        const auto archive = dynsyslab::core::readNpzIndex(manifest);
-        root = json::parse(archive.metadataJson);
-    } catch (...) {
-        warnings.push_back("Could not read legacy hierarchy " + manifest.u8string());
-        return;
-    }
-    if (root.at("format").string() != "dynsyslab.hierarchy/v1") return;
-    const auto requestedSystem = item.properties.find("legacy system index");
-    const auto requestedCluster = item.properties.find("legacy cluster index");
-    std::size_t systemIndex = 0;
-    for (const auto& system : root.at("systems").array()) {
-        const auto currentSystem = systemIndex++;
-        if (requestedSystem != item.properties.end() &&
-            std::to_string(currentSystem) != requestedSystem->second) continue;
-        const auto identifier = system.at("dynamical_system").at("name").string();
-        if (stateNames.empty())
-            for (const auto& descriptor : dynsyslab::core::availableSystems())
-                if (descriptor.identifier == identifier ||
-                    (identifier == "rayleigh-plesset" && descriptor.identifier == "rpe")) {
-                    stateNames = descriptor.stateLabels; break;
-                }
-        std::size_t clusterIndex = 0;
-        for (const auto& cluster : system.at("clusters").array()) {
-            const auto currentCluster = clusterIndex++;
-            if (requestedCluster != item.properties.end() &&
-                std::to_string(currentCluster) != requestedCluster->second) continue;
-            for (const auto& archived : cluster.at("trajectories").array()) {
-                if (archived.at("metadata").at("status").string() != "complete") continue;
-                if (coordinates.empty()) coordinates = archived.at("metadata")
-                    .at("solver_metadata").at("integration_form").string();
-                appendArchivedTrajectory(archived, projectRoot, archiveRoot, manifest,
-                    trajectories, warnings);
-            }
-        }
-    }
-}
-
 std::vector<Trajectory> loadTrajectories(
     const CatalogItem& item, const std::filesystem::path& projectRoot,
     const std::filesystem::path& archiveRoot, std::vector<std::string>& stateNames,
     std::string& coordinates, std::vector<std::string>& warnings) {
     std::vector<Trajectory> result;
     const auto source = std::filesystem::u8path(item.source);
-    if (source.extension() == ".npz") {
-        appendLegacyManifest(item, projectRoot, archiveRoot, source, result,
-            stateNames, coordinates, warnings);
-    } else if (item.kind == "forcing_campaign") {
+    if (item.kind == "forcing_campaign") {
         const auto root = archiveRoot / "hierarchies";
         for (const auto& entry : std::filesystem::recursive_directory_iterator(
                  root, std::filesystem::directory_options::skip_permission_denied)) {
@@ -287,7 +239,7 @@ CampaignAxis campaignAxis(const CatalogItem& item,
         if (!entry.is_regular_file() || entry.path().extension() != ".json") continue;
         try {
             const auto campaign = json::load(entry.path().wstring());
-            if (campaign.at("format").string() != "dynsyslab.campaign/v3" ||
+            if (campaign.at("schema").string() != "dynsyslab.campaign/v3" ||
                 campaign.at("id").string() != identity->second) continue;
             const auto& axes = campaign.at("axes").array();
             const auto& points = campaign.at("points").array();
@@ -369,6 +321,9 @@ Payload buildHierarchyPayload(const CatalogItem& item, const std::string& view,
             figure.traces.push_back(trace(trajectories[index], index,
                 column(trajectories[index], 0, samples),
                 column(trajectories[index], 1, samples)));
+            const auto& path=figure.traces.back();
+            if(!path.x.empty()&&!path.y.empty())  // each trajectory's initial condition, with its coordinates
+                figure.references.push_back({path.x.front(),path.y.front(),"IC",false});
             auto analytic=analyticTrace(trajectories[index],samples,1,true);
             if(!analytic.x.empty())figure.traces.push_back(std::move(analytic));
             appendVerifiedEquilibria(figure,trajectories[index].metadata);
@@ -415,17 +370,24 @@ Payload buildHierarchyPayload(const CatalogItem& item, const std::string& view,
         return payload;
     }
     if (view == "campaign_bifurcation") {
-        Figure figure{"campaign_bifurcation", "Asymptotic state-0 response", axis.label,
+        // Peak-amplitude diagram: the local maxima of state 0 after the transient (core/Extrema.hpp).
+        // The campaign's "bifurcation tail fraction" property sets the retained tail (default 0.25).
+        const auto setting = item.properties.find("bifurcation tail fraction");
+        const double tailFraction = setting == item.properties.end() ? 0.25 : std::stod(setting->second);
+        Figure figure{"campaign_bifurcation", "Post-transient local maxima of " + names[0], axis.label,
                       names[0] + suffix, false};
         for (std::size_t index = 0; index < trajectories.size(); ++index) {
             const auto& trajectory = trajectories[index];
             Trace points; points.label = trajectory.label; points.role = "campaign_tail";
             points.color = color(index); points.marker = true;
-            const std::size_t tail = std::max<std::size_t>(1, trajectory.rows / 5);
-            const std::size_t stride = std::max<std::size_t>(1, tail / 200);
-            for (std::size_t row = trajectory.rows - tail; row < trajectory.rows; row += stride) {
+            std::vector<double> state(trajectory.rows);
+            for (std::size_t row = 0; row < trajectory.rows; ++row)
+                state[row] = trajectory.states[row * trajectory.columns];
+            auto peaks = dynsyslab::core::postTransientMaxima(state, tailFraction);
+            if (peaks.empty() && !state.empty()) peaks.push_back(state.size() - 1);  // settled: its final value
+            for (const auto row : peaks) {
                 points.x.push_back(trajectory.campaignPoint);
-                points.y.push_back(trajectory.states[row * trajectory.columns]);
+                points.y.push_back(state[row]);
             }
             figure.traces.push_back(std::move(points));
         }

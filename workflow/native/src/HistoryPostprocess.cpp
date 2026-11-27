@@ -5,6 +5,7 @@
 #include "KromDatasetSupport.hpp"
 #include <dynsyslab/core/HistoryKoopman.hpp>
 #include <dynsyslab/core/HistoryObservationArchive.hpp>
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -20,7 +21,7 @@ std::size_t count(const json::Value& s,const char* key,std::size_t fallback) {
 }
 p::SourceData sourceData(const std::filesystem::path& path,const json::Value& settings) {
     auto s=p::loadObservationSource(path,settings.at("observation_array").string("echo"),settings.at("observable").string());
-    if(s.dimension!=1)throw std::invalid_argument("History transform requires scalar observations");
+    if(s.dimension()!=1)throw std::invalid_argument("History transform requires scalar observations");
     return s;
 }
 std::vector<double> decimate(const std::vector<double>& x,std::size_t stride) {
@@ -53,7 +54,7 @@ std::filesystem::path runHistoryBasis(const std::vector<std::filesystem::path>& 
         p::requireSameObservationSystem(first,source);
         if(std::abs(p::uniformDeltaTime(source)*double(stride)-dt)>1e-8*dt)
             throw std::invalid_argument("Pooled history clocks differ");
-        observations.push_back(decimate(source.values,stride));
+        observations.push_back(decimate(source.values(),stride));
         references.push_back({std::filesystem::absolute(path).generic_u8string(),"training","unforced",{}});
     }
     c::PooledHankelOptions options;options.delays=count(settings,"delays",100);
@@ -73,7 +74,7 @@ std::filesystem::path runHistoryBasis(const std::vector<std::filesystem::path>& 
     meta.object()["history_decimation"]=double(stride);
     meta.object()["transform_identity"]=transform.identity();
     a.arrays["metadata_json"]=c::NpyArray::fromString(json::dump(meta));
-    return p::publish(root,first,"history-basis",label,std::move(a));
+    return p::publishObject(root, first, dynsyslab::core::object_kind::coordinateMap, "history-basis",std::move(a));
 }
 std::filesystem::path runHistoryProjection(const std::filesystem::path& path,
     const json::Value& settings,const std::filesystem::path& root,const std::string& label) {
@@ -89,7 +90,7 @@ std::filesystem::path runHistoryProjection(const std::filesystem::path& path,
     const auto stride=count(settings,"decimation",1);
     if(std::abs(p::uniformDeltaTime(source)*double(stride)-transform.sampleInterval())>1e-8*transform.sampleInterval())
         throw std::invalid_argument("Projection observation clock differs from the frozen transform");
-    const auto observations=decimate(source.values,stride),time=decimate(source.time,stride);
+    const auto observations=decimate(source.values(),stride),time=decimate(source.time(),stride);
     const auto projected=c::transformHistoryCoordinates(c::TimeSeries(time,observations,1),transform);
     const auto& selection=transform.retainedCoordinates();
     const auto& q=projected.coordinates;
@@ -98,6 +99,27 @@ std::filesystem::path runHistoryProjection(const std::filesystem::path& path,
     a.arrays["time"]=c::NpyArray::fromDoubles({windows},{q.timeData(),q.timeData()+windows});
     a.arrays["values"]=c::NpyArray::fromDoubles({windows,selection.size()},
         {q.valuesData(),q.valuesData()+windows*selection.size()});
+    {   // The physical states and the measurement at each window's newest sample, for audits that
+        // compare coordinates with the states they stand for (orbit_geometry).
+        const auto raw=c::readNpz(path);
+        std::string stateKey=raw.contains("source_states")?"source_states":"";
+        if(stateKey.empty()&&raw.contains("values")&&settings.at("observation_array").string("echo")!="values")stateKey="values";
+        std::size_t offset=0;
+        while(offset<time.size()&&windows&&time[offset]<q.timeData()[0]-1e-9*std::max(1.0,std::abs(q.timeData()[0])))++offset;
+        std::vector<double> measured;
+        for(std::size_t k=0;k<windows&&offset+k<observations.size();++k)measured.push_back(observations[offset+k]);
+        if(measured.size()==windows)a.arrays["measurement_values"]=c::NpyArray::fromDoubles({windows},measured);
+        if(!stateKey.empty()) {
+            const auto& states=raw.at(stateKey);
+            const auto width=states.shape.size()==2?states.shape[1]:0;
+            if(width&&states.shape[0]==source.samples()&&(offset+windows-1)*stride<states.shape[0]) {
+                const auto all=states.doubles();
+                std::vector<double> carried;
+                for(std::size_t k=0;k<windows;++k){const auto row=(offset+k)*stride;carried.insert(carried.end(),all.begin()+std::ptrdiff_t(row*width),all.begin()+std::ptrdiff_t((row+1)*width));}
+                a.arrays["source_states"]=c::NpyArray::fromDoubles({windows,width},carried);
+            }
+        }
+    }
     auto meta=json::parse(p::metadata(source,"history-projection",label,""));
     meta.object()["coordinate_provider"]="causal-history";
     meta.object()["coordinate_transform_identity"]=transform.identity();
@@ -106,11 +128,11 @@ std::filesystem::path runHistoryProjection(const std::filesystem::path& path,
     const auto dynamics=p::datasetDynamics(source);
     meta.object()["forcing_type"]=dynamics=="unforced"?"free":dynamics;
     meta.object()["controller_kind"]=dynamics=="unforced"?"none":"unknown";
-    meta.object()["warmup_samples"]=double(transform.basis().delays-1);
+    meta.object()["warmup_samples"]=double(transform.basis().rows-1);
     meta.object()["delta_t"]=transform.sampleInterval();
     // Original controls remain in the source archive. No implicit input averaging.
     meta.object()["input_history_source"]=std::filesystem::absolute(path).generic_u8string();
     a.arrays["metadata_json"]=c::NpyArray::fromString(json::dump(meta));
-    return p::publish(root,source,"history-projection",label,std::move(a));
+    return p::publishObject(root, source, dynsyslab::core::object_kind::timeSeries, "history-projection",std::move(a));
 }
 }

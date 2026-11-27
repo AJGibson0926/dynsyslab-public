@@ -12,22 +12,22 @@ SourceData loadObservationSource(const std::filesystem::path& path,
         auto s=loadSource(path);
         const auto system=dynsyslab::core::createSystem(systemConfiguration(s));
         const auto observable=system->observableCatalog().at(analyticObservable);
-        s.values=observable.evaluateRealBatch(s.values,s.samples);s.dimension=observable.outputDimension();
-        return s;
+        return withSeries(s,s.time(),observable.evaluateRealBatch(s.values(),s.samples()),observable.outputDimension());
     }
     const auto& t=a.at("time");const auto& y=a.at(arrayName);
     if(t.shape.size()!=1||(y.shape.size()!=1&&y.shape.size()!=2)||y.shape[0]!=t.shape[0]||t.shape[0]<2)
         throw std::invalid_argument("Measured data require a samples-by-components array aligned with time");
-    SourceData s{path,t.doubles(),y.doubles(),t.shape[0],y.shape.size()==1?1:y.shape[1],{},0,a.metadataJson()};
-    (void)dynsyslab::core::TimeSeries::view(s.time,s.values.data(),s.samples,s.dimension);
-    for(double yv:s.values)if(!std::isfinite(yv))throw std::invalid_argument("Measured values must be finite");
+    SourceData s{path,a.metadataJson(),{}};
+    s.record.series=dynsyslab::core::TimeSeries(t.doubles(),y.doubles(),y.shape.size()==1?1:y.shape[1]);
+    for(double yv:s.values())if(!std::isfinite(yv))throw std::invalid_argument("Measured values must be finite");
     const std::string key=a.contains("control_interval_values")?"control_interval_values":"control_values";
     if(a.contains(key)) {
         const auto& u=a.at(key);
-        if(u.shape.size()!=2||!u.shape[1]||u.shape[0]!=s.samples-(key=="control_interval_values"?1:0))
+        if(u.shape.size()!=2||!u.shape[1]||u.shape[0]!=s.samples()-(key=="control_interval_values"?1:0))
             throw std::invalid_argument("Measured input history has incompatible shape");
-        s.inputs=u.doubles();s.inputDimension=u.shape[1];
-        for(double v:s.inputs)if(!std::isfinite(v))throw std::invalid_argument("Measured inputs must be finite");
+        s.record.inputsOnIntervals=key=="control_interval_values";
+        s.record.inputs=inputSeries(s.time(),u.doubles(),u.shape[1],s.record.inputsOnIntervals);
+        for(double v:s.inputs())if(!std::isfinite(v))throw std::invalid_argument("Measured inputs must be finite");
     }
     return s;
 }

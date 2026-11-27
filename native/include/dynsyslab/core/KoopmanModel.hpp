@@ -3,17 +3,23 @@
 #include <dynsyslab/core/SINDy.hpp>
 #include <dynsyslab/core/EigenfunctionFit.hpp>
 #include <dynsyslab/core/Eigenfunction.hpp>
+#include <dynsyslab/core/Eigenpair.hpp>
 #include <dynsyslab/core/DiscreteInputMap.hpp>
 #include <dynsyslab/core/Reconstruction.hpp>
 #include <dynsyslab/core/FunctionInterpolation.hpp>
 #include <dynsyslab/core/System.hpp>
 #include <dynsyslab/core/KoopmanDatasets.hpp>
 #include <dynsyslab/core/SpectralKROM.hpp>
+#include <dynsyslab/core/TimeSeriesRecord.hpp>
 
 #include <complex>
+#include <filesystem>
+#include <iterator>
+#include <optional>
 #include <cstddef>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <variant>
 #include <vector>
@@ -42,6 +48,41 @@ struct BilinearControlMap {
 
 using ApproximateControlMap = std::variant<ConstantControlMap, BilinearControlMap>;
 
+// Values of every eigenfunction at the training samples the method produced them on.
+struct EigenfunctionSamples {
+    std::vector<double> time;                  // label time of each sample
+    std::vector<std::size_t> sampleIndices;    // row of the input record each sample is labelled by
+    std::vector<std::complex<double>> values;  // samples x modes, row-major
+    std::size_t modes{};
+    [[nodiscard]] std::size_t samples() const noexcept { return time.size(); }
+};
+
+// The name of a domain: "state" for the full state, "window" for series windows, else its coordinate
+// names joined by commas, else "coordinates".
+[[nodiscard]] std::string domainName(const FunctionDomain& domain);
+
+struct EigenfunctionErrors {
+    std::string representation, domain;
+    std::size_t samples{};
+    std::vector<double> valueRelative;    // ||R(p_k) - psi_k|| / ||psi_k|| over the samples, per mode
+    std::vector<double> koopmanResidual;  // ||R(p_k+1) - mu^dt R(p_k)|| / ||R(p_k)||, per mode
+};
+
+// Empirical spectral weight of each eigenfunction over its training samples: w_kj = |psi_j(x_k)|^2 /
+// sum_k |psi_j(x_k)|^2 (samples x modes; uniform for a mode that vanishes). An exploratory
+// localization of where each mode lives along the data, not an identified spectral measure (for
+// those, see KoopmanSpectralAnalysis.hpp; Colbrook & Townsend, Comm. Pure Appl. Math. 77, 2024).
+[[nodiscard]] std::vector<double> empiricalSpectralWeight(const EigenfunctionSamples& samples);
+
+// The krom a model's inherited parts come from: its archive (path and SHA-256) and which of its
+// modes, in this model's order. A krom written from such a model references it as its parent and
+// stores only what the model added (KoopmanArchive.hpp).
+struct KromParent {
+    std::filesystem::path path;
+    std::string sha256;
+    std::vector<std::size_t> modes;
+};
+
 struct KoopmanEigenfunctionDescriptor {
     std::size_t index{};
     std::complex<double> continuousEigenvalue;
@@ -50,8 +91,27 @@ struct KoopmanEigenfunctionDescriptor {
     bool continuousEigenvalueAvailable{true};
 };
 
+// A Koopman reduced-order model (K-ROM): a Spectrum (Spectrum.hpp) whose point part are this model's
+// eigenpairs (eigenvalue, eigenfunction, optional residual; eigenpair(j)), optionally with input maps B
+// (how inputs drive the eigenfunctions) and readouts C (observables g ~ C psi). Without B or C it is
+// still a model; they can be fitted later. The spectrum's continuous part and pseudospectrum, and the
+// fit's spectralDiagnostics(), travel with it. The eigenfunctions are their values at the training
+// samples, the method that found them (origin), and one or more named representations (expansion,
+// interpolation, time-delay window map, ...), each one multi-output FunctionRepresentation on its own
+// domain. The first representation is the one the model evaluates (useRepresentation). The archive
+// is the "krom" data object (KoopmanArchive.hpp).
 class KoopmanModel {
 public:
+    struct Representation {
+        std::string name;
+        std::shared_ptr<const FunctionRepresentation> function;  // every eigenfunction: one output per mode
+    };
+    // A K-ROM from data: the spectrum, the eigenfunctions' sample values (may hold no samples), their
+    // origin and representations (named by representationName; the first is evaluated). No physical
+    // system: bindSystem attaches one.
+    KoopmanModel(Spectrum spectrum, EigenfunctionSamples samples, DataOrigin origin,
+                 std::vector<std::shared_ptr<const FunctionRepresentation>> representations,
+                 std::size_t inputDimension = 0);
     // Coordinate-only models need neither an ODE nor fictitious physical state.
     // The eigenfunctions' shared expansion and, separately, their eigenvalues (one per output).
     KoopmanModel(FunctionExpansion functions, Spectrum spectrum,
@@ -64,7 +124,46 @@ public:
     // Mode `mode` as an Eigenfunction object on the physical state (or on the K-ROM coordinates
     // when they cannot be computed from a state): its representation is this model's expansion or
     // interpolation, its eigenvalue the model's.
-    [[nodiscard]] Eigenfunction eigenfunction(std::size_t mode) const;
+    // Every representation of mode `mode` (the evaluated one first), each through its domain's state
+    // map (`catalog` binds a catalog map; default: the system's); a function of q when a domain has none.
+    [[nodiscard]] Eigenfunction eigenfunction(std::size_t mode, const ObservableCatalog* catalog = nullptr) const;
+    // Eigenpair `mode`: its eigenvalue, eigenfunction (every representation, as eigenfunction()) and residual.
+    [[nodiscard]] Eigenpair eigenpair(std::size_t mode, const ObservableCatalog* catalog = nullptr) const;
+    // Every eigenpair in mode order, for (const auto& pair : krom.pairs()). Each is assembled on
+    // dereference by eigenpair(j); the range stores and copies nothing (it must not outlive the model).
+    class EigenpairRange;
+    [[nodiscard]] EigenpairRange pairs(const ObservableCatalog* catalog = nullptr) const;
+
+    // The eigenfunctions as data.
+    [[nodiscard]] const EigenfunctionSamples& samples() const noexcept { return samples_; }
+    [[nodiscard]] const DataOrigin& origin() const noexcept { return origin_; }
+    void setOrigin(DataOrigin origin) { origin_ = std::move(origin); }
+    // Sets the values at the training samples (a model fitted without them); an interpolation keeps its own.
+    void setSamples(EigenfunctionSamples samples);
+    [[nodiscard]] const std::vector<Representation>& representations() const noexcept { return representations_; }
+    [[nodiscard]] std::vector<std::string> representationNames() const;
+    // By name, else by kind when exactly one representation has it; empty selects the evaluated one.
+    // An ambiguous kind is refused with the names to choose from.
+    [[nodiscard]] const Representation& representation(const std::string& key = {}) const;
+    // The name of `key`'s domain, checked against the observables of data handed in (empty: no check).
+    [[nodiscard]] std::string recognizeDomain(const std::vector<std::string>& observables, const std::string& key = {}) const;
+    // Every eigenfunction at a point of the representation's own domain.
+    [[nodiscard]] std::vector<std::complex<double>> evaluateRepresentation(const double* point, const std::string& key = {}) const;
+    // Errors at the training samples. An interpolation evaluates at its base points; a window map at
+    // the windows of `input` (the record the eigenfunctions were fitted on).
+    [[nodiscard]] EigenfunctionErrors errors(const std::string& key = {}, const TimeSeriesRecord* input = nullptr) const;
+    // Replaces the representation of the same name, keeping its position.
+    void replaceRepresentation(std::shared_ptr<const FunctionRepresentation> function);
+    // Adds a representation (a new name); `first` makes it the evaluated one.
+    void addRepresentation(std::shared_ptr<const FunctionRepresentation> function, bool first = false);
+    // Evaluates through the named representation (moved to the front). An interpolation on catalog
+    // observables binds them through the system; a window map evaluates only on windows.
+    void useRepresentation(const std::string& key);
+    // The interpolation, and switching its interpolant in place (sweeps). The domain and points stay.
+    [[nodiscard]] const FunctionInterpolation& interpolation() const;
+    void setInterpolationMethod(InterpolationMethod method, std::size_t neighbors);
+    // Attaches a physical system to a model built from data (its catalog binds the domains).
+    void bindSystem(SystemConfiguration system);
     [[nodiscard]] const Spectrum& spectrum() const noexcept;
     [[nodiscard]] const FunctionDomain& coordinates() const noexcept;
     [[nodiscard]] const EigenfunctionFitDiagnostics& fitDiagnostics() const noexcept;
@@ -76,10 +175,8 @@ public:
     [[nodiscard]] std::vector<std::complex<double>> evaluateFromCoordinates(const double* q) const { return evaluateCoordinates(q); }
     [[nodiscard]] std::vector<double> continuousGeneratorReal() const { return generatorSplit(); }
     [[nodiscard]] std::vector<std::complex<double>> stateJacobianControlMap(const double* x) const { return exactControlMap(x); }
-    // Historical names below remain source-compatible adapters.
-    // Convenience entry point for manually specified polynomials in the
-    // system's state variables. Use KoopmanSINDyResult::fromCoefficients and
-    // the existing constructor for named analytic or causal-history coordinates.
+    // Manually specified polynomials in the system's state variables (polynomialEigenfunctions in
+    // EigenfunctionFit.hpp builds them on other domains).
     [[nodiscard]] static KoopmanModel fromPolynomialCoefficients(
         SystemConfiguration system, std::size_t coordinateDimension,
         std::vector<std::size_t> exponents,
@@ -87,7 +184,6 @@ public:
         std::vector<std::complex<double>> continuousEigenvalues,
         std::vector<double> center = {}, std::vector<double> scale = {});
 
-    KoopmanModel(KoopmanSINDyResult eigenfunctions, SystemConfiguration system);
     KoopmanModel(InterpolationData eigenfunctions, Spectrum spectrum,
                  SystemConfiguration system);
 
@@ -96,7 +192,11 @@ public:
     [[nodiscard]] std::size_t liftedDimension() const noexcept;
     [[nodiscard]] std::size_t splitDimension() const noexcept;
     [[nodiscard]] std::size_t inputDimension() const;
-    [[nodiscard]] const KoopmanSINDyResult& eigenfunctions() const;
+    // Additive-state actuation xdot = f(x) + B u (B row-major n x m): replaces the bound
+    // system's input matrix in inputDimension() and the exact map grad psi(x) B, so KLQR and
+    // KMPC can drive m inputs (Korda & Mezic 2018, Automatica 93:149-160). Empty restores it.
+    void setAdditiveInputMatrix(std::vector<double> matrix);
+    [[nodiscard]] const std::vector<double>& additiveInputMatrix() const noexcept { return additiveInput_; }
     [[nodiscard]] const std::vector<std::complex<double>>&
         continuousEigenvalues() const;
     [[nodiscard]] std::vector<std::complex<double>> discreteEigenvalues(double dt = 0) const;
@@ -158,8 +258,25 @@ public:
     [[nodiscard]] const std::map<std::string, ReconstructionResult>&
         reconstructions() const noexcept;
     [[nodiscard]] KoopmanModel extract(const std::vector<std::size_t>& indices) const;
-    [[nodiscard]] const SpectralData& spectralData() const noexcept { return spectralData_; }
-    void setSpectralData(SpectralData data) { spectralData_=spectralDataFromJson(spectralDataJson(data)); }
+    // The spectrum's evidence (pair residuals, continuous part, pseudospectrum; Spectrum.hpp) and the
+    // fit's diagnostics. Setting any of them makes it this model's own (a child krom stores it).
+    void setResidual(std::size_t mode, std::optional<EigenpairResidual> residual);
+    void setSpectralEvidence(const Spectrum& evidence);
+    [[nodiscard]] const SpectralDiagnostics& spectralDiagnostics() const noexcept { return spectralDiagnostics_; }
+    void setSpectralDiagnostics(SpectralDiagnostics diagnostics) { spectralDiagnostics_ = std::move(diagnostics); ownSpectralEvidence_ = true; }
+
+    // The krom this model was loaded from (set by the loader; extract keeps it with the chosen modes).
+    // Everything the model has when it is set is inherited; parts added or replaced afterwards are its
+    // own, and a krom written from the model stores only those, referencing the parent.
+    [[nodiscard]] const std::optional<KromParent>& parent() const noexcept { return parent_; }
+    void setParent(KromParent parent);
+    // Forgets the parent: the model is written whole.
+    void clearParent();
+    [[nodiscard]] bool ownsRepresentation(const std::string& name) const { return !inherited_.representations.count(name); }
+    [[nodiscard]] bool ownsReconstruction(const std::string& name) const { return !inherited_.readouts.count(name); }
+    [[nodiscard]] bool ownsControlMap(const std::string& name) const { return !inherited_.controlMaps.count(name); }
+    [[nodiscard]] bool ownsDiscreteInputMap(const std::string& name) const { return !inherited_.discreteMaps.count(name); }
+    [[nodiscard]] bool ownsSpectralEvidence() const noexcept { return ownSpectralEvidence_; }
 
 private:
     void attachPhysicalSystem(SystemConfiguration system);
@@ -168,8 +285,8 @@ private:
     std::optional<Spectrum> spectrum_;
     EigenfunctionFitDiagnostics fitDiagnostics_;
     std::size_t suppliedInputDimension_{};
+    std::vector<double> additiveInput_;
     // Read-only legacy snapshot; runtime evaluation uses polynomial_.
-    KoopmanSINDyResult eigenfunctions_;
     SystemConfiguration systemConfiguration_;
     std::shared_ptr<ODESystem> system_;
     std::shared_ptr<const FunctionInterpolation> scattered_;
@@ -178,7 +295,51 @@ private:
     std::map<std::string, ReconstructionResult> reconstructions_;
     std::vector<KoopmanDatasetReference> datasetReferences_;
     std::string bindingEvidenceJson_{"{}"};
-    SpectralData spectralData_;
+    struct Inherited { std::set<std::string> representations, readouts, controlMaps, discreteMaps; };
+    void activate();  // builds the evaluator from representations_.front()
+    void restampMaps();
+    EigenfunctionSamples samples_;
+    DataOrigin origin_;
+    std::vector<Representation> representations_;
+    std::optional<KromParent> parent_;
+    Inherited inherited_;
+    bool ownSpectralEvidence_{false};
+    SpectralDiagnostics spectralDiagnostics_;
 };
+
+class KoopmanModel::EigenpairRange {
+public:
+    class iterator {
+    public:
+        using iterator_category = std::input_iterator_tag;
+        using value_type = Eigenpair;
+        using difference_type = std::ptrdiff_t;
+        using pointer = void;
+        using reference = Eigenpair;
+        iterator(const KoopmanModel* model, std::size_t mode, const ObservableCatalog* catalog)
+            : model_(model), mode_(mode), catalog_(catalog) {}
+        Eigenpair operator*() const { return model_->eigenpair(mode_, catalog_); }
+        iterator& operator++() { ++mode_; return *this; }
+        iterator operator++(int) { auto previous = *this; ++mode_; return previous; }
+        bool operator==(const iterator& other) const { return mode_ == other.mode_ && model_ == other.model_; }
+        bool operator!=(const iterator& other) const { return !(*this == other); }
+    private:
+        const KoopmanModel* model_;
+        std::size_t mode_;
+        const ObservableCatalog* catalog_;
+    };
+    EigenpairRange(const KoopmanModel& model, const ObservableCatalog* catalog) : model_(&model), catalog_(catalog) {}
+    [[nodiscard]] iterator begin() const { return {model_, 0, catalog_}; }
+    [[nodiscard]] iterator end() const { return {model_, model_->liftedDimension(), catalog_}; }
+    [[nodiscard]] std::size_t size() const { return model_->liftedDimension(); }
+private:
+    const KoopmanModel* model_;
+    const ObservableCatalog* catalog_;
+};
+
+inline KoopmanModel::EigenpairRange KoopmanModel::pairs(const ObservableCatalog* catalog) const {
+    return {*this, catalog};
+}
+
 
 }  // namespace dynsyslab::core

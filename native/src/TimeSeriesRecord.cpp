@@ -24,12 +24,14 @@ TimeSeriesRecord joinTimeSeriesRecords(const std::vector<TimeSeriesRecord>& reco
             if (series.time(k) != first.time(k))
                 throw std::invalid_argument("joined time series must share one clock (times differ); "
                                             "resample them first");
+        if (record.inputs)
+            throw std::invalid_argument("joined time series must not carry inputs; drop them before joining");
         if (record.channels.size() != series.componentCount())
             throw std::invalid_argument("time-series record channels do not match its components");
         width += series.componentCount();
     }
     std::vector<double> time(first.timeData(), first.timeData() + samples), values(samples * width);
-    TimeSeriesRecord joined{TimeSeries(std::vector<double>{0.0}, std::vector<double>{0.0}, 1), {}, {}, {}, {}};
+    TimeSeriesRecord joined;
     joined.origin.method = "join";
     std::size_t offset = 0;
     for (const auto& record : records) {

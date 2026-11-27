@@ -13,9 +13,9 @@ docs/LOCAL_ARTIFACT_POINTERS.md export-ignore
 docs/LOCAL_ASSET_POINTERS.json export-ignore
 docs/RPE_CLEAN_ISOLATION_KLQR_SOP.md export-ignore
 docs/architecture/DYNSYSLAB_SUITE_ARCHITECTURE_AUDIT_2026-08-31.md export-ignore
-examples/native/pipelines/rpe-echo-mode-selection/echo-pool.json export-ignore
-examples/native/pipelines/rpe-echo-mode-selection/hdmd-pool.json export-ignore
-examples/native/pipelines/rpe-echo-mode-selection/range-pool.json export-ignore
+examples/native/experiments/rpe-echo-mode-selection/echo-pool.json export-ignore
+examples/native/experiments/rpe-echo-mode-selection/hdmd-pool.json export-ignore
+examples/native/experiments/rpe-echo-mode-selection/range-pool.json export-ignore
 scripts/generate_rpe_control_identification_data.py export-ignore
 scripts/run_rpe_control_map_comparison.py export-ignore
 tools/analyze_rpe_echo_jet_nonlinear_sine.py export-ignore

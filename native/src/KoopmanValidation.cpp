@@ -8,7 +8,7 @@
 namespace dynsyslab::core {
 namespace {
 
-KoopmanErrorStatistics statistics(
+EigenfunctionErrorStatistics statistics(
     const std::vector<std::complex<double>>& actual,
     const std::vector<std::complex<double>>& predicted) {
     if (actual.empty() || actual.size() != predicted.size())
@@ -128,7 +128,7 @@ EigenfunctionValidationResult validateEigenfunctions(
             values[mode][sample] = lifted[mode];
     }
 
-    KoopmanValidationResult result;
+    EigenfunctionValidationResult result;
     result.samples = samples; result.stateDimension = stateDimension;
     result.inputKind=input;
     result.trainingDomainAvailable = trainingMinimum.size() == stateDimension
@@ -172,9 +172,9 @@ EigenfunctionValidationResult validateEigenfunctions(
         std::vector<std::complex<double>> generatorPrediction(samples);
         for (std::size_t index = 0; index < samples; ++index)
             generatorPrediction[index] = lambda * values[mode][index];
-        KoopmanModeValidation item{lambda, statistics(stepActual, stepPredicted),
+        EigenfunctionModeValidation item{lambda, statistics(stepActual, stepPredicted),
             statistics(anchoredActual, anchoredPredicted),
-            rate?statistics(observedDerivative, generatorPrediction):KoopmanErrorStatistics{}, {}};
+            rate?statistics(observedDerivative, generatorPrediction):EigenfunctionErrorStatistics{}, {}};
         item.continuousRateAvailable=rate.has_value();item.generatorAvailable=rate.has_value();
         long double incrementSquared=0, residualSquared=0;
         for(std::size_t index=1;index<samples;++index) {
@@ -200,7 +200,7 @@ EigenfunctionValidationResult validateEigenfunctions(
     return result;
 }
 
-KoopmanValidationResult validateKoopmanSemigroup(const KoopmanModel& model,
+EigenfunctionValidationResult validateKoopmanSemigroup(const KoopmanModel& model,
     const std::vector<double>& time,const std::vector<double>& states,std::size_t samples,
     std::size_t dimension,std::vector<double> horizons,const std::vector<double>& minimum,
     const std::vector<double>& maximum) {

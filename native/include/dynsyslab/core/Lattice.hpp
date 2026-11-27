@@ -5,10 +5,19 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
 namespace dynsyslab::core {
+
+// Called every `interval` sweeps (before the last) with the sweeps done, the observations so far
+// (sweeps x 2 row-major: energy, magnetisation) and the current spins: durable mid-run history.
+struct LatticeCheckpoint {
+    std::size_t interval{0};
+    std::function<void(std::size_t sweeps, const std::vector<double>& observations,
+                       const std::vector<std::int64_t>& spins)> callback;
+};
 
 struct IsingRequest {
     std::vector<std::int64_t> spins;
@@ -19,6 +28,7 @@ struct IsingRequest {
     double temperature{1.0};
     std::uint64_t seed{};
     std::size_t sweeps{};
+    LatticeCheckpoint checkpoint;
 };
 
 struct IsingResult {
@@ -39,6 +49,7 @@ struct PottsRequest {
     double temperature{1.0};
     std::uint64_t seed{};
     std::size_t sweeps{};
+    LatticeCheckpoint checkpoint;
 };
 
 struct PottsResult {

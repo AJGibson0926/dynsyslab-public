@@ -1,11 +1,14 @@
 #include <dynsyslab/workflow/ControlTargets.hpp>
 
+#include <dynsyslab/core/AnalyticExpression.hpp>
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/Targets.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <limits>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -129,6 +132,71 @@ dynsyslab::core::StateTargetFunction withRamp(
     };
 }
 
+// Monotone piecewise-cubic Hermite interpolation (Fritsch & Carlson 1980, SIAM J. Numer. Anal.
+// 17:238-246) with the weighted-harmonic-mean interior slopes of Fritsch & Butland 1984 (SIAM J.
+// Sci. Stat. Comput. 5:300-304) and shape-preserving one-sided end slopes; it never overshoots.
+dynsyslab::core::StateTargetFunction pchipTarget(std::vector<double> time, std::vector<double> values,
+                                                 std::size_t dimension) {
+    const std::size_t n = time.size();
+    std::vector<double> slopes(n * dimension, 0.0);
+    for (std::size_t c = 0; c < dimension && n > 1; ++c) {
+        std::vector<double> h(n - 1), delta(n - 1);
+        for (std::size_t k = 0; k + 1 < n; ++k) {
+            h[k] = time[k + 1] - time[k];
+            delta[k] = (values[(k + 1) * dimension + c] - values[k * dimension + c]) / h[k];
+        }
+        for (std::size_t k = 1; k + 1 < n; ++k)
+            if (delta[k - 1] * delta[k] > 0.0) {
+                const double w1 = 2 * h[k] + h[k - 1], w2 = h[k] + 2 * h[k - 1];
+                slopes[k * dimension + c] = (w1 + w2) / (w1 / delta[k - 1] + w2 / delta[k]);
+            }
+        const auto end = [&](double h0, double h1, double d0, double d1) {
+            if (n == 2) return d0;
+            double d = ((2 * h0 + h1) * d0 - h0 * d1) / (h0 + h1);
+            if (d * d0 <= 0.0) d = 0.0;
+            else if (d0 * d1 < 0.0 && std::abs(d) > 3 * std::abs(d0)) d = 3 * d0;
+            return d;
+        };
+        slopes[c] = end(h[0], n > 2 ? h[1] : h[0], delta[0], n > 2 ? delta[1] : delta[0]);
+        slopes[(n - 1) * dimension + c] = end(h[n - 2], n > 2 ? h[n - 3] : h[n - 2],
+                                              delta[n - 2], n > 2 ? delta[n - 3] : delta[n - 2]);
+    }
+    return [time = std::move(time), values = std::move(values), slopes = std::move(slopes), dimension](double query) {
+        std::vector<double> result(dimension);
+        if (query <= time.front() || time.size() == 1) {
+            std::copy(values.begin(), values.begin() + dimension, result.begin()); return result; }
+        if (query >= time.back()) {
+            std::copy(values.end() - dimension, values.end(), result.begin()); return result; }
+        const std::size_t right = static_cast<std::size_t>(std::upper_bound(time.begin(), time.end(), query) - time.begin());
+        const std::size_t left = right - 1;
+        const double h = time[right] - time[left], s = (query - time[left]) / h;
+        const double h00 = (1 + 2 * s) * (1 - s) * (1 - s), h10 = s * (1 - s) * (1 - s);
+        const double h01 = s * s * (3 - 2 * s), h11 = s * s * (s - 1);
+        for (std::size_t c = 0; c < dimension; ++c)
+            result[c] = h00 * values[left * dimension + c] + h10 * h * slopes[left * dimension + c]
+                + h01 * values[right * dimension + c] + h11 * h * slopes[right * dimension + c];
+        return result;
+    };
+}
+
+// {"kind": "expression", "components": ["1 + 0.1*sin(4*t)", "0.4*cos(4*t)"], "parameters": {...}}:
+// one analytic expression of t per state component (AnalyticExpression infix syntax).
+dynsyslab::core::StateTargetFunction expressionTarget(const json::Value& source, std::size_t dimension) {
+    std::map<std::string, double> constants;
+    for (const auto& [name, value] : source.at("parameters").object()) constants[name] = value.number();
+    std::vector<dynsyslab::core::AnalyticExpression> components;
+    for (const auto& item : source.at("components").array())
+        components.push_back(dynsyslab::core::AnalyticExpression::parse(item.string(), {"t"}, constants));
+    if (components.size() != dimension)
+        throw std::invalid_argument("expression target needs one component per state");
+    return [components = std::move(components)](double time) {
+        std::vector<double> result;
+        result.reserve(components.size());
+        for (const auto& component : components) result.push_back(component.evaluate(&time));
+        return result;
+    };
+}
+
 dynsyslab::core::StateTargetFunction trajectoryTarget(
     const json::Value& source, std::size_t dimension) {
     const std::string path = source.at("source").string();
@@ -151,6 +219,10 @@ dynsyslab::core::StateTargetFunction trajectoryTarget(
     if (!std::is_sorted(time.begin(), time.end())
         || std::adjacent_find(time.begin(), time.end()) != time.end())
         throw std::invalid_argument("trajectory target time must be strictly increasing");
+    const std::string interpolation = source.at("interpolation").string("linear");
+    if (interpolation != "linear" && interpolation != "pchip")
+        throw std::invalid_argument("trajectory target interpolation must be linear or pchip");
+    if (interpolation == "pchip") return pchipTarget(std::move(time), std::move(values), dimension);
     return [time = std::move(time), values = std::move(values), dimension]
         (double query) {
         const auto copyRow = [&](std::size_t row) {
@@ -180,6 +252,7 @@ dynsyslab::core::StateTargetFunction baseTarget(const json::Value& source, std::
         return fixedTarget(source, dimension);
     if (kind == "waveform") return waveformTarget(source, dimension);
     if (kind == "trajectory") return trajectoryTarget(source, dimension);
+    if (kind == "expression") return expressionTarget(source, dimension);
     if (kind == "rpe_canonical") {
         if (dimension != 2)
             throw std::invalid_argument("RPE target requires a two-state system");
@@ -194,6 +267,32 @@ dynsyslab::core::StateTargetFunction baseTarget(const json::Value& source, std::
 dynsyslab::core::StateTargetFunction resolveControlTarget(
     const json::Value& source, std::size_t dimension) {
     return withRamp(baseTarget(source, dimension), source.at("ramp"), dimension);
+}
+
+TargetEnvelope controlTargetEnvelope(const json::Value& source, std::size_t dimension,
+                                     double start, double stop) {
+    TargetEnvelope result;
+    const std::string kind = source.at("kind").string("constant");
+    const bool ramped = rampRequested(source.at("ramp"));
+    if (kind == "rpe_canonical" && !ramped) {
+        const auto [lower, upper] = dynsyslab::core::rpeControlTarget(source.at("name").string()).conservativeEnvelope();
+        result.lower = lower; result.upper = upper; result.method = "analytic";
+        return result;
+    }
+    const auto target = resolveControlTarget(source, dimension);
+    if (!(stop >= start)) throw std::invalid_argument("target envelope needs start <= stop");
+    constexpr std::size_t samples = 4001;
+    result.lower.assign(dimension, std::numeric_limits<double>::infinity());
+    result.upper.assign(dimension, -std::numeric_limits<double>::infinity());
+    for (std::size_t k = 0; k < samples; ++k) {
+        const auto value = target(start + (stop - start) * double(k) / double(samples - 1));
+        for (std::size_t c = 0; c < dimension; ++c) {
+            result.lower[c] = std::min(result.lower[c], value[c]);
+            result.upper[c] = std::max(result.upper[c], value[c]);
+        }
+    }
+    result.method = "sampled";
+    return result;
 }
 
 }  // namespace dynsyslab::workflow

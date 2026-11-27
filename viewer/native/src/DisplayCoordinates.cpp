@@ -38,15 +38,7 @@ std::string storedCoordinates(const json::Value& metadata,
                               const std::string& desired) {
     auto stored = metadata.at("archive_coordinate_system").string(
         metadata.at("stored_coordinate_system").string());
-    if (!stored.empty()) return stored;
-    const auto backend = metadata.at("execution_backend").at("name").string();
-    // Historical Python solver archives explicitly preserve dimensional
-    // TimeSeries arrays even when their equations were advanced in model
-    // coordinates. The old Python Viewer applied this transform at display.
-    if (backend == "python-reference" ||
-        metadata.at("time_series_format").string() == "dynsyslab.TimeSeries/v1")
-        return "dimensional";
-    return desired;
+    return stored.empty() ? desired : stored;
 }
 
 std::vector<std::string> labels(const std::string& system,
@@ -64,7 +56,7 @@ std::vector<std::string> labels(const std::string& system,
 bool hasTransformedValues(const json::Value& metadata) {
     const auto space = metadata.at("value_space").string();
     return space == "observation-coordinates" || space == "history-coordinates" ||
-        metadata.at("method").string() == "coordinate-transform";
+        !metadata.at("coordinate_transform_kind").string().empty();
 }
 
 DisplayCoordinateTransform displayCoordinateTransform(

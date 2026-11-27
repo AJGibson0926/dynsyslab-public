@@ -44,19 +44,19 @@ std::filesystem::path runDerivativeBenchmark(const std::vector<std::filesystem::
     const auto observable = settings.at("observable").string(), referenceName = settings.at("reference_derivative").string();
     if (observable.empty() || referenceName.empty()) throw std::invalid_argument("derivative_benchmark needs observable and reference_derivative");
     const auto& window = settings.at("time_window").array();
-    std::size_t i0 = 0, i1 = source.samples;
+    std::size_t i0 = 0, i1 = source.samples();
     if (window.size() == 2) {
-        while (i0 < source.samples && source.time[i0] < window[0].number()) ++i0;
-        i1 = i0; while (i1 < source.samples && source.time[i1] <= window[1].number()) ++i1;
+        while (i0 < source.samples() && source.time()[i0] < window[0].number()) ++i0;
+        i1 = i0; while (i1 < source.samples() && source.time()[i1] <= window[1].number()) ++i1;
     }
     const std::size_t n = i1 - i0;
     if (n < 50) throw std::invalid_argument("derivative_benchmark window has too few samples");
-    const double dt = source.time[i0 + 1] - source.time[i0];
+    const double dt = source.time()[i0 + 1] - source.time()[i0];
     std::vector<double> y(n), ref(n), time(n);
     const auto& map = catalog.at(observable); const auto& refMap = catalog.at(referenceName);
     for (std::size_t i = 0; i < n; ++i) {
-        const double* x = &source.values[(i0 + i) * source.dimension];
-        y[i] = map.evaluateReal(x).front(); ref[i] = refMap.evaluateReal(x).front(); time[i] = source.time[i0 + i];
+        const double* x = &source.values()[(i0 + i) * source.dimension()];
+        y[i] = map.evaluateReal(x).front(); ref[i] = refMap.evaluateReal(x).front(); time[i] = source.time()[i0 + i];
     }
     const std::size_t skip = n / 50;
     const auto seeds = static_cast<std::size_t>(std::max(1.0, settings.at("seeds").number(1)));
@@ -126,15 +126,16 @@ std::filesystem::path runDerivativeBenchmark(const std::vector<std::filesystem::
         archive.arrays["trace_measured"] = c::NpyArray::fromDoubles({noises.size(), T}, traceMeasured);
         archive.arrays["trace_derivative"] = c::NpyArray::fromDoubles({noises.size(), methods.size(), T}, traceDerivative);
     }
-    json::Value::Object meta{{"format", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("derivative-benchmark")},
+    json::Value::Object meta{{"schema", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("derivative-benchmark")},
         {"label", json::Value(label)}, {"source_archive", json::Value(sources.front().generic_u8string())},
         {"observable", json::Value(observable)}, {"reference_derivative", json::Value(referenceName)},
         {"delta_t", json::Value(dt)}, {"samples", json::Value(double(n))}, {"settings", settings},
         {"independent_archive", json::Value(true)}};
     archive.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(json::Value(std::move(meta))));
-    const auto directory = objectFolder(root, "derivative-benchmark");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::report);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(sources.front().stem().u8string() + "__derivative-benchmark__" + timestamp()) + ".npz");
+    stampDataObject(archive, dynsyslab::core::object_kind::report, "derivative-benchmark", {});
     c::writeNpzAtomic(path, archive);
     return path;
 }

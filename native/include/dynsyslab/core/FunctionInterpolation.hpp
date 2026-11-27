@@ -1,7 +1,7 @@
 #pragma once
 // The interpolation representation: outputs interpolated from sampled values at scattered points of
 // a domain, with a selectable interpolant (InterpolationMethod). Like FunctionExpansion it is a
-// FunctionRepresentation and holds no eigenvalues; Observables and Eigenfunctions point at it.
+// FunctionRepresentation and holds no eigenvalues; Observables and K-ROMs point at it.
 #include <dynsyslab/core/FunctionRepresentation.hpp>
 
 #include <complex>

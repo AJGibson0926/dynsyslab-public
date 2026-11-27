@@ -41,7 +41,7 @@ int main() {
         require(encoded.at("schema").string() == "dynsyslab.initial-conditions/v1"
             && encoded.at("values").array().size() == 4,
             "machine-readable IC response");
-        require(dynsyslab::workflow::supportedOdeInitialConditionModes().size() == 6,
+        require(dynsyslab::workflow::supportedOdeInitialConditionModes().size() == 12,
                 "IC capability list");
         auto partial = job;
         partial.at("initial_conditions").at("cluster_specs") =

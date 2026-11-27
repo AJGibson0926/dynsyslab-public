@@ -132,10 +132,7 @@ DMDResult dmdPair(const RMatrix& x,const RMatrix& y,double deltaTime,
     result.samples=x.columns+1;
     result.rank=rank;
     result.deltaTime=deltaTime;
-    result.discreteEigenvalues=eigen.eigenvalues;
-    result.continuousEigenvalues.reserve(rank);
-    for(const auto value:result.discreteEigenvalues)
-        result.continuousEigenvalues.push_back(std::log(value)/deltaTime);
+    result.spectrum=Spectrum::fromDiscreteMultipliers(eigen.eigenvalues,deltaTime);
     result.modes=modes.values;
     result.operatorMatrix=complexValues(reduced).values;
     if(coordinates) {
@@ -164,8 +161,7 @@ void reorder(HankelDMDResult& result,const std::vector<std::size_t>& order) {
             copy[index]=source[order[index]];
         source=std::move(copy);
     };
-    vector(result.discreteEigenvalues);
-    vector(result.continuousEigenvalues);
+    result.spectrum=result.spectrum.extract(order);
     vector(result.modalAmplitudes);
     const auto modes=result.modes;
     for(std::size_t row=0;row<result.featureDimension;++row)

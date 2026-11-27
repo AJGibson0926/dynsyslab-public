@@ -59,6 +59,20 @@ std::vector<std::size_t> figureIndices(const Payload& payload, int page,
     return result;
 }
 
+// A figure's focus range, with the ordinate fitted to the samples inside it.
+std::optional<AxisLimits> focusLimits(const Figure& figure) {
+    if (!figure.focusX || !(figure.focusX->second > figure.focusX->first)) return std::nullopt;
+    double low = std::numeric_limits<double>::infinity(), high = -low;
+    for (const auto& trace : figure.traces)
+        for (std::size_t i = 0; i < trace.x.size() && i < trace.y.size(); ++i)
+            if (trace.x[i] >= figure.focusX->first && trace.x[i] <= figure.focusX->second && std::isfinite(trace.y[i])) {
+                low = std::min(low, trace.y[i]); high = std::max(high, trace.y[i]);
+            }
+    if (!std::isfinite(low)) return std::nullopt;
+    const double pad = 0.05 * std::max(high - low, 1e-12 * std::max(1.0, std::abs(high)));
+    return AxisLimits{figure.focusX->first, figure.focusX->second, low - pad, high + pad};
+}
+
 }  // namespace
 
 bool PlotCanvas::registerClass(HINSTANCE instance) {
@@ -89,6 +103,8 @@ void PlotCanvas::setPayload(std::shared_ptr<Payload> payload) {
     payload_ = std::move(payload);
     scrollBar_.scrollBy(-scrollBar_.position());
     axisLimits_.clear(); cameras3D_.clear(); page_ = 0; composed_ = false; hitRegions_.clear();
+    if (payload_) for (std::size_t index = 0; index < payload_->figures.size(); ++index)
+        if (const auto limits = focusLimits(payload_->figures[index])) axisLimits_[index] = *limits;
     hoverProbe_.reset(); pinnedProbes_.clear(); active3DFigure_.reset();
     hovered3DFigure_.reset(); hovered3DControl_ = Plot3DControl::none;
     if (!preferredCoordinates_.empty() && canDisplayCoordinates(preferredCoordinates_))

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <dynsyslab/core/BalancedTruncation.hpp>
+#include <dynsyslab/core/ControlDesign.hpp>
 #include <dynsyslab/core/PIDCompensator.hpp>
 #include <dynsyslab/core/KoopmanModel.hpp>
 
@@ -14,16 +15,7 @@
 
 namespace dynsyslab::core {
 
-struct ContinuousLQRSolution {
-    std::vector<double> riccati; // state x state
-    std::vector<double> gain;    // input x state
-    std::vector<std::complex<double>> closedLoopPoles;
-    double relativeResidual{};
-    std::size_t stateDimension{};
-    std::size_t inputDimension{};
-};
-
-[[nodiscard]] ContinuousLQRSolution solveContinuousLQR(
+[[nodiscard]] numerics::ContinuousLqrResult solveContinuousLQR(
     const std::vector<double>& generator, const std::vector<double>& input,
     const std::vector<double>& statePenalty, const std::vector<double>& inputPenalty,
     std::size_t stateDimension, std::size_t inputDimension);
@@ -32,7 +24,7 @@ struct ContinuousLQRSolution {
 // the gain [K_x K_q] (input x (state + outputs)) minimizes the cost with penalty
 // blkdiag(Q, Q_i). Control law: u = -K_x (x - x_ref) - K_q q. (A, B) must be stabilizable
 // and (A, B, C_i) must have no transmission zero at s = 0.
-[[nodiscard]] ContinuousLQRSolution solveContinuousLQI(
+[[nodiscard]] numerics::ContinuousLqrResult solveContinuousLQI(
     const std::vector<double>& generator, const std::vector<double>& input,
     const std::vector<double>& outputMatrix, const std::vector<double>& statePenalty,
     const std::vector<double>& integralPenalty, const std::vector<double>& inputPenalty,
@@ -98,7 +90,7 @@ public:
         const std::vector<std::complex<double>>& values,
         const std::vector<std::complex<double>>& inputMap) const;
     [[nodiscard]] std::size_t gainSolveCount() const noexcept { return gainSolveCount_; }
-    [[nodiscard]] const ContinuousLQRSolution& lastSolution() const noexcept;
+    [[nodiscard]] const numerics::ContinuousLqrResult& lastSolution() const noexcept;
     [[nodiscard]] const std::string& controlRepresentation() const noexcept;
     // KLQR option `balanced_truncation`: every gain solve balances (A, B, I),
     // designs LQR on the reduced model and applies the lifted gain K_r P to the
@@ -136,7 +128,7 @@ private:
     StateTargetFunction target_;
     KoopmanTargetSpace targetSpace_{KoopmanTargetSpace::dynamicalState};
     std::string representation_;
-    mutable ContinuousLQRSolution last_;
+    mutable numerics::ContinuousLqrResult last_;
     mutable std::vector<double> cachedInputMap_;
     mutable std::size_t gainSolveCount_{};
     std::optional<KoopmanIntegralAction> integral_;

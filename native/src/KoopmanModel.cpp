@@ -14,6 +14,12 @@ void finiteMapValues(const std::vector<std::complex<double>>& values) {
         throw std::invalid_argument("Control map coefficients must be finite");
 }
 
+// A K-ROM need not have an input map B: it is fitted later (input_map, control_regression, ...).
+std::string missingControlMap(const std::string& name) {
+    return "this K-ROM has no input map B named \"" + name + "\"; fit one first (input_map, control_regression, "
+           "history_control_regression or DMDc/EDMDc) and use the krom that step publishes";
+}
+
 bool realMode(std::complex<double> value) { return std::abs(value.imag()) <= 1e-12; }
 
 void validate(const ConstantControlMap& value, std::size_t modes, std::size_t inputs) {
@@ -52,38 +58,22 @@ std::vector<std::complex<double>> evaluateStored(
     return result;
 }
 
-}  // namespace
-
-KoopmanModel::KoopmanModel(KoopmanSINDyResult eigenfunctions,
-                           SystemConfiguration system)
-    : KoopmanModel(polynomialEigenfunctionsFromLegacy(eigenfunctions),std::move(system)) {
-    eigenfunctions.dynamicalStateDimension=stateDimension();
-    eigenfunctions_=std::move(eigenfunctions);
+// An interpolation's own samples: its training values at its base points, in order.
+EigenfunctionSamples interpolationSamples(const InterpolationData& data) {
+    EigenfunctionSamples samples;
+    samples.modes = data.outputs();
+    samples.values = data.trainingValues;
+    for (std::size_t k = 0; k < data.samples; ++k) { samples.sampleIndices.push_back(k); samples.time.push_back(double(k)); }
+    return samples;
 }
+
+}  // namespace
 
 KoopmanModel::KoopmanModel(InterpolationData eigenfunctions, Spectrum spectrum,
                            SystemConfiguration system)
-    : spectrum_(std::move(spectrum)), systemConfiguration_(std::move(system)),
-      scattered_(std::make_shared<FunctionInterpolation>(
-          std::move(eigenfunctions))) {
-    system_=std::shared_ptr<ODESystem>(createSystem(systemConfiguration_).release());
-    systemConfiguration_=system_->configuration();
-    const std::size_t physicalDimension=system_->descriptor().stateDimension;
-    const auto& bound=scattered_->data().coordinateObservable;
-    if(bound.empty()&&scattered_->data().stateDimension!=physicalDimension)
-        throw std::invalid_argument(
-            "scattered KROM eigenfunctions and dynamical system differ in dimension");
-    if(spectrum_->size()!=scattered_->outputCount())
-        throw std::invalid_argument("interpolated eigenfunctions and spectrum differ in size");
-    eigenfunctions_.continuousEigenvalues=spectrum_->continuousRates();
-    eigenfunctions_.stateDimension=physicalDimension;
-    eigenfunctions_.dynamicalStateDimension=physicalDimension;
-    if(!bound.empty()){  // bind the catalog observables the interpolation was sampled on
-        auto q=scattered_->coordinates().bound(system_->observableCatalog());
-        if(q.stateMap->stateDimension()!=physicalDimension)
-            throw std::invalid_argument("scattered KROM coordinates and their observable differ in dimension");
-        scattered_=std::dynamic_pointer_cast<const FunctionInterpolation>(scattered_->onDomain(std::move(q)));
-    }
+    : KoopmanModel(std::move(spectrum), interpolationSamples(eigenfunctions), DataOrigin{},
+                   {std::make_shared<const FunctionInterpolation>(eigenfunctions)}) {
+    bindSystem(std::move(system));
 }
 
 std::size_t KoopmanModel::stateDimension() const {
@@ -102,17 +92,23 @@ std::size_t KoopmanModel::splitDimension() const noexcept {
     for (std::size_t j=0;j<liftedDimension();++j) result += isRealMode(j) ? 1 : 2;
     return result;
 }
+void KoopmanModel::setAdditiveInputMatrix(std::vector<double> matrix) {
+    const std::size_t n = stateDimension();
+    if (!matrix.empty() && (n == 0 || matrix.size() % n))
+        throw std::invalid_argument("additive input matrix must be state dimension x inputs");
+    for (const double v : matrix)
+        if (!std::isfinite(v)) throw std::invalid_argument("additive input matrix must be finite");
+    additiveInput_ = std::move(matrix);
+}
 std::size_t KoopmanModel::inputDimension() const {
+    if(!additiveInput_.empty())return additiveInput_.size()/stateDimension();
     if(!system_)return suppliedInputDimension_;
     const auto initial = system_->initialState();
     const auto matrix = system_->inputMatrix(initial.data());
-    if (matrix.empty() || matrix.size() % stateDimension())
+    const std::size_t states = system_->descriptor().stateDimension;  // the system's, whatever the domain
+    if (matrix.empty() || matrix.size() % states)
         throw std::runtime_error("system input matrix has invalid dimensions");
-    return matrix.size() / stateDimension();
-}
-const KoopmanSINDyResult& KoopmanModel::eigenfunctions() const {
-    if(!spectrum().hasContinuousRates())throw std::logic_error("Legacy eigenfunctions() requires finite continuous rates; use expansion()");
-    return eigenfunctions_;
+    return matrix.size() / states;
 }
 const std::vector<std::complex<double>>&
 KoopmanModel::continuousEigenvalues() const {
@@ -220,8 +216,9 @@ std::vector<std::complex<double>> KoopmanModel::valuesFromSplit(
 }
 
 std::vector<std::complex<double>> KoopmanModel::exactControlMap(const double* state) const {
-    if(!system_)throw std::logic_error("State-Jacobian control map needs a physical-system adapter");
-    const auto original = system_->inputMatrix(state); const std::size_t inputs = inputDimension();
+    if(!system_&&additiveInput_.empty())throw std::logic_error("State-Jacobian control map needs a physical-system adapter");
+    const auto original = additiveInput_.empty() ? system_->inputMatrix(state) : additiveInput_;
+    const std::size_t inputs = inputDimension();
     if(scattered_){
         if(!scattered_->data().coordinateObservable.empty())throw std::logic_error(
             "an observable-bound scattered KROM needs a fitted input map");
@@ -274,7 +271,7 @@ std::vector<std::complex<double>> KoopmanModel::controlMap(
     const double* state, const std::string& representation) const {
     if (representation == "exact") return exactControlMap(state);
     const auto found = controlMaps_.find(representation);
-    if (found == controlMaps_.end()) throw std::out_of_range("unknown KROM control map");
+    if (found == controlMaps_.end()) throw std::out_of_range(missingControlMap(representation));
     return evaluateStored(found->second, evaluate(state));
 }
 
@@ -290,7 +287,7 @@ std::vector<std::complex<double>> KoopmanModel::controlMapFromLifted(
         throw std::logic_error(
             "coordinate-supplied control evaluation requires an approximate control map");
     const auto found = controlMaps_.find(representation);
-    if (found == controlMaps_.end()) throw std::out_of_range("unknown KROM control map");
+    if (found == controlMaps_.end()) throw std::out_of_range(missingControlMap(representation));
     return evaluateStored(found->second, values);
 }
 
@@ -328,6 +325,7 @@ void KoopmanModel::setControlMap(std::string name, ApproximateControlMap represe
             throw std::invalid_argument("Control map belongs to different ordered eigenfunctions/coordinates/physics");
         value.modelIdentity = identity;
     }, representation);
+    inherited_.controlMaps.erase(name);
     controlMaps_[std::move(name)] = std::move(representation);
 }
 bool KoopmanModel::hasControlMap(const std::string& name) const {
@@ -348,6 +346,7 @@ void KoopmanModel::setReconstruction(std::string observable,
         || reconstruction.matrix.size()!=reconstruction.outputs*liftedDimension()
         || (!reconstruction.offset.empty()&&reconstruction.offset.size()!=reconstruction.outputs))
         throw std::invalid_argument("observable reconstruction dimensions do not match KROM");
+    inherited_.readouts.erase(observable);
     reconstructions_[std::move(observable)]=std::move(reconstruction);
 }
 bool KoopmanModel::hasReconstruction(const std::string& observable) const {
@@ -372,71 +371,6 @@ std::vector<std::complex<double>> KoopmanModel::reconstruct(
 }
 const std::map<std::string, ReconstructionResult>&
 KoopmanModel::reconstructions() const noexcept { return reconstructions_; }
-
-KoopmanModel KoopmanModel::extract(const std::vector<std::size_t>& indices) const {
-    if (indices.empty()) throw std::invalid_argument("KROM extraction requires a mode");
-    std::set<std::size_t> unique(indices.begin(), indices.end());
-    if (unique.size() != indices.size() || *unique.rbegin() >= liftedDimension())
-        throw std::out_of_range("KROM extraction indices are invalid");
-    KoopmanModel result=scattered_
-        ? KoopmanModel(scattered_->select(indices)->data(),spectrum().extract(indices),systemConfiguration_)
-        : KoopmanModel(polynomial_->select(indices),spectrum().extract(indices),inputDimension(),fitDiagnostics_.extract(indices));
-    if(!scattered_&&system_)result.attachPhysicalSystem(systemConfiguration_);
-    // Spectral diagnostics refer to the original trial subspace; extraction intentionally clears them.
-    result.datasetReferences_=datasetReferences_;
-    result.bindingEvidenceJson_=bindingEvidenceJson_;
-    const std::size_t inputs = inputDimension(), modes = indices.size();
-    for(const auto& entry:discreteInputMaps_) {
-        auto map=entry.second;map.matrix.clear();map.eigenfunctionCount=modes;map.modelIdentity.clear();
-        for(auto j:indices)map.matrix.insert(map.matrix.end(),entry.second.matrix.begin()+j*inputs,
-            entry.second.matrix.begin()+(j+1)*inputs);
-        result.setDiscreteInputMap(entry.first,std::move(map));
-    }
-    for (const auto& item : controlMaps_) {
-        if (const auto* constantSource = std::get_if<ConstantControlMap>(&item.second)) {
-            ConstantControlMap map{{}, modes, inputs, constantSource->provenance + "; independent row subset"};
-            map.sampleTime=constantSource->sampleTime;
-            for (const auto row : indices)
-                map.matrix.insert(map.matrix.end(), constantSource->matrix.begin() + row * inputs,
-                                  constantSource->matrix.begin() + (row + 1) * inputs);
-            if(!constantSource->discreteMatrix.empty())
-                for(const auto row:indices)
-                    map.discreteMatrix.insert(map.discreteMatrix.end(),
-                        constantSource->discreteMatrix.begin()+row*inputs,
-                        constantSource->discreteMatrix.begin()+(row+1)*inputs);
-            result.setControlMap(item.first, std::move(map));
-        } else {
-            const auto& bilinearSource = std::get<BilinearControlMap>(item.second);
-            BilinearControlMap map{{}, {}, {}, modes, inputs,
-                bilinearSource.provenance + "; independent principal restriction"};
-            map.operators.resize(inputs * modes * modes); map.offsets.resize(modes * inputs);
-            if (!bilinearSource.conjugateOperators.empty()) map.conjugateOperators.resize(map.operators.size());
-            for (std::size_t input = 0; input < inputs; ++input)
-                for (std::size_t row = 0; row < modes; ++row) {
-                    map.offsets[row * inputs + input] = bilinearSource.offsets[indices[row] * inputs + input];
-                    for (std::size_t column = 0; column < modes; ++column) {
-                        const auto target = (input * modes + row) * modes + column;
-                        const auto origin = (input * bilinearSource.modes + indices[row])
-                            * bilinearSource.modes + indices[column];
-                        map.operators[target] = bilinearSource.operators[origin];
-                        if (!map.conjugateOperators.empty())
-                            map.conjugateOperators[target] = bilinearSource.conjugateOperators[origin];
-                    }
-                }
-            result.setControlMap(item.first, std::move(map));
-        }
-    }
-    for (const auto& item : reconstructions_) {
-        ReconstructionResult projection=item.second;
-        projection.modes=modes; projection.matrix.assign(projection.outputs*modes,{});
-        for (std::size_t output=0;output<projection.outputs;++output)
-            for (std::size_t column=0;column<modes;++column)
-                projection.matrix[output*modes+column]=
-                    item.second.matrix[output*liftedDimension()+indices[column]];
-        result.setReconstruction(item.first,std::move(projection));
-    }
-    return result;
-}
 
 const std::vector<KoopmanDatasetReference>& KoopmanModel::datasetReferences() const noexcept {
     return datasetReferences_;

@@ -28,12 +28,12 @@ std::filesystem::path runAnimation(const std::vector<std::filesystem::path>& sou
         if (!std::filesystem::exists(sources[i])) throw std::invalid_argument("animation panel archive is missing: " + sources[i].u8string());
         const auto meta = json::parse(c::readNpzIndex(sources[i]).metadataJson);
         const auto view = i < count ? panels.array()[i].at("view").string() : std::string();
-        const auto fallback = meta.at("format").string() == "dynsyslab.grid-field/v1" ? "domain_field" : "time";
+        const auto fallback = meta.at("schema").string() == "dynsyslab.grid-field/v1" ? "domain_field" : "time";
         out.push_back(J::Object{{"source", std::filesystem::absolute(sources[i]).generic_u8string()},
                                 {"view", view.empty() ? fallback : view},
                                 {"label", i < count ? panels.array()[i].at("label").string() : std::string()}});
     }
-    J::Object meta{{"format", "dynsyslab.animation/v1"}, {"method", "animation"}, {"label", label},
+    J::Object meta{{"schema", "dynsyslab.animation/v1"}, {"method", "animation"}, {"label", label},
                    {"title", settings.at("title").string(label)}, {"panels", out},
                    {"frame_seconds", settings.at("frame_seconds").number(0.4)},
                    {"loop", settings.at("loop").boolean(true)}, {"autoplay", settings.at("autoplay").boolean(true)},
@@ -41,9 +41,10 @@ std::filesystem::path runAnimation(const std::vector<std::filesystem::path>& sou
     if (!settings.at("columns").isNull()) meta["columns"] = settings.at("columns").number();
     c::NpzRecord archive;
     archive.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(J(meta)));
-    const auto directory = objectFolder(root, "animation");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::figure);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(label + "__" + timestamp()) + ".npz");
+    stampDataObject(archive, dynsyslab::core::object_kind::figure, "animation", {});
     c::writeNpzAtomicNew(path, archive);
     return path;
 }

@@ -2,9 +2,30 @@
 
 #include <complex>
 #include <cstddef>
+#include <string>
 #include <vector>
 
 namespace dynsyslab::numerics {
+
+// The dense SVD algorithm (per thread): divide and conquer (Gu & Eisenstat, SIAM J. Matrix Anal.
+// Appl. 16:79, 1995; LAPACK gesdd's method, the default) or one-sided Jacobi (Demmel & Veselic,
+// SIAM J. Matrix Anal. Appl. 13:1204, 1992; slower, with high relative accuracy for small singular
+// values, the choice the gesvd driver stands for). Names: "gesdd" / "divide_and_conquer",
+// "gesvd" / "jacobi".
+enum class SvdDriver { divideAndConquer, jacobi };
+void setSvdDriver(SvdDriver driver);
+[[nodiscard]] SvdDriver svdDriver();
+[[nodiscard]] SvdDriver svdDriverFromName(const std::string& name);
+[[nodiscard]] const char* svdDriverName(SvdDriver driver);
+class SvdDriverScope {
+public:
+    explicit SvdDriverScope(SvdDriver driver) : previous_(svdDriver()) { setSvdDriver(driver); }
+    ~SvdDriverScope() { setSvdDriver(previous_); }
+    SvdDriverScope(const SvdDriverScope&) = delete;
+    SvdDriverScope& operator=(const SvdDriverScope&) = delete;
+private:
+    SvdDriver previous_;
+};
 
 struct RealSvd {
     std::vector<double> left;             // rows x rank

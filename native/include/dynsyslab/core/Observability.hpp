@@ -60,6 +60,16 @@ struct ObservabilityResult {
 [[nodiscard]] ObservabilityResult analyzeObservability(const KoopmanModel& model,
     const std::string& reconstruction, const ObservabilityOptions& options = {});
 
+// Fractional squared participation of coordinate groups in each observability direction:
+// entry [g, j] = sum over i in group g of V[i, j]^2, with V the orthonormal right directions
+// (state x state, row-major), so every column sums to one over a partition of the coordinates.
+// Groups must be disjoint and inside the state. Returns groups x state, row-major.
+[[nodiscard]] std::vector<double> observabilityModeParticipation(
+    const ObservabilityResult& result, const std::vector<std::vector<std::size_t>>& groups);
+// The KROM's split coordinates grouped by nonredundant Koopman mode: a real mode is one
+// coordinate, a complex mode its real and imaginary coordinates (KoopmanModel::splitValues order).
+[[nodiscard]] std::vector<std::vector<std::size_t>> splitModeGroups(const KoopmanModel& model);
+
 // Convert G = C Psi into a real output map over the KROM's split lifted state.
 // Defined in dynsyslab_linear_analysis; shared by observability, the
 // linear-systems toolkit and KLQE.

@@ -107,18 +107,15 @@ int main(){try{
     close((h.evaluateReal(plusTime.data())[0]-2*h.evaluateReal(probe.data())[0]+h.evaluateReal(minusTime.data())[0])/(step*step),changingSecond.evaluateReal(probe.data())[0],2e-5);
     bool rejected=false;try{(void)jet.pushForwardRealBatch({1,0},{0},1);}catch(const std::invalid_argument&){rejected=true;}
     check(rejected,"push-forward shape mismatch was accepted");
-    KoopmanSINDyResult fit;fit.stateDimension=2;fit.dynamicalStateDimension=2;fit.featureCount=3;
-    fit.center={0,0};fit.scale={1,1};fit.exponents={2,0,1,1,0,1};
-    fit.coefficients={.3,.2,.5};fit.continuousEigenvalues={-1.};
-    fit.coordinateObservableNames=jet.descriptor().outputNames;
-    fit.coordinateObservableDefinition=json::dump(jet.expressionDefinition());
+    auto fit=polynomialEigenfunctions(2,{2,0,1,1,0,1},{.3,.2,.5},Spectrum::fromContinuousRates({-1.}),
+        {0,0},{1,1},FunctionDomain::fromStateMap(jet));
     const KoopmanModel model(fit,config);const double x[]{1.2,.3};
     const auto y=jet.evaluateReal(x);close(model.evaluate(x)[0].real(),.3*y[0]*y[0]+.2*y[0]*y[1]+.5*y[1]);
     const auto b=system->inputMatrix(x);const double eps=1e-7;
     const double plus[]{x[0]+eps*b[0],x[1]+eps*b[1]},minus[]{x[0]-eps*b[0],x[1]-eps*b[1]};
     close(model.exactControlMap(x)[0].real(),(model.evaluate(plus)[0].real()-model.evaluate(minus)[0].real())/(2*eps),1e-7);
     const auto file=std::filesystem::temp_directory_path()/("echo-jet-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".npz");
-    savePolynomialKoopmanModel(file,model);const auto restored=loadKoopmanModel(file);std::filesystem::remove(file);
+    saveKoopmanModel(file,model);const auto restored=loadKoopmanModel(file);std::filesystem::remove(file);
     close(restored.evaluate(x)[0].real(),model.evaluate(x)[0].real());
     close(restored.exactControlMap(x)[0].real(),model.exactControlMap(x)[0].real());
     std::cout<<"echo, echo-dot, echo-double-dot, spatial derivatives and lifted input map passed\n";return 0;

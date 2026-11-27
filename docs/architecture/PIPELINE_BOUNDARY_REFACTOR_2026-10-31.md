@@ -92,9 +92,9 @@ physics agrees. Archive loaders reject conflicting parameters. An explicit
 the trained model's physical adapter**. Its exact Jacobian still belongs to its
 training physics. A transfer is not certification of predictive accuracy.
 
-Low-level explicit-system loaders retain access to legacy records with incomplete
-provenance and label them `unverified-legacy`. Workflow consumers require
-`unverified_legacy_reason` for that case. New workflow control accepts an intentional
+An archive that records no physical system binds to the system its caller names, and the
+binding evidence says `requested-system`; the former `unverified-legacy` path and its
+`unverified_legacy_reason` setting are gone. Workflow control accepts an intentional
 `system_transfer_reason`. Binding evidence is retained on the ROM, after extraction,
 in saved models and in controlled-solve metadata.
 
@@ -106,7 +106,7 @@ mode order, phase/gauge or normalization agree. Extracting a mode subset produce
 a new identity and binds the existing mathematical row/principal restriction to
 that subset. It does not refit the map or assert that a bilinear restriction is exact.
 
-Independent legacy map attachment requires `unverified_control_map_reason`.
+An independent map that records no K-ROM identity is refused; refit it on the K-ROM.
 Frozen-history legacy attachment similarly requires `unverified_transform_reason`
 when the old KROM has no content identity. A known conflicting identity cannot be
 overridden by a legacy reason. `krom-info` exposes model identity and binding evidence.

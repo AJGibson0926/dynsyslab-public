@@ -28,7 +28,7 @@
      {"id": "koopman", "kind": "module", "label": "Koopman", "icon": "krom", "layout": "column", "gap": 22,
       "children": [
        {"id": "k-model", "kind": "data", "label": "KoopmanModel (K-ROM)", "icon": "krom"},
-       {"id": "k-sets", "kind": "data", "label": "EigenfunctionSet (H-DMD)", "icon": "matrix"}
+       {"id": "k-sets", "kind": "data", "label": "Eigenfunctions (H-DMD)", "icon": "matrix"}
       ]},
      {"id": "observation", "kind": "module", "label": "Observation", "icon": "estimator", "layout": "column", "gap": 22,
       "children": [

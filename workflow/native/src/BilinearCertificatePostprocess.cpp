@@ -201,7 +201,7 @@ std::filesystem::path runBilinearCertificate(const std::vector<std::filesystem::
 
     std::vector<double> operatorValues, continuousOperators;
     for (const auto& matrix : used.B) operatorValues.insert(operatorValues.end(), matrix.begin(), matrix.end());
-    for (const auto& matrix : bridge.continuous.operators)
+    for (const auto& matrix : bridge.continuous.B)
         continuousOperators.insert(continuousOperators.end(), matrix.begin(), matrix.end());
     c::NpzRecord record;
     const auto store = [&](const char* name, std::vector<std::size_t> shape, const std::vector<double>& values) {
@@ -211,8 +211,8 @@ std::filesystem::path runBilinearCertificate(const std::vector<std::filesystem::
     store("model_A", {n, n}, used.A);
     store("model_B0", {n, 1}, used.B0);
     store("model_B", {1, n, n}, operatorValues);
-    store("continuous_generator", {n, n}, bridge.continuous.generator);
-    store("continuous_offsets", {n, 1}, bridge.continuous.offsets);
+    store("continuous_generator", {n, n}, bridge.continuous.A);
+    store("continuous_offsets", {n, 1}, bridge.continuous.B0);
     store("continuous_operators", {1, n, n}, continuousOperators);
     store("target_lifted", {n}, bridge.targetLifted);
     store("target_input", {1}, bridge.targetInput);
@@ -258,19 +258,20 @@ std::filesystem::path runBilinearCertificate(const std::vector<std::filesystem::
         certificate["verifier_margin"] = json::Value(design.certificate.margin);
     }
     json::Value::Object meta{
-        {"format", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("koopman-bilinear-certificate")},
+        {"schema", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("koopman-bilinear-certificate")},
         {"label", json::Value(label)}, {"source_krom", json::Value(kromPath.generic_u8string())},
         {"source_archive", json::Value(kromPath.generic_u8string())},
         {"forced_sources", json::Value(std::move(forcedSources))},
         {"bilinear_certificate", json::Value(std::move(certificate))}, {"independent_archive", json::Value(true)}};
     record.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(json::Value(std::move(meta))));
 
-    const auto directory = objectFolder(root, "koopman-bilinear-certificate");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::report);
     std::filesystem::create_directories(directory);
     const auto stem = safeName(kromPath.stem().u8string() + "__bilinear-certificate__" + timestamp());
     for (std::size_t suffix = 0; suffix < 10000; ++suffix) {
         const auto path = directory / c::wide(stem + (suffix ? "__" + std::to_string(suffix) : "") + ".npz");
         if (std::filesystem::exists(path)) continue;
+        stampDataObject(record, dynsyslab::core::object_kind::report, "bilinear-certificate", {});
         c::writeNpzAtomicNew(path, record);
         return path;
     }

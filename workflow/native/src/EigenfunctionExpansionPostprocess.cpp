@@ -16,6 +16,7 @@
 // Library: "library": true | ["x_1", "eta"] loads the source system's own hand-derived
 // eigenfunctions (DynamicalKnowledge::eigenfunctions) with its parameters; no other settings.
 #include "TimeSeriesSource.hpp"
+#include "DictionaryTerms.hpp"
 #include "ExpansionArchive.hpp"
 #include "PostprocessInternal.hpp"
 #include <dynsyslab/core/AnalyticExpression.hpp>
@@ -31,50 +32,6 @@ namespace c = dynsyslab::core;
 using J = json::Value;
 
 namespace {
-
-std::vector<double> numbers(const J& value) {
-    std::vector<double> out;
-    for (const auto& item : value.array()) out.push_back(item.number());
-    return out;
-}
-
-c::DictionaryTerm term(const J& spec, std::size_t dimension, const std::vector<std::string>& variables) {
-    c::DictionaryTerm t;
-    if (!spec.at("center").isNull()) t.center = numbers(spec.at("center"));
-    if (!spec.at("scale").isNull()) t.scale = numbers(spec.at("scale"));
-    if (!spec.at("expression").isNull()) {
-        t.kind = "expression";
-        t.expression = std::make_shared<const c::AnalyticExpression>(c::AnalyticExpression::parse(spec.at("expression").string(), variables));
-        return t;
-    }
-    for (const char* kind : {"monomial", "chebyshev", "laguerre", "hermite", "fourier_hermite"})
-        if (!spec.at(kind).isNull()) {
-            t.kind = kind;
-            for (const auto& n : spec.at(kind).array()) t.orders.push_back(std::size_t(n.number()));
-            return t;
-        }
-    for (const char* kind : {"exponential", "sine", "cosine"})
-        if (!spec.at(kind).isNull()) {
-            t.kind = kind;
-            t.vector = numbers(spec.at(kind));
-            t.phase = spec.at("phase").number(0);
-            return t;
-        }
-    for (const char* kind : {"gaussian", "laplacian", "lorentzian", "matern"})
-        if (!spec.at(kind).isNull()) {
-            const auto& radial = spec.at(kind);
-            t.kind = kind;
-            t.vector = numbers(radial.at("node"));
-            t.width = radial.at("width").number(1);
-            t.smoothness = radial.at("smoothness").number(2);
-            t.amplitude = radial.at("amplitude").number(1);
-            return t;
-        }
-    if (!spec.at("kind").isNull())  // a full term in the archived form
-        return c::ExpansionDictionary::fromJson(J::Object{{"schema", "dynsyslab.expansion-dictionary/v1"},
-            {"dimension", double(dimension)}, {"terms", J::Array{spec}}}).terms().front();
-    throw std::invalid_argument("unrecognized dictionary term " + json::dump(spec));
-}
 
 std::complex<double> coefficient(const J& value) {
     if (std::holds_alternative<double>(value.storage())) return value.number();
@@ -99,9 +56,9 @@ std::filesystem::path runEigenfunctionExpansion(const std::filesystem::path& sou
         c::NpzRecord archive;
         std::string reason;
         const c::DataOrigin origin{"eigenfunction_expansion", settings, {dataReference(source.path, "time_series")}};
-        if (!writeExpansionEigenfunctions(archive, bank, origin, {}, {}, {}, json::dump(meta), reason))
+        if (!writeExpansionKrom(archive, bank, origin, {}, {}, {}, json::dump(meta), reason))
             throw std::invalid_argument("eigenfunction_expansion: " + reason);
-        return publish(root, source, "koopman-eigenfunction-expansion", label, std::move(archive));
+        return publishObject(root, source, dynsyslab::core::object_kind::krom, "koopman-eigenfunction-expansion", std::move(archive));
     };
     if (const auto& library = settings.at("library"); !library.isNull()) {
         std::vector<std::string> ids;
@@ -135,7 +92,7 @@ std::filesystem::path runEigenfunctionExpansion(const std::filesystem::path& sou
     std::vector<c::DictionaryTerm> terms;
     std::vector<std::complex<double>> coefficients;
     if (!settings.at("dictionary").isNull()) {
-        for (const auto& spec : settings.at("dictionary").array()) terms.push_back(term(spec, domain.dimension, variables));
+        for (const auto& spec : settings.at("dictionary").array()) terms.push_back(dictionaryTerm(spec, domain.dimension, variables));
         const auto& rows = settings.at("coefficients").array();
         if (rows.size() != rates.size()) throw std::invalid_argument("eigenfunction_expansion needs one coefficient row per eigenvalue");
         for (const auto& row : rows) {

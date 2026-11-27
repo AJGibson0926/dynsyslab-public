@@ -37,10 +37,8 @@ IoDelayControl buildIoDelayControl(const json::Value& settings, const json::Valu
     std::optional<std::pair<double, double>> limits) {
     const auto path = modelPath(settings);
     const auto archive = c::readNpz(path);
-    const auto model = c::loadIoDelayModel(archive);
+    const auto model = c::loadIoDelayModel(archive);  // validates the archive is an I/O-delay model
     const auto metadata = json::parse(archive.metadataJson());
-    if (metadata.at("method").string() != "io-delay-model")
-        throw std::invalid_argument("io_delay_lqr model is not an io_delay_model archive");
     if (std::abs(controlSampleTime - model.sampleTime) > 1e-10 * model.sampleTime)
         throw std::invalid_argument("io_delay_lqr control_sample_time must equal the model clock");
     postprocess_detail::SourceData trained;

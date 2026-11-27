@@ -74,8 +74,23 @@ std::filesystem::path installedProjectRoot() {
     } catch (...) { return {}; }
 }
 
+std::filesystem::path archiveDirectoryVariable() {
+#ifdef _WIN32
+    std::vector<wchar_t> value(32768);
+    const DWORD size = GetEnvironmentVariableW(L"DYNSYSLAB_ARCHIVE_DIR", value.data(), static_cast<DWORD>(value.size()));
+    if (size && size < value.size()) return std::filesystem::path(std::wstring(value.data(), size));
+#else
+    if (const char* value = std::getenv("DYNSYSLAB_ARCHIVE_DIR"); value && *value) return std::filesystem::u8path(value);
+#endif
+    return {};
+}
+
 ArchiveRootChoice resolveArchiveRoot(const std::filesystem::path& executable,
-                                     const std::filesystem::path& userData) {
+                                     const std::filesystem::path& userData,
+                                     const std::filesystem::path& environmentRoot) {
+    // An explicit environment choice wins over every configured default (not over --archive-root).
+    if (!environmentRoot.empty())
+        return {std::filesystem::absolute(environmentRoot).lexically_normal(), "environment"};
     // An installation's own runtime.json wins, even when it is installed inside a checkout.
     if (auto saved = savedArchiveRoot(executable.parent_path().parent_path() / L"resources" / L"runtime.json");
         !saved.empty()) return {saved, "install_runtime"};
@@ -86,6 +101,8 @@ ArchiveRootChoice resolveArchiveRoot(const std::filesystem::path& executable,
     return {userData / L"archives", "user_default"};
 }
 
-ArchiveRootChoice defaultArchiveRoot() { return resolveArchiveRoot(cliExecutablePath(), userDataRoot()); }
+ArchiveRootChoice defaultArchiveRoot() {
+    return resolveArchiveRoot(cliExecutablePath(), userDataRoot(), archiveDirectoryVariable());
+}
 
 }  // namespace dynsyslab::cli

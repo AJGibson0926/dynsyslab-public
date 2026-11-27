@@ -73,8 +73,7 @@ and compares exact, constant, and bilinear KLQR control for no more than 25
 fitted candidates. The complete job can be planned, saved, queued, run, and
 reviewed in Viewer without Python or hand-editing JSON.
 
-Use `DynSysLabViewer.exe` to open Viewer directly. The old Python/Tk GUI is a
-frozen source reference and is not part of the native distribution.
+Use `DynSysLabViewer.exe` to open Viewer directly.
 
 ## Native CLI and optional Python adapter
 
@@ -135,14 +134,14 @@ python -m dynsyslab_client queue list
 
 The client accepts the same saved job documents as the desktop workbench. It
 does not validate, schedule, solve, process, or archive independently: those
-operations remain inside the compiled CLI/workflow ABI. Historical Python
-research packages are source-only migration references and are not included in
-the client wheel or either application. The compiled
+operations remain inside the compiled CLI/workflow ABI. The compiled
 archive audit is read-only and verifies candidate duplicates byte-for-byte;
 deduplication is also a dry run unless `--apply` is supplied. Applied cleanup
 moves only unreferenced exact duplicates into recoverable archive-local trash;
-the optional `dynsyslab archive audit|deduplicate` front doors delegate to
-these compiled operations. See
+the optional `dynsyslab archive|storage` front doors delegate to
+these compiled operations. Recompression, shared time grids, metadata edits,
+storage locations and campaign relocation are described in
+[archive management](ARCHIVE_MANAGEMENT.md). See
 [native build and installation](BUILD_NATIVE.md) for the unified CMake and
 portable package workflow.
 
@@ -152,8 +151,8 @@ portable package workflow.
   action or `--execute` gate.
 - Completed numerical records are immutable. Extensions and derived products
   create new records with provenance rather than overwriting source data.
-- Application packages use Archiver capabilities. The low-level `archives`
-  package is storage implementation, not a general application API.
+- Applications reach archives through the native workflow and
+  `dynsyslab-cli archive` operations, not by editing archive files directly.
 - Viewer is read-only relative to the primary archive. Its temporary payloads
   live under the ignored `viewer_compute_archive` directory.
 - Dimensionless systems, targets, controllers, and control histories must share
@@ -182,9 +181,10 @@ wrapper or adaptation. Do not infer permission to copy legacy behavior.
 
 - [Solver and Post-processor guide](SOLVER_POSTPROCESSOR.md)
 - [Native observable derivatives and echo control](architecture/NATIVE_OBSERVABLE_EXPRESSIONS_AND_TARGETS.md)
-- [Tutorial and Python API examples](TUTORIAL.md)
+- [Tutorial](TUTORIAL.md)
 - [Documentation map](README.md)
 - [AI context and package contracts](AI_CONTEXT.md)
 - [Native Viewer architecture](architecture/VIEWER_CPP_WORKBENCH.md)
 - [Functions on their domains and coordinate maps](architecture/DOMAIN_FIELDS.md)
+- [Lagrangian coherent structures and spectral submanifolds](architecture/LCS_AND_SSM.md)
 - [Native Solver/Post-processor architecture](architecture/SOLVER_POSTPROCESSOR_CPP_WORKBENCH.md)

@@ -9,7 +9,7 @@
 #include <dynsyslab/workflow/LatticeSolve.hpp>
 #include <dynsyslab/workflow/KromControlSearch.hpp>
 #include <dynsyslab/workflow/PDESolve.hpp>
-#include <dynsyslab/workflow/Pipeline.hpp>
+#include <dynsyslab/workflow/Experiment.hpp>
 #include <dynsyslab/workflow/Run.hpp>
 #include <dynsyslab/workflow/SystemResolution.hpp>
 
@@ -18,6 +18,8 @@
 #include "ViewerFigureJob.hpp"
 #include "WorkflowExtensions.hpp"
 #include "TrainingPreflight.hpp"
+#include "CampaignDesign.hpp"
+#include "PostprocessGeometry.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -61,7 +63,8 @@ PlannedSystem plannedSystem(const json::Value& job,
 
 void validateController(const json::Value& job) {
     static const std::set<std::string> supported{
-        "none", "waveform", "random_pulse", "pid", "lqr", "sdre",
+        "none", "waveform", "random_pulse", "tabulated", "command_tape",
+        "telegraph_multisine", "symmetric_pulse", "pulse_branches", "pid", "lqr", "sdre",
         "mpc", "klqr", "kmpc", "io_delay_lqr",
     };
     const std::string kind = job.at("controller").at("kind").string("none");
@@ -88,12 +91,14 @@ void validateController(const json::Value& job) {
     if (estimator.isNull() && job.at("controller").at("settings").at("feedback").string() == "estimated_state")
         throw std::invalid_argument("estimated_state feedback needs an estimator");
     if (!estimator.isNull()) {
-        if (estimator.at("kind").string("klqe") != "klqe")
-            throw std::invalid_argument("unknown native estimator kind: " + estimator.at("kind").string());
+        const auto estimatorKind = estimator.at("kind").string("klqe");
+        if (estimatorKind != "klqe" && estimatorKind != "lqe" && estimatorKind != "luenberger"
+            && estimatorKind != "static_map")
+            throw std::invalid_argument("unknown native estimator kind: " + estimatorKind);
         if (job.at("controller").at("settings").at("feedback").string() == "estimate" && kind != "klqr")
             throw std::invalid_argument("estimate feedback (KLQE -> controller) requires KLQR");
         if (job.at("controller").at("settings").at("feedback").string() == "estimated_state"
-            && estimator.at("output").string().empty())
+            && estimatorKind == "klqe" && estimator.at("output").string().empty())
             throw std::invalid_argument("estimated_state feedback needs an estimator output reconstruction (e.g. state)");
     }
 }
@@ -101,14 +106,15 @@ void validateController(const json::Value& job) {
 bool supportedMethod(const json::Value& stage) {
     static const std::set<std::string> supported{
         "svd", "pca", "pod", "bagged_pca", "robust_pca", "hankel_pod", "hankel_svd", "hankel_matrix",
-        "dmd", "dmdc", "edmdc", "hdmd", "hankel_dmd", "sindy", "edmd", "havok", "eigenfunction_expansion", "eigenfunction_errors", "domain_field",
+        "dmd", "dmdc", "edmdc", "hdmd", "hankel_dmd", "sindy", "edmd", "havok", "eigenfunction_expansion", "eigenfunction_errors", "domain_field", "ftle", "ssm", "orbit_geometry", "receiver_signals", "state_readout", "ring_errors", "affine_dynamics", "prehistory", "clock_audit", "run_invariant", "field_model", "pulse_response", "control_map_audit", "delay_pairs", "delay_consistency",
         "koopman_spectral", "resdmd", "mpedmd", "hermitian_dmd", "tlsdmd", "multdmd", "stochastic_resdmd", "specrkhs",
         "control_regression", "krom_extract", "koopman_validation", "observable_reconstruction",
         "echo_history_koopman", "history_basis", "history_projection", "history_control_regression", "input_map", "bilinear_certificate", "control_target", "derivative_benchmark", "mode_selection",
         "coordinate_transform", "sindy_dynamics", "dynamics_validation",
-        "krom_recenter", "krom_readout", "reference_signal", "control_score", "figure_dataset", "io_delay_model", "animation",
+        "krom_recenter", "krom_readout", "reference_signal", "control_score", "figure_dataset", "bifurcation_points", "observable_spectrum_comparison", "io_delay_model", "animation",
         "boundary_eigenfunctions", "eigenvalue_optimization",
         "observability", "klqe", "linear_analysis", "linear_systems", "controllability", "empirical_observability",
+        "control_error_compare", "krom_rollout", "pod_galerkin", "krom_refit", "reconstruction_transfer",
     };
     const std::string method = stage.at("name").string();
     return supported.count(method) || !stage.at("extension").string().empty();
@@ -118,17 +124,25 @@ json::Value solvePlan(const json::Value& job) {
     const auto requested = configuration(job);
     const auto system = plannedSystem(job, requested);
     const auto& time = job.at("time");
-    const double start = time.at("start").number();
-    const double stop = time.at("stop").number();
-    const double step = time.at("output_step").number();
+    // time.output_times (an arbitrary output clock) replaces the uniform output_step grid.
+    const auto& outputTimes = time.at("output_times").array();
+    const double start = time.at("start").number(outputTimes.empty() ? 0.0 : outputTimes.front().number());
+    const double stop = time.at("stop").number(outputTimes.empty() ? 0.0 : outputTimes.back().number());
+    const double step = outputTimes.size() > 1
+        ? time.at("output_step").number((stop - start) / static_cast<double>(outputTimes.size() - 1))
+        : time.at("output_step").number();
     if (!(start < stop) || !(step > 0.0))
         throw std::invalid_argument("solve time requires start < stop and positive output_step");
-    const double intervals = (stop - start) / step;
-    if (std::abs(intervals - std::round(intervals))
+    const double intervals = outputTimes.size() > 1 ? static_cast<double>(outputTimes.size() - 1) : (stop - start) / step;
+    if (outputTimes.empty() && std::abs(intervals - std::round(intervals))
         > 1e-9 * std::max(1.0, std::abs(intervals)))
         throw std::invalid_argument("solve interval must be an integer multiple of output_step");
     const std::string coordinates = time.at("coordinate_system").string("automatic");
-    if (coordinates != "automatic"
+    const bool dimensional = coordinates == "dimensional"
+        && system.descriptor.preferredCoordinates == "dimensionless"
+        && system.scaling.physicalTimeAvailable
+        && system.scaling.physicalStatePerModelState.size() == system.descriptor.stateDimension;
+    if (coordinates != "automatic" && !dimensional
         && coordinates != system.descriptor.preferredCoordinates)
         throw std::invalid_argument("requested coordinate system is unavailable for this model");
     detail::validateTrainingPreflightPlan(
@@ -143,7 +157,8 @@ json::Value solvePlan(const json::Value& job) {
         throw std::invalid_argument("initial_conditions.clusters exceeds trajectory count");
     const std::string initialMode = initial.at("mode").string("default");
     static const std::set<std::string> continuousModes{
-        "default", "explicit", "uniform", "normal"};
+        "default", "explicit", "uniform", "normal", "sphere", "ellipsoid",
+        "stratified", "target_tube", "concatenate", "continue_from", "archive_states", "file"};
     static const std::set<std::string> latticeModes{"default", "explicit", "uniform"};
     const auto& modes = system.descriptor.family == "lattice"
         ? latticeModes : continuousModes;
@@ -160,7 +175,9 @@ json::Value solvePlan(const json::Value& job) {
         job.at("controller").at("kind").string("none");
     const bool controlled = controllerKind != "none";
     const bool hasTarget = controlled && controllerKind != "waveform"
-        && controllerKind != "random_pulse";
+        && controllerKind != "random_pulse" && controllerKind != "tabulated"
+        && controllerKind != "command_tape" && controllerKind != "telegraph_multisine"
+        && controllerKind != "symmetric_pulse" && controllerKind != "pulse_branches";
     const std::size_t scalarsPerSample = 1 + dimension
         + (controlled ? 1 : 0) + (hasTarget ? dimension : 0);
     const double perSystemBytes = static_cast<double>(samples) * trajectories
@@ -172,7 +189,7 @@ json::Value solvePlan(const json::Value& job) {
     result["kind"] = "solve";
     result["system"] = system.descriptor.identifier;
     result["system_family"] = system.descriptor.family;
-    result["coordinate_system"] = system.descriptor.preferredCoordinates;
+    result["coordinate_system"] = dimensional ? std::string("dimensional") : system.descriptor.preferredCoordinates;
     result["model_time_units"] = system.scaling.modelTimeUnits;
     result["controller"] = controllerKind;
     result["has_control_target"] = hasTarget;
@@ -187,6 +204,12 @@ json::Value solvePlan(const json::Value& job) {
     result["output_samples_per_trajectory"] = static_cast<double>(samples);
     result["estimated_peak_solution_bytes"] = perSystemBytes;
     result["estimated_total_solution_bytes"] = perSystemBytes * systems;
+    if (systems > 1) {
+        const std::size_t chunk = detail::campaignSystemsPerJob(job);
+        result["systems_per_job"] = static_cast<double>(chunk);
+        result["queue_tasks"] = static_cast<double>(chunk ? (systems + chunk - 1) / chunk : 1);
+    }
+    if (!time.at("retained_start").isNull()) result["retained_start"] = time.at("retained_start");
     result["archive_policy"] = "immutable native NPZ plus hierarchy manifest";
     return json::Value(std::move(result));
 }
@@ -261,20 +284,24 @@ json::Value postprocessPlan(const json::Value& job) {
     const auto pooled = static_cast<std::size_t>(std::count_if(
         methods.begin(), methods.end(), [](const json::Value& method) {
             return method.string() == "echo_history_koopman" || method.string() == "history_basis"
-                || method.string() == "io_delay_model";
+                || method.string() == "io_delay_model" || method.string() == "control_error_compare"
+                || method.string() == "krom_rollout" || method.string() == "pod_galerkin"
+                || method.string() == "krom_refit" || method.string() == "reconstruction_transfer";
         }));
     result["stage_count"] = static_cast<double>(
         sources.size() * (methods.size() - pooled) + pooled);
     result["archive_policy"] = "immutable native derived archive";
+    result["geometry"] = detail::postprocessGeometry(job);  // shapes and memory, nothing computed
     return json::Value(std::move(result));
 }
 
 }  // namespace
 
-json::Value planJob(const json::Value& job) {
-    validateJob(job);
+json::Value planJob(const json::Value& submitted) {
+    validateJob(submitted);
+    const auto job=detail::resolveJobDesign(submitted);  // campaign axes, profiles, cycle time
     const auto kind=job.at("kind").string();
-    if(kind=="pipeline")return planPipeline(job);
+    if(kind=="experiment")return planExperiment(job);
     if(kind=="job_group")return planJobGroup(job);
     if(kind=="viewer_figure")return detail::planViewerFigure(job);
     detail::loadExtensions(job);

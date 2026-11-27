@@ -1,4 +1,5 @@
 #include <dynsyslab/core/SpectralKromArchive.hpp>
+#include <dynsyslab/core/SpectrumArchive.hpp>
 #include <dynsyslab/core/FileDigest.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/core/ScientificCompatibility.hpp>
@@ -62,21 +63,52 @@ NpzRecord makeSpectralKromArchive(const SpectralKROM& model,const std::string& m
     metadata.at("model_identity")=spectralKromIdentity(model);metadata.at("method")=model.method;
     metadata.at("delta_t")=model.sampleInterval;metadata.at("eigenvalue_domain")="discrete-time";
     a.arrays["metadata_json"]=NpyArray::fromString(json::dump(metadata));
-    a.arrays["discrete_eigenvalues"]=NpyArray::fromComplex({model.rank},model.multipliers);
-    a.arrays["eigenvalues"]=a.arrays["discrete_eigenvalues"];
+    writeSpectrumArrays(a,Spectrum::fromDiscreteMultipliers(model.multipliers,model.sampleInterval));
     return a;
 }
-SpectralKROM readSpectralKromArchive(const NpzRecord& a) {
+void attachSpectralData(Spectrum& spectrum,const SpectralData& data) {
+    const auto& r=data.residuals;
+    if(!r.eigenpair.empty())spectrum.setResiduals(r.eigenpair,r.definition,r.scope);
+    if(!r.pseudospectrum.empty())spectrum.setPseudospectrum(r.pseudospectrum);
+    if(!data.measures.empty())spectrum.setContinuous(data.measures);
+}
+SpectralData spectralDataOf(const Spectrum& spectrum,const SpectralDiagnostics& diagnostics) {
+    SpectralData data;static_cast<SpectralDiagnostics&>(data)=diagnostics;data.measures=spectrum.continuous();
+    if(spectrum.hasResiduals()) {
+        const auto& first=spectrum.residual(0);
+        if(first){data.residuals.definition=first->definition;data.residuals.scope=first->scope;}
+        for(std::size_t j=0;j<spectrum.size();++j) {
+            const auto& r=spectrum.residual(j);
+            if(!r||r->definition!=data.residuals.definition||r->scope!=data.residuals.scope){data.residuals.eigenpair.clear();break;}
+            data.residuals.eigenpair.push_back(r->value);
+        }
+    }
+    if(spectrum.pseudospectrum())data.residuals.pseudospectrum=*spectrum.pseudospectrum();
+    return data;
+}
+namespace {
+// The contract as stored, its identity checked against the archive's metadata.
+SpectralKROM readContract(const NpzRecord& a) {
     auto model=spectralKromFromJson(unpack(json::parse(a.at("spectral_krom_contract_json").string()),a));
     const auto expected=json::parse(a.metadataJson()).at("model_identity").string();
     if(expected.empty()||expected!=spectralKromIdentity(model))throw std::invalid_argument("Spectral KROM identity mismatch");
     return model;
 }
+}
+SpectralKROM readSpectralKromArchive(const NpzRecord& a) {
+    auto model=readContract(a);
+    if(isKrom(a)) {  // the krom keeps the fit's SpectralData on its spectrum and diagnostics
+        const auto diagnostics=a.contains("spectral_diagnostics_json")
+            ?spectralDiagnosticsFromJson(json::parse(a.at("spectral_diagnostics_json").string())):SpectralDiagnostics{};
+        model.spectral=spectralDataOf(readSpectrumArrays(a),diagnostics);
+        if(model.spectral.residuals.eigenpair.size()!=model.rank)model.spectral.residuals.eigenpair.clear();
+    }
+    return model;
+}
 SpectralKROM loadSpectralKrom(const std::filesystem::path& path){return readSpectralKromArchive(readNpz(path));}
-Observable spectralKromObservable(SpectralKROM model,ObservableDecompositionReference reference,std::string name) {
+namespace {
+Observable observableOf(SpectralKROM model,ObservableDecompositionReference reference,std::string name) {
     model.validate();
-    if(reference.modelIdentity.empty()||reference.modelIdentity!=spectralKromIdentity(model))
-        throw std::invalid_argument("Observable reference does not match spectral KROM identity");
     std::size_t outputs=1;
     if(reference.kind=="reconstruction")outputs=model.reconstructions.at(reference.component).outputs;
     else if(reference.kind=="eigenfunction") {
@@ -100,10 +132,23 @@ Observable spectralKromObservable(SpectralKROM model,ObservableDecompositionRefe
         return out;
     });
 }
+}
+Observable spectralKromObservable(SpectralKROM model,ObservableDecompositionReference reference,std::string name) {
+    if(reference.modelIdentity.empty()||reference.modelIdentity!=spectralKromIdentity(model))
+        throw std::invalid_argument("Observable reference does not match spectral KROM identity");
+    return observableOf(std::move(model),std::move(reference),std::move(name));
+}
 Observable existingKromObservable(const std::filesystem::path& path,ObservableDecompositionReference ref,std::string name) {
     const auto archive=readNpz(path);ref.artifact=path.generic_u8string();
-    if(archive.contains("spectral_krom_contract_json"))return spectralKromObservable(readSpectralKromArchive(archive),ref,std::move(name));
-    auto model=loadKoopmanEigenfunctionModel(path);
+    if(archive.contains("spectral_krom_contract_json")) {
+        if(!isKrom(archive))return spectralKromObservable(readSpectralKromArchive(archive),ref,std::move(name));
+        // A krom's contract identity is the operator's as stored (readContract checks it); its wave
+        // packets are restored from the krom's diagnostics.
+        if(ref.modelIdentity.empty()||ref.modelIdentity!=json::parse(archive.metadataJson()).at("model_identity").string())
+            throw std::invalid_argument("Observable reference does not match spectral KROM identity");
+        return observableOf(readSpectralKromArchive(archive),ref,std::move(name));
+    }
+    auto model=loadKoopmanModel(path);
     if(ref.modelIdentity.empty()||ref.modelIdentity!=koopmanModelIdentity(model))throw std::invalid_argument("Observable reference does not match existing KROM identity");
     if(ref.kind!="reconstruction")throw std::invalid_argument("Legacy KROM observable binding currently requires named reconstruction");
     if(model.requiresExternalCoordinates())throw std::invalid_argument("Legacy KROM reference needs its external coordinate provider");

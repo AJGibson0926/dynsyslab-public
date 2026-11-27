@@ -15,35 +15,27 @@
 namespace {
 
 dynsyslab::core::KoopmanModel velocityModel() {
-    dynsyslab::core::KoopmanSINDyResult fit;
-    fit.continuousEigenvalues = {{-1.0, 0.0}};
-    fit.coefficients = {{1.0, 0.0}};
-    fit.exponents = {0, 1};
-    fit.center = {0.0, 0.0}; fit.scale = {1.0, 1.0};
-    fit.stateDimension = 2; fit.featureCount = 1;
+    auto fit = dynsyslab::core::polynomialEigenfunctions(2, {0, 1}, {{1.0, 0.0}},
+        dynsyslab::core::Spectrum::fromContinuousRates({{-1.0, 0.0}}), {0.0, 0.0}, {1.0, 1.0});
     dynsyslab::core::SystemConfiguration system;
     system.identifier = "duffing"; system.preset = "double_well_reference";
     return {std::move(fit), std::move(system)};
 }
 
 dynsyslab::core::KoopmanModel energyCoordinateModel() {
-    dynsyslab::core::KoopmanSINDyResult fit;
-    fit.continuousEigenvalues={{-1.0,0.0}}; fit.coefficients={{1.0,0.0}};
-    fit.exponents={1}; fit.center={0.0}; fit.scale={1.0};
-    fit.stateDimension=1; fit.dynamicalStateDimension=2; fit.featureCount=1;
-    fit.coordinateObservableNames={"total_energy"};
+    auto domain=dynsyslab::core::FunctionDomain::fromCatalog({"total_energy"},1);
+    domain.physicalStateDimension=2;
+    auto fit=dynsyslab::core::polynomialEigenfunctions(1,{1},{{1.0,0.0}},
+        dynsyslab::core::Spectrum::fromContinuousRates({{-1.0,0.0}}),{0.0},{1.0},std::move(domain));
     dynsyslab::core::SystemConfiguration system;
     system.identifier="duffing"; system.preset="double_well_reference";
     return {std::move(fit),std::move(system)};
 }
 
 dynsyslab::core::KoopmanModel screeningModel() {
-    dynsyslab::core::KoopmanSINDyResult fit;
-    fit.continuousEigenvalues={{-1.0,0.0},{-2.0,0.0}};
-    fit.coefficients={{0.0,0.0},{0.0,0.0},{1.0,0.0},
-                      {0.0,0.0},{1.0,0.0},{0.0,0.0}};
-    fit.exponents={0,0,1,0,0,1};fit.center={0.0,0.0};fit.scale={1.0,1.0};
-    fit.stateDimension=2;fit.featureCount=3;
+    auto fit=dynsyslab::core::polynomialEigenfunctions(2,{0,0,1,0,0,1},
+        {{0.0,0.0},{0.0,0.0},{1.0,0.0},{0.0,0.0},{1.0,0.0},{0.0,0.0}},
+        dynsyslab::core::Spectrum::fromContinuousRates({{-1.0,0.0},{-2.0,0.0}}),{0.0,0.0},{1.0,1.0});
     dynsyslab::core::SystemConfiguration system;
     system.identifier="duffing";system.preset="double_well_reference";
     return {std::move(fit),std::move(system)};
@@ -53,33 +45,19 @@ void close(double actual, double expected, double tolerance, const char* message
     if (std::abs(actual - expected) > tolerance) throw std::runtime_error(message);
 }
 
-void legacyArchiveCompatibility() {
+void approximateControlMapLoading() {
     namespace core=dynsyslab::core;
     const auto root=std::filesystem::temp_directory_path()
-        / "dynsyslab-native-legacy-krom-test";
+        / "dynsyslab-native-control-map-test";
     std::filesystem::remove_all(root); std::filesystem::create_directories(root);
-    const auto kromPath=root/"legacy-krom.npz";
-    core::NpzRecord krom;
-    krom.arrays["eigenvalues"]=core::NpyArray::fromComplex(
-        {2},{std::exp(std::complex<double>{-0.5,1.0}*0.01),
-             std::exp(std::complex<double>{-0.5,-1.0}*0.01)});
-    krom.arrays["coefficients"]=core::NpyArray::fromComplex(
-        {2,3},{{0.0,0.0},{1.0,0.0},{0.0,1.0},
-               {0.0,0.0},{1.0,0.0},{0.0,-1.0}});
-    krom.arrays["training_states"]=core::NpyArray::fromDoubles({1,2},{0.0,0.0});
-    krom.arrays["metadata_json"]=core::NpyArray::fromString(
-        R"({"analysis_metadata":{"dictionary":{"degree":1,"include_constant":true},"state_preprocessing":{"center":[0,0],"scale":[1,1],"multiplier":[1,1]},"krom":{"delta_t":0.01,"eigenvalue_domain":"continuous","retained_indices":[0]}}})");
-    core::writeNpzAtomic(kromPath,krom);
-    core::SystemConfiguration configuration;
-    configuration.identifier="duffing";
-    configuration.preset="gibson_damped_stabilization_2022";
-    auto imported=core::loadPolynomialKoopmanModel(kromPath,configuration);
-    if (imported.liftedDimension()!=1 || imported.splitDimension()!=2)
-        throw std::runtime_error("legacy explicit conjugate dual was not canonicalized");
+    // One complex mode psi = x + i y on the plane, eigenvalue -0.5 + i.
+    core::PolynomialDictionary monomials{2,{1,0,0,1},{0.0,0.0},{1.0,1.0}};
+    core::KoopmanModel imported(core::FunctionExpansion(std::move(monomials),{{1.0,0.0},{0.0,1.0}},
+        core::FunctionDomain::physicalState(2)),core::Spectrum::fromContinuousRates({{-0.5,1.0}}),1);
     const double point[]{0.25,-0.5};
     const auto psi=imported.evaluate(point);
-    close(psi[0].real(),0.25,1e-12,"legacy KROM real evaluation");
-    close(psi[0].imag(),-0.5,1e-12,"legacy KROM imaginary evaluation");
+    close(psi[0].real(),0.25,1e-12,"polynomial KROM real evaluation");
+    close(psi[0].imag(),-0.5,1e-12,"polynomial KROM imaginary evaluation");
 
     const auto mapsPath=root/"legacy-control-maps.npz";
     core::NpzRecord maps;
@@ -117,12 +95,12 @@ void selfContainedArchiveRoundTrip() {
     constant.discreteMatrix={{0.2,0.05}};constant.sampleTime=0.1;
     model.setControlMap("constant",std::move(constant));
     model.setReconstruction("state",{{{1.0,0.0},{0.0,1.0}},2,1,0.0,0.0,0.0});
-    core::savePolynomialKoopmanModel(path,model,R"({"label":"Independent KROM"})");
+    core::saveKoopmanModel(path,model,R"({"label":"Independent KROM"})");
     const auto metadata=core::json::parse(core::readNpz(path).metadataJson());
     if (metadata.at("system_configuration").at("identifier").string()!="duffing"
         || metadata.at("krom_mode_count").number()!=1.0)
         throw std::runtime_error("self-contained KROM system metadata");
-    const auto loaded=core::loadPolynomialKoopmanModel(path);
+    const auto loaded=core::loadKoopmanModel(path);
     if (loaded.systemConfiguration().identifier!="duffing"
         || loaded.systemConfiguration().parameters.empty()
         || !loaded.hasControlMap("constant") || !loaded.hasReconstruction("state"))
@@ -147,9 +125,10 @@ void scatteredArchiveStoresOneValueArray() {
     core::SystemConfiguration system;
     system.identifier="duffing";system.preset="double_well_reference";
     core::saveKoopmanModel(path,core::KoopmanModel(std::move(fit),core::Spectrum::fromContinuousRates({{-0.5,0.25}}),std::move(system)));
+    // One krom: the sampled values are stored once, as its samples; the interpolation keeps its points.
     const auto archive=core::readNpz(path);
-    if(!archive.contains("eigenfunction_values")
-        ||archive.contains("training_eigenfunction_values"))
+    if(!archive.contains("eigenfunction_values")||!archive.contains("interpolation_points")
+        ||archive.contains("training_eigenfunction_values")||std::filesystem::exists(root/"scattered-krom.eigenfunctions.npz"))
         throw std::runtime_error("scattered KROM duplicated its sampled value array");
     const auto loaded=core::loadKoopmanModel(path);
     const double state[]{0.0,0.5};
@@ -160,10 +139,8 @@ void scatteredArchiveStoresOneValueArray() {
 }
 
 void semigroupValidation() {
-    dynsyslab::core::KoopmanSINDyResult fit;
-    fit.continuousEigenvalues={{0.0,0.0}}; fit.coefficients={{1.0,0.0}};
-    fit.exponents={0,0}; fit.center={0.0,0.0}; fit.scale={1.0,1.0};
-    fit.stateDimension=2; fit.featureCount=1;
+    auto fit=dynsyslab::core::polynomialEigenfunctions(2,{0,0},{{1.0,0.0}},
+        dynsyslab::core::Spectrum::fromContinuousRates({{0.0,0.0}}),{0.0,0.0},{1.0,1.0});
     dynsyslab::core::SystemConfiguration configuration;
     configuration.identifier="duffing"; configuration.preset="double_well_reference";
     dynsyslab::core::KoopmanModel model(std::move(fit),std::move(configuration));
@@ -241,7 +218,7 @@ int main() {
     try {
         klqrIntegralAndPidAdapters();
         auto model = velocityModel(); const double point[]{0.25, -0.5};
-        legacyArchiveCompatibility();
+        approximateControlMapLoading();
         selfContainedArchiveRoundTrip();
         scatteredArchiveStoresOneValueArray();
         semigroupValidation();
@@ -259,15 +236,20 @@ int main() {
         const std::vector<double> samples{-1,-1, 0,0, 1,1, 0.5,-0.5};
         const auto constant = dynsyslab::core::fitConstantExactControlMap(model, samples, 4);
         close(constant.representation.matrix[0].real(), 1.0, 1e-12, "constant exact fit");
-        dynsyslab::core::ControlledData controlled;
-        controlled.samples=8;controlled.stateDimension=2;controlled.inputDimension=1;
-        controlled.inputs.assign(controlled.samples-1,2.0);
+        const std::size_t controlledSamples=8;
         const double step=0.1,transition=std::exp(-step),integral=1.0-transition;
+        std::vector<double> controlledTime,controlledStates;
         double velocity=0.3;
-        for(std::size_t index=0;index<controlled.samples;++index){
-            controlled.time.push_back(index*step);controlled.states.push_back(0.0);
-            controlled.states.push_back(velocity);velocity=transition*velocity+integral*2.0;
+        for(std::size_t index=0;index<controlledSamples;++index){
+            controlledTime.push_back(index*step);controlledStates.push_back(0.0);
+            controlledStates.push_back(velocity);velocity=transition*velocity+integral*2.0;
         }
+        dynsyslab::core::TimeSeriesRecord controlled;
+        controlled.inputs=dynsyslab::core::TimeSeries(
+            std::vector<double>(controlledTime.begin(),controlledTime.end()-1),
+            std::vector<double>(controlledSamples-1,2.0),1);
+        controlled.inputsOnIntervals=true;
+        controlled.series=dynsyslab::core::TimeSeries(std::move(controlledTime),std::move(controlledStates),2);
         auto system=dynsyslab::core::createSystem(model.systemConfiguration());
         const auto multistep=dynsyslab::core::fitConstantControlMultistepOutput(
             model,controlled,system->observableCatalog().at("state_1"),

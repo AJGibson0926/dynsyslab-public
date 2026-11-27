@@ -94,7 +94,7 @@ int main() {
         const auto still = write("still", {field(2, false)});
         c::NpzRecord manifest;
         manifest.arrays["metadata_json"] = c::NpyArray::fromString(c::json::dump(c::json::Value(c::json::Value::Object{
-            {"format", "dynsyslab.animation/v1"}, {"title", "demo"}, {"frame_seconds", 0.1},
+            {"schema", "dynsyslab.animation/v1"}, {"title", "demo"}, {"frame_seconds", 0.1},
             {"panels", c::json::Value::Array{c::json::Value::Object{{"source", moving}, {"view", "domain_field"}},
                                              c::json::Value::Object{{"source", still}, {"view", "domain_field"}}}}})));
         const auto movie = dsl::buildAnimationPayload("demo.npz", manifest);

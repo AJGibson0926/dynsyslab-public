@@ -12,14 +12,12 @@ import sys
 import unittest
 
 TEST_GROUPS={
-    "archive": ("test_archive_contracts.py","test_gateway_contracts.py"),
-    "campaigner": ("test_campaign_contracts.py",),
-    "control_estimation": ("test_control_estimation.py",),
-    "job_manager": ("test_job_claims.py","test_pause_watchdog.py","test_history_policy.py"),
-    "history_policy": ("test_history_policy.py",),
-    "pause_watchdog": ("test_pause_watchdog.py",),
-    "solver": ("test_solver_checkpoint_pause.py",),
-    "viewer": ("test_viewer_contracts.py",),
+    "architecture": ("test_architecture_quality.py",),
+    "front_door": ("test_cli_entrypoints.py",),
+    "harness": ("test_codex_harness.py",),
+    "native_ui": ("test_native_ui_design_contract.py","test_native_ui_parity_contract.py"),
+    "native_workflow": ("test_native_workflow_adapter.py",),
+    "tester": ("test_tester.py",),
 }
 
 @dataclass(frozen=True)

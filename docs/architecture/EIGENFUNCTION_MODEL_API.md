@@ -10,13 +10,13 @@ are unchanged. The MATLAB suite is unchanged.
 | Type | Responsibility |
 | --- | --- |
 | `PolynomialDictionary` | Coordinate dimension, monomial powers, center and scale |
-| `PolynomialEigenfunctionSet` | Immutable shared dictionary, coefficients, spectrum and coordinate contract |
-| `PolynomialEigenfunctionView` | One mode; shares the bank's storage and owns its lifetime |
-| `EigenfunctionCoordinates` | What the polynomial variables mean; optional physical dimension and frozen-provider pointer |
+| `FunctionExpansion` | Immutable shared dictionary and coefficients on a `FunctionDomain` (one function per mode) |
+| `FunctionDomain` | What the variables mean: the physical state, catalog observables, a state map, or supplied values with a frozen-provider identity |
 | `Spectrum` | Primary continuous rates or discrete multipliers, sample interval and logarithm branches |
-| `EigenfunctionFitResult` | A polynomial bank plus separate fitting diagnostics |
+| `EigenfunctionFitResult` | An expansion, its spectrum, and separate fitting diagnostics: what every producer returns |
+| `Eigenfunction` | One mode: an observable with all its representations, and its eigenvalue |
 | `EigenfunctionValidationResult` | Errors measured along a particular supplied trajectory |
-| `KoopmanModel` | The bank, optional physical-system adapter, input maps, reconstructions and dataset pointers |
+| `KoopmanModel` | The eigenfunctions, optional physical-system adapter, input maps, reconstructions and dataset pointers |
 
 No fit result, ODE, sampled training values or live history buffer is needed to
 construct or evaluate a polynomial. A manually supplied expression is still a
@@ -57,31 +57,30 @@ dimension even when no ODE is attached.
 ## Manual construction, without a physical system
 
 ```cpp
+#include <dynsyslab/core/EigenfunctionFit.hpp>
 #include <dynsyslab/core/KoopmanModel.hpp>
 namespace c = dynsyslab::core;
 
-c::EigenfunctionCoordinates coordinates;
-coordinates.kind = c::EigenfunctionCoordinateKind::causalHistory;
-coordinates.dimension = 2;
+auto coordinates = c::FunctionDomain::supplied(2);
 coordinates.names = {"xi_1", "xi_2"};
 coordinates.providerArtifact = "frozen-echo-projector.npz";
 
 // psi(q) = 2 + q1 + i*q2; no normalization, one sampled eigenvalue.
-c::PolynomialEigenfunctionSet bank(
-    {2, {0,0, 1,0, 0,1}, {}, {}},
-    {2.0, 1.0, {0.0,1.0}},
-    c::Spectrum::fromDiscreteMultipliers({{0.99,0.06}}, 0.01),
-    coordinates);
+const auto bank = c::polynomialEigenfunctions(
+    2, {0,0, 1,0, 0,1}, {2.0, 1.0, {0.0,1.0}},
+    c::Spectrum::fromDiscreteMultipliers({{0.99,0.06}}, 0.01), {}, {}, coordinates);
 c::KoopmanModel model(bank, 1); // one input; no invented physical state
 const double q[] = {0.3, -0.2};
 const auto psi = model.evaluateFromCoordinates(q);
-const auto gradient = bank.eigenfunction(0).gradient(q);
+const auto gradient = bank.functions.gradient(0, q);
 ```
 
 For a physical-system adapter, use the overload taking `SystemConfiguration`.
-The existing constructor taking `KoopmanSINDyResult` still works and converts
-into the same canonical bank. Scattered/interpolated models remain supported;
-they are not falsely cast as polynomials.
+Every producer (SINDy, EDMD, DMDc, history EDMD, manual coefficients through
+`polynomialEigenfunctions` in `core/EigenfunctionFit.hpp`) returns an
+`EigenfunctionFitResult`: the expansion, its spectrum and its fit diagnostics.
+Scattered/interpolated models remain supported; they are not falsely cast as
+polynomials.
 
 ## Fitting paths
 
@@ -174,8 +173,8 @@ a certificate of accuracy. Completed source archives are not migrated in place.
 
 | Existing API | Preferred API |
 | --- | --- |
-| Runtime `KoopmanSINDyResult` | `PolynomialEigenfunctionSet` |
-| `model.eigenfunctions()` legacy DTO | `model.polynomialEigenfunctions()` |
+| `KoopmanSINDyResult` (removed) | `EigenfunctionFitResult` |
+| `model.eigenfunctions()` (removed) | `model.expansion()`, `model.spectrum()`, `model.fitDiagnostics()` |
 | `liftedDimension()` | `eigenfunctionCount()` |
 | `splitDimension()` | `realLiftedDimension()` |
 | Ambiguous `stateDimension()` | `physicalStateDimension()` or `coordinateDimension()` |
@@ -184,20 +183,19 @@ a certificate of accuracy. Completed source archives are not migrated in place.
 | `exactControlMap(x)` | `stateJacobianControlMap(x)` |
 | `validateKoopmanSemigroup(...)` | `validateEigenfunctions(...)` with explicit input kind |
 
-Old names remain adapters for supported cases. Requesting a legacy
-continuous-only DTO for zero-multiplier modes fails explicitly. This is source
-compatibility, not binary ABI compatibility: rebuild C++ clients with the new
-headers and matching libraries. Rebuilt Solver and Viewer keep their existing
+Old names remain adapters for supported cases. This is source compatibility,
+not binary ABI compatibility: rebuild C++ clients with the new headers and
+matching libraries. Rebuilt Solver and Viewer keep their existing
 workflow/UI behavior; no alternate controller or plot implementation is added.
 Continuous-only downstream tools still require a finite continuous spectrum.
 
-New KROM archives use `dynsyslab.koopman-model/v2`, with an embedded versioned
-polynomial/coordinate contract. Established coefficient, normalization and
-continuous-spectrum array names remain where valid. Old native and legacy
-archives remain readable. Optional physical adapters, provider pointers, fit
-evidence, primary spectrum, named continuous/discrete maps and dataset refs
-round-trip. The raw `dynsyslab.edmdc/v1` fit archive remains a separate fitted
-predictor contract; export it to the shared polynomial bank when needed.
+K-ROM archives are the `krom` data object (`dynsyslab.krom/v1`): the spectrum,
+the eigenfunctions (samples and named representations) and the optional
+readouts C and input maps B; a krom that extends another references it as its
+parent (path, SHA-256, modes) and stores only what it adds
+([DATA_OBJECTS.md](DATA_OBJECTS.md)). Older K-ROM, eigenfunctions and
+reconstructions archives are refused with a message to regenerate them. The raw `dynsyslab.edmdc/v1` fit archive remains a
+separate fitted predictor contract; export it with `eigenfunctionSet()`.
 
 Inspect an archive without fitting or mutating it:
 
@@ -211,7 +209,7 @@ The same service is `core/KoopmanInspection.hpp`.
 
 ## Runtime composition
 
-Polynomial evaluation and legacy DTO adapters live in `dynsyslab_eigenfunctions`;
+Polynomial evaluation lives in `dynsyslab_eigenfunctions`;
 SINDy fitting lives in `dynsyslab_identification`. Runtime consumers can link the
 former without the fitter. Controllers accept `valueFromCoordinates` or
 `valueFromLifted`; estimators accept measured outputs and an initial lifted value.

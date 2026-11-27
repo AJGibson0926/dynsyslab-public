@@ -68,14 +68,16 @@ void appendTraces(Figure& target, const Figure& source, const ComparisonEntry& e
             target.alternateCoordinates->traceLabels.push_back(entry.label + " — " + traceLabel);
     for (auto trace : source.traces) {
         trace.label = entry.label + " — " + trace.label;
-        const bool own = !sharedRole(trace) && !trace.heatmap
-            && trace.encoding != "complex-domain-color";
+        // Domain colouring is the data itself, and a faint "reference" path (e.g. the trajectory
+        // under an observable) is background: both keep their own style in every run.
+        const bool domain = trace.encoding == "complex-domain-color" || trace.encoding == "domain-color";
+        const bool own = !sharedRole(trace) && !trace.heatmap && !domain && trace.role != "reference";
         if (colored && own) {
             trace.color = entry.color;
             if (trace.encoding == "time") { trace.encoding.clear(); trace.colorValues.clear(); }
             if (trace.role != "estimate") trace.lineStyle = "solid";
-        } else if (!colored && index > 0 && trace.lineStyle == "solid" && !trace.marker
-                   && trace.encoding != "complex-domain-color") {
+        } else if (!colored && index > 0 && trace.lineStyle == "solid" && !trace.marker && !domain
+                   && trace.role != "reference") {
             trace.lineStyle = "dash";
         }
         target.traces.push_back(std::move(trace));
@@ -156,7 +158,36 @@ Figure overlay(const std::vector<const Figure*>& figures, const std::vector<Comp
     for (std::size_t k = 0; k < figures.size(); ++k)
         appendTraces(result, *figures[k], entries[k], k, colored);
     mergeSharedTraces(result, figures.size(), colored);
-    if (colored && result.colorLabel.size()) result.colorLabel.clear();
+    // Domain-coloured lines of one function share one brightness scale, so moduli compare across runs.
+    double largest = 0.0;
+    for (const auto& trace : result.traces)
+        if (trace.encoding == "domain-color" && !trace.heatmap)
+            for (const double m : trace.magnitudes) if (std::isfinite(m)) largest = std::max(largest, m);
+    if (largest > 0)
+        for (auto& trace : result.traces)
+            if (trace.encoding == "domain-color" && !trace.heatmap) trace.magnitudeScale = largest;
+    const bool domainFigure = std::any_of(result.traces.begin(), result.traces.end(),
+        [](const Trace& trace) { return trace.encoding == "domain-color"; });
+    if (domainFigure) {
+        // Hue carries the function, so runs are not named: the legend has one entry per kind of
+        // line (e.g. training and test trajectories), and each run shows only its initial condition.
+        std::set<std::string> listed;
+        for (auto& trace : result.traces) {
+            if (trace.encoding != "domain-color" && trace.role != "reference") continue;
+            const auto dash = trace.label.find(kSeparator);
+            const auto name = dash == std::string::npos ? trace.label : trace.label.substr(dash + kSeparator.size());
+            trace.label = listed.insert(trace.role + "|" + name).second ? name : std::string{};
+        }
+        result.title = figures.front()->title;
+        std::vector<Figure::ReferencePoint> unique;  // a shared equilibrium is drawn once
+        for (const auto& reference : result.references)
+            if (std::none_of(unique.begin(), unique.end(), [&](const auto& kept) {
+                    return kept.x == reference.x && kept.y == reference.y && kept.equilibrium == reference.equilibrium;
+                }))
+                unique.push_back(reference);
+        result.references = std::move(unique);
+    }
+    if (colored && result.colorLabel.size() && !domainFigure) result.colorLabel.clear();
     return result;
 }
 

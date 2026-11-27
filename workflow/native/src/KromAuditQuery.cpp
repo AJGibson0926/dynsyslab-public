@@ -1,5 +1,8 @@
 #include "KromTrajectoryAudit.hpp"
 #include <cmath>
+#include <algorithm>
+#include <dynsyslab/core/Archive.hpp>
+#include <dynsyslab/core/ControlMapPath.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/core/KromDifferentialAnalysis.hpp>
 #include <dynsyslab/core/KromLocalControlAnalysis.hpp>
@@ -208,6 +211,29 @@ core::json::Value evaluateKromAuditQuery(const core::json::Value &request) {
         "Frozen continuous local loops; same compensator applied to surrogate "
         "and physical sensor/plant. Not a guarantee for tracking, scheduled "
         "gains, saturation, sampling, delay or noise.";
+  } else if (action == "control_map_path") {
+    // Pathwise B error, direction, norm ratio and truth-coupled frozen poles (ControlMapPath.hpp).
+    ControlMapPathOptions o;
+    o.controlMap = request.at("input_map").string(o.controlMap);
+    o.statePenalty = request.at("Q").number(o.statePenalty);
+    o.inputPenalty = request.at("R").number(o.inputPenalty);
+    o.maximumRelativeError = request.at("maximum_relative_error").number(o.maximumRelativeError);
+    o.minimumCosine = request.at("minimum_cosine").number(o.minimumCosine);
+    o.minimumStableFraction = request.at("minimum_stable_fraction").number(o.minimumStableFraction);
+    o.stride = std::size_t(std::max(1.0, request.at("stride").number(1)));
+    std::vector<double> states = request.at("states").isNull() ? std::vector<double>{} : numbers(request.at("states"));
+    if (states.empty() && !request.at("trajectory").string().empty())
+      states = readNpz(std::filesystem::u8path(request.at("trajectory").string())).at("values").doubles();
+    const auto r = analyzeControlMapPath(model, states, states.size() / model.stateDimension(), o);
+    out["relative_error"] = array(r.relativeError);
+    out["direction_cosine"] = array(r.cosine);
+    out["norm_ratio"] = array(r.normRatio);
+    out["truth_coupled_maximum_pole_real"] = array(r.maximumPoleReal);
+    out["stable_fraction"] = r.stableFraction;
+    out["passed"] = r.passed;
+    J::Array failures;
+    for (const auto& item : r.failures) failures.emplace_back(item);
+    out["failures"] = J(std::move(failures));
   } else
     throw std::invalid_argument("Unknown KROM audit action");
   return out;

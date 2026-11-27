@@ -182,31 +182,14 @@ Theory*, chapters 14, 17–18
 ([author text](https://www.math.uni-leipzig.de/~eisner/book-EFHN.pdf)).
 Tests cover non-dyadic cycles, corrupted recurrence, angular wrapping,
 insufficient repeats, Parseval mass and independent Hankel successor spacing.
-`viewer/cycle_spectra.py` presents already computed spectra, sections,
-regularized measures and free predictions in notebooks or exported figures;
+The native Viewer presents already computed spectra, sections, regularized
+measures and free predictions (`dynsyslab.research-figure/v1` documents
+`cycle_spectrum_sequence`, `return_sections`, `regularized_measures`,
+`prediction_comparison`; [Viewer reports and export](VIEWER_REPORTS_AND_EXPORT.md));
 it does not fit models or infer periods.
 
-For local notebooks, `viewer.notebook_export.standalone_fragment` supplies
-theme defaults for an existing interactive Viewer fragment;
-`notebook_html_frame` embeds it in an isolated iframe.
-`write_executed_notebook(cells, path, kernel_name="python3")` executes
-caller-authored cells using optional nbformat/nbclient and saves outputs.
-It neither installs dependencies nor starts a server. The notebook must be
-trusted locally for JavaScript output; restrictive hosts may disable it.
-Static figures and an exported standalone HTML document remain available.
-`phase_cover_figure` is the static/export counterpart of `phase_cover_fragment`,
-using the same precomputed orbit geometry and finite branch labels.
-`phase_cover_evolution_figure` advances a displayed finite phase tower by a
-specified number of base periods, including residue carries. It consumes
-precomputed geometry and does not integrate or infer the underlying dynamics.
-Both phase-cover renderers accept `axis_labels=(x_label,y_label)` and optional
-`bounds=[xmin,xmax,ymin,ymax]`; otherwise bounds come from the supplied samples.
-`phase_cover_fragment` consumes `sample_phase_cover` geometry directly, with
-three levels for each supplied prime 2 or 3. Pre-enumerated branch tables are
-not required. It provides initial-phase/digit controls, an elapsed-time slider,
-a one-base-period button, a finite suspension chart, mouse-wheel zoom and drag.
-Its bounded degree/tick display arithmetic is checked against the exact native
-clock; interpolation is only for markers on already sampled curves.
+Notebook packaging (standalone fragments, iframes, executed notebooks) is retired;
+the native Viewer exports any payload as self-contained interactive HTML or SVG.
 
 ### Exact finite phase-cover clock
 
@@ -248,10 +231,9 @@ the exact suspension clock, including negative time.
 
 The native mathematics tests check gluing, negative time, compatibility and
 inverse evolution. Python contracts also check the CLI schema and hidden carry.
-`tests/test_phase_cover_viewer.py` tests the generic presentation contract;
-setting `DYNSYSLAB_TEST_BROWSER` to a Chromium/Edge executable enables its
-optional headless clock-parity, time/branch, state-restoration, zoom and drag
-checks. The normal library and CLI have no browser dependency.
+`tests/test_phase_cover_viewer.py` checks the analytic `phase_cover` query and
+the native Viewer's phase-cover pages through the compiled CLIs. The library
+and CLI have no browser dependency.
 
 Fourier action `evaluate_many` evaluates a supplied `series` at `phases`.
 Action `evolve` takes `series`, `time`, optional `initial_phase` and
@@ -260,8 +242,9 @@ Action `evolve` takes `series`, `time`, optional `initial_phase` and
 neither estimates missing harmonics or fits a law. The C++ API is
 `evolveFourierSeries`; the optional thin client is
 `mathematics.evolve_fourier_channels`. Direct evaluation is bounded to 100 million
-term evaluations. `viewer.coordinate_reconstruction` plots already computed
-decoders, character masses and errors without estimating them.
+term evaluations. The native Viewer plots already computed decoders, character masses and errors
+(`coordinate_reconstruction`, `character_mass`, `error_comparison` research figures)
+without estimating them.
 
 See [Periodic spectral analysis and estimation](PERIODIC_SPECTRAL_ANALYSIS.md)
 for the additional native APIs, CLI operations, thin Python adapters and sources.
@@ -361,22 +344,8 @@ See de Carvalho, Lyubich and Martens, *Renormalization in the Hénon Family I*,
 for a theorem obtaining such geometry under substantive renormalization
 hypotheses. This finite diagnostic does not verify those hypotheses.
 
-The presentation-only `viewer.cycle_spectra.cycle_clock_fragment` renders
-interactive finite quotient clocks for a supplied divisibility chain:
-
-```python
-from viewer.cycle_spectra import cycle_clock_fragment
-fragment = cycle_clock_fragment((2, 4, 8), initial_step=6,
-                                step_label="Advance one return-map step")
-```
-
-It accepts one to six strictly increasing periods between 2 and 32, each
-dividing the next. Its browser counter uses exact integers, including carries
-beyond the largest displayed quotient; circle positions are display geometry.
-It restores host interaction state and supports arbitrary signed integer
-initial steps. The supplied periods are assumptions for the schematic, not
-inferred or certified periods of a physical model. No integration, partition
-inference, or spectral fitting occurs in Viewer.
+The exact adding-machine arithmetic is the native `phase_cover_flow` and
+related mathematics queries; the native Viewer draws their results.
 
 ### Circle-cover characters with periodic forcing
 
@@ -410,10 +379,10 @@ Both use the existing compiled `math-query` CLI and optional
 `dynsyslab_client.mathematics.query` Python client. Standard sources are
 [Burgos and Verjovsky, §2](https://arxiv.org/abs/1603.05676) for circle-cover
 characters and [Pöschel](https://arxiv.org/abs/0908.2234) for the small-divisor
-perturbation framework. Viewer `solenoid_suspension_figure` in
-`viewer.phase_covers` supplies a finite-prefix, cut-open suspension schematic
-and Cantor-fiber refinement. Its transverse placement is illustrative, not a
-physical phase-space coordinate.
+perturbation framework. The analytic query `phase_cover` samples a caller-chosen orbit tower and checks
+its clock ratios (`|omega_j p^j / omega_0 - 1|` within a tolerance, else an error);
+the native Viewer draws its `dynsyslab.phase-cover-geometry/v1` result, one panel per
+level with the compatible phase points.
 
 
 ### Positive Fourier clock changes
@@ -456,7 +425,7 @@ measure $\rho\,dm/\bar\rho$, where $m$ is Haar measure, not generally with
 unweighted Haar measure. No infinite-limit, Hamiltonian preservation, physical
 embedding, KAM persistence, or spectral-type certificate is asserted.
 
-`viewer.time_changes.clock_character_figure` renders a native query response
-against a supplied linear reference on the same mesh. The existing native
+The native Viewer's `clock_character` research figure renders a native query
+response against a supplied linear reference on the same mesh. The existing native
 Fourier evolution operation can supply that reference; Viewer contains no
 clock integration or regression.

@@ -20,15 +20,8 @@ void require(bool condition, const char* message) {
 }
 
 core::KoopmanModel constantKrom() {
-    core::KoopmanSINDyResult fit;
-    fit.continuousEigenvalues = {{0.0, 0.0}};
-    fit.coefficients = {{1.0, 0.0}};
-    fit.exponents = {0, 0};
-    fit.center = {0.0, 0.0};
-    fit.scale = {1.0, 1.0};
-    fit.stateDimension = 2;
-    fit.dynamicalStateDimension = 2;
-    fit.featureCount = 1;
+    auto fit = core::polynomialEigenfunctions(2, {0, 0}, {{1.0, 0.0}},
+        core::Spectrum::fromContinuousRates({{0.0, 0.0}}), {0.0, 0.0}, {1.0, 1.0});
     core::SystemConfiguration system;
     system.identifier = "duffing";
     system.preset = "double_well_reference";
@@ -68,8 +61,8 @@ int main() {
         auto original=constantKrom();
         original.addDatasetReference({"forced-training.npz","training","forced","recorded-input.npz"});
         original.addDatasetReference({"forced-test.npz","test","forced",{}});
-        core::savePolynomialKoopmanModel(krom, original,
-            R"({"format":"dynsyslab.derived/v1","label":"Constant KROM"})",
+        core::saveKoopmanModel(krom, original,
+            R"({"schema":"dynsyslab.derived/v1","label":"Constant KROM"})",
             std::move(evidence));
 
         const auto trajectory = root / "test-trajectory.npz";
@@ -79,13 +72,13 @@ int main() {
         source.arrays["values"] = core::NpyArray::fromDoubles(
             {4, 2}, {-0.5, 0.0, 0.0, 0.1, 0.5, 0.0, 1.2, 0.0});
         source.arrays["metadata_json"] = core::NpyArray::fromString(
-            R"({"format":"dynsyslab.trajectory/v1","label":"Validation trajectory","system":"duffing","system_preset":"double_well_reference","resolved_system_parameters":{},"integration_form":"dimensionless","forcing_type":"free","controller_kind":"none"})");
+            R"({"schema":"dynsyslab.trajectory/v1","label":"Validation trajectory","system":"duffing","system_preset":"double_well_reference","resolved_system_parameters":{},"integration_form":"dimensionless","forcing_type":"free","controller_kind":"none"})");
         core::writeNpzAtomic(trajectory, source);
 
         const auto result = dynsyslab::workflow::executeJob(
             validationJob(trajectory, krom), root / "archives");
-        require(result.archives.size() == 1,
-                "validation did not publish exactly one archive");
+        require(result.archives.size() == 2,  // the validation report, then the validated K-ROM
+                "validation publishes its report and the K-ROM it validated");
         const auto archive = core::readNpz(result.archives.front());
         require(archive.at("one_step_metrics").shape ==
                     std::vector<std::size_t>({1, 6}),
@@ -96,7 +89,7 @@ int main() {
         require(archive.at("one_step_metrics").doubles()[3] == 0.0,
                 "constant eigenfunction should have zero one-step defect");
         const auto metadata = json::parse(archive.metadataJson());
-        require(metadata.at("method").string() == "koopman-validation"
+        require(metadata.at("method").string() == "koopman_validation"
                     && metadata.at("dataset_role").string() == "test",
                 "validation metadata is incomplete");
         require(metadata.at("outside_training_samples").number() == 1.0,
@@ -132,7 +125,8 @@ int main() {
         auto legacy=core::koopmanDatasetReferencesFromMetadata(json::parse(
             R"({"method":"edmdc","training_sources":[{"states":"x.npz","inputs":"u.npz"}],"validation_archives":["v.npz"]})"));
         require(legacy.size()==2&&legacy[0].dynamics=="unknown","legacy forcing classification must not be invented");
-        auto sampledFit=core::KoopmanSINDyResult::fromDiscreteCoefficients(2,{0,0},{{1.,0.}},{{1.,0.}},.2);
+        auto sampledFit=core::polynomialEigenfunctions(2,{0,0},{{1.,0.}},
+            core::Spectrum::fromDiscreteMultipliers({{1.,0.}},.2));
         const auto sampledPath=root/"sampled-krom.npz";
         core::saveKoopmanModel(sampledPath,core::KoopmanModel(sampledFit,original.systemConfiguration()),"{}");
         auto fine=source;fine.arrays["time"]=core::NpyArray::fromDoubles({7},{0.,.1,.2,.3,.4,.5,.6});

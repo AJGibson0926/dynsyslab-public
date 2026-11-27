@@ -117,22 +117,22 @@ int main(int argc,char** argv) {
         std::ofstream(root/"scattered.viewer.json")<<dsl::json::dump(dsl::inspectPlot(real,true));
         const auto roundtrip=dsl::Payload::load((root/"scattered.viewer.json").wstring());
         require(roundtrip.layout=="krom" && roundtrip.selectedModes==real.selectedModes && roundtrip.figures[0].traces[1].selected,"payload selection roundtrip");
-        // Legacy control import keeps independent modes; evaluator import exposes both stored conjugates.
-        NpzRecord legacy;
-        legacy.arrays["training_states"]=NpyArray::fromDoubles({4,2},data.trainingStates);
-        legacy.arrays["training_time"]=NpyArray::fromDoubles({4},{0,.1,0,.1});
-        legacy.arrays["coefficients"]=NpyArray::fromComplex({2,2},{{1,0},{0,1},{1,0},{0,-1}});
-        const std::vector<std::complex<double>> mu={std::exp(std::complex<double>(-.1,1)*.1),std::exp(std::complex<double>(-.1,-1)*.1)};
-        legacy.arrays["eigenvalues"]=NpyArray::fromComplex({2},mu);
-        legacy.arrays["metadata_json"]=NpyArray::fromString(R"({"system":"duffing","analysis_metadata":{"dictionary":{"degree":1,"include_constant":false},"krom":{"delta_t":0.1,"retained_indices":[0],"eigenvalue_domain":"continuous"}}})");
-        writeNpzAtomic(root/"legacy.npz",legacy);
-        const auto independent=loadKoopmanModel(root/"legacy.npz");
-        const auto full=loadKoopmanEigenfunctionModel(root/"legacy.npz",system);
-        require(independent.liftedDimension()==1 && full.liftedDimension()==2,"legacy control import unchanged");
-        options={};options.allModes=true;
-        const auto legacyPayload=dsl::buildKromWorkspace(root/"legacy.npz",options);
-        require(legacyPayload.selectedModes.size()==2,"both legacy conjugates selectable");
-        checkNear(legacyPayload.figures[0].traces[1].x[0],mu[0].real(),"legacy discrete spectrum");
+        {   // Each eigenvalue shows its pair's residual; a lattice pseudospectrum is a heat map beneath them.
+            auto evidence=model.spectrum();
+            evidence.setResiduals({0.0123,0.0123},"one-step","empirical-training");
+            evidence.setPseudospectrum(Pseudospectrum{"one-step","empirical-training",{{0.9,-0.1},{1.0,-0.1},{0.9,0.1},{1.0,0.1}},{0.1,0.01,0.2,0.02},{},0});
+            auto withEvidence=model; withEvidence.setSpectralEvidence(evidence);
+            const auto evidenced=root/"evidenced.npz";
+            saveKoopmanModel(evidenced,withEvidence,R"({"label":"Evidence fixture","delta_t":0.1})",
+                {{"training_time",NpyArray::fromDoubles({4},{0,.1,0,.1})}});
+            dsl::KromWorkspaceOptions all; all.allModes=true;
+            const auto shown=dsl::buildKromWorkspace(evidenced,all);
+            const auto& spectrum=shown.figures[0];
+            require(spectrum.traces[0].heatmap && spectrum.traces[0].zShape==std::vector<int>{2,2}
+                && std::abs(spectrum.traces[0].z[1]+2)<1e-12,"pseudospectrum heat map of log10 residual");
+            require(spectrum.traces.back().label.find("r = 0.0123")!=std::string::npos,"eigenvalue label carries its residual");
+            dsl::renderPlotPng(shown,root/"evidence.png",{1400,900});
+        }
         interaction(real);
         dsl::renderPlotPng(domain,root/"domain.png",{1400,900});
         std::cout<<"KROM workspace: PASS\n"; return 0;

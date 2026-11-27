@@ -13,7 +13,7 @@ std::vector<double> transpose(const std::vector<double>& x,std::size_t rows,std:
 }
 }
 ControllabilityResult analyzeControllability(const std::vector<double>& A,
-    const std::vector<double>& B,std::size_t n,std::size_t m,const ControllabilityOptions& options) {
+    const std::vector<double>& B,std::size_t n,std::size_t m,const ObservabilityOptions& options) {
     const auto dual=analyzeObservability(transpose(A,n,n),transpose(B,n,m),n,m,options);
     ControllabilityResult r;
     if(!dual.matrix.empty())r.matrix=transpose(dual.matrix,m*dual.blockCount,n);
@@ -26,9 +26,9 @@ ControllabilityResult analyzeControllability(const std::vector<double>& A,
     r.effectiveRank=dual.effectiveRank;return r;
 }
 ControllabilityResult analyzeControllability(const KoopmanModel& model,
-    const std::string& name,const ControllabilityOptions& options) {
-    const bool discrete=options.method==ControllabilityMethod::discreteGramian
-        ||options.method==ControllabilityMethod::discreteInfiniteGramian;
+    const std::string& name,const ObservabilityOptions& options) {
+    const bool discrete=options.method==ObservabilityMethod::discreteGramian
+        ||options.method==ObservabilityMethod::discreteInfiniteGramian;
     if(discrete) {
         const auto found=model.discreteInputMaps().find(name);
         if(found==model.discreteInputMaps().end())

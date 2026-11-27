@@ -1,4 +1,5 @@
 #include "HankelAnalysis.hpp"
+#include <dynsyslab/core/DataObject.hpp>
 #include <dynsyslab/core/FileDigest.hpp>
 #include <algorithm>
 #include <cmath>
@@ -19,11 +20,7 @@ void archiveHankelLayout(c::NpzRecord& archive,const HankelAnalysis& input,bool 
     }
 }
 
-std::filesystem::path runHankelMatrix(const SourceData& source,const json::Value& settings,
-    const std::filesystem::path& root,const std::string& label) {
-    if (settings.at("window").isNull() || !settings.at("hankel_archive").isNull())
-        throw std::invalid_argument("hankel_matrix requires a window on the supplied source");
-    auto input=prepareHankel(source,settings,settings.at("shifted_pair").boolean(true));
+c::NpzRecord hankelMatrixObject(const SourceData& source,const HankelAnalysis& input,const std::string& label) {
     c::NpzRecord archive;
     archiveHankelLayout(archive,input,true);
     const auto& h=input.matrix;
@@ -31,8 +28,8 @@ std::filesystem::path runHankelMatrix(const SourceData& source,const json::Value
     std::vector<double> time,successors;
     time.reserve(ticks.size());
     for (auto tick:ticks) {
-        time.push_back(source.time[tick]);
-        if (!h.y.empty()) successors.push_back(source.time[tick+h.window.sampleStride]);
+        time.push_back(source.time()[tick]);
+        if (!h.y.empty()) successors.push_back(source.time()[tick+h.window.sampleStride]);
     }
     archive.arrays["time"]=c::NpyArray::fromDoubles({time.size()},time);
     if (!successors.empty()) archive.arrays["successor_time"]=c::NpyArray::fromDoubles({successors.size()},successors);
@@ -40,14 +37,23 @@ std::filesystem::path runHankelMatrix(const SourceData& source,const json::Value
     meta.at("hankel_window")=input.provenance;
     meta.at("source_sha256")=c::sha256File(source.path);
     archive.arrays["metadata_json"]=c::NpyArray::fromString(json::dump(meta));
-    return publish(root,source,"hankel_matrix",label,std::move(archive));
+    return archive;
+}
+
+std::filesystem::path runHankelMatrix(const SourceData& source,const json::Value& settings,
+    const std::filesystem::path& root,const std::string& label) {
+    if (settings.at("window").isNull() || !settings.at("hankel_archive").isNull())
+        throw std::invalid_argument("hankel_matrix requires a window on the supplied source");
+    const auto input=prepareHankel(source,settings,settings.at("shifted_pair").boolean(true));
+    return publishObject(root, source, dynsyslab::core::object_kind::matrix, "hankel_matrix",hankelMatrixObject(source,input,label));
 }
 
 HankelAnalysis readHankel(const SourceData& source,const std::filesystem::path& path,bool requirePair) {
     const auto archive=c::readNpz(path);
     const auto meta=json::parse(archive.metadataJson());
     const auto& layout=meta.at("hankel_window");
-    if (meta.at("method").string()!="hankel_matrix" || layout.at("schema").string()!="dynsyslab.hankel-window/v1")
+    // A Hankel matrix object, whichever step wrote it (hankel_matrix, or H-DMD with save_matrix).
+    if (c::dataObjectKind(archive.metadataJson())!=c::object_kind::matrix || layout.at("schema").string()!="dynsyslab.hankel-window/v1")
         throw std::invalid_argument("expected a published Hankel matrix");
     if (meta.at("source_sha256").string()!=c::sha256File(source.path))
         throw std::invalid_argument("Hankel matrix and source trajectory have different content hashes");
@@ -62,7 +68,7 @@ HankelAnalysis readHankel(const SourceData& source,const std::filesystem::path& 
     result.provenance.at("matrix_archive")=std::filesystem::absolute(path).lexically_normal().generic_u8string();
     result.alignEnd=layout.at("alignment").string()=="end";
     auto& h=result.matrix;
-    h.sourceSamples=source.samples;
+    h.sourceSamples=source.samples();
     h.rows=count(layout.at("rows")); h.columns=count(layout.at("columns"));
     h.window={count(layout.at("delays")),count(layout.at("sample_stride")),count(layout.at("delay_stride")),
         count(layout.at("snapshot_stride")),h.columns};
@@ -92,13 +98,13 @@ HankelAnalysis readHankel(const SourceData& source,const std::filesystem::path& 
         std::vector<std::size_t> result;
         for (double value:a.doubles()) {
             const auto i=count(value,true);
-            if (i>=source.samples || (!result.empty() && i<=result.back())) throw std::invalid_argument("invalid Hankel clock");
+            if (i>=source.samples() || (!result.empty() && i<=result.back())) throw std::invalid_argument("invalid Hankel clock");
             result.push_back(i);
         }
         return result;
     };
     h.starts=offsets("hankel_start_samples");h.ends=offsets("hankel_end_samples");
-    if (requirePair && h.window.sampleStride>=source.samples-h.ends.back())
+    if (requirePair && h.window.sampleStride>=source.samples()-h.ends.back())
         throw std::invalid_argument("archived Hankel successor exceeds source clock");
     return result;
 }

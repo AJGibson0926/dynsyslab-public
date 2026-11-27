@@ -85,8 +85,10 @@ Viewer reads the axis labels for transformed trajectories from `coordinate_names
 and plots the saved values on their original scale. Physical equilibrium markers
 and phase overlays require the source state trajectory.
 
-sindy_dynamics accepts derivatives finite_difference (default) or stored
-(coordinate_derivatives). use_previous_output consumes a preceding coordinate
+sindy_dynamics accepts derivatives finite_difference (default, fourth order),
+central_high_order (eighth-order central differences, Fornberg 1988) or stored
+(coordinate_derivatives). `monomials` [[p_0, ..., p_{d-1}], ...] gives a library of
+monomials with integer, possibly negative (Laurent), exponents. use_previous_output consumes a preceding coordinate
 transform. The existing sindy stage still fits Koopman eigenfunctions.
 
 Dynamics SINDy defaults to library_family broad. Sparse thresholding selects terms
@@ -186,7 +188,7 @@ rollout and its reference in other coordinates. Rollouts are stored with the
 error-bounded vertex selection Viewer uses (`rollout_vertices`, default 60000);
 errors use every sample. The `sindy_dynamics_transient` view shows one page per
 plot type with training and each held-out record side by side. The study in
-`examples/native/pipelines/rpe-coordinate-dynamics/study.json` runs all of this.
+`examples/native/experiments/rpe-coordinate-dynamics/study.json` runs all of this.
 
 ## Interpretation
 

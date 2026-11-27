@@ -121,8 +121,5 @@ def validate_job(source: str | Path | dict[str, Any]) -> dict[str, Any]:
         methods = [item for item in job.get("methods", []) if item.get("enabled", True)]
         if not methods:
             raise ValueError("A postprocess job requires at least one enabled method.")
-        from postprocessing.processor import PostprocessingPipeline
-        unknown = {str(item.get("name", "")).lower() for item in methods} - set(PostprocessingPipeline.supported_methods)
-        if unknown:
-            raise ValueError(f"Unsupported post-processing methods: {sorted(unknown)}")
+        # Method names are checked by the native planner.
     return job

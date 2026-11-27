@@ -1,7 +1,7 @@
 #pragma once
 // The expansion representation: g_r(q) = sum_k A_rk phi_k(q), r = 0..outputs-1, in the one
 // universal dictionary (ExpansionDictionary) on a domain q. It holds dictionary terms and
-// coefficients only. Observables and Eigenfunctions point at it (Observable::representation()); an
+// coefficients only. Observables and K-ROMs point at it (Observable::representation()); an
 // eigenvalue belongs to the Eigenfunction, never to the expansion. Methods (SINDy, EDMD, DMD,
 // spectral fits, library entries, jobs) differ only in which terms and coefficients they supply.
 #include <dynsyslab/core/ExpansionDictionary.hpp>

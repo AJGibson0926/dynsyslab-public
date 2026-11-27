@@ -67,7 +67,7 @@ ApproximateControlMap loadApproximateControlMap(
 
 ApproximateControlMap loadApproximateControlMap(
     const std::filesystem::path& path,const std::string& prefix,
-    const KoopmanModel& model,const std::string& unverifiedLegacyReason) {
+    const KoopmanModel& model,bool externalMap) {
     const auto archive=readNpz(path);
     const auto key=prefix.empty()?"model_identity":prefix+"_model_identity";
     std::string identity=archive.contains(key)?archive.at(key).string():std::string{};
@@ -76,15 +76,15 @@ ApproximateControlMap loadApproximateControlMap(
         for(const auto& entry:manifest.array())
             if(prefix=="control_"+entry.at("name").string())identity=entry.at("model_identity").string();
     }
-    if(identity.empty()) {
-        if(unverifiedLegacyReason.find_first_not_of(" \t\r\n")==std::string::npos)
-            throw std::invalid_argument("External control map has no KROM identity; supply an explicit unverified legacy reason");
-    } else if(identity!=koopmanModelIdentity(model))
+    if(identity.empty()&&!externalMap)
+        throw std::invalid_argument("External control map records no KROM identity; refit it on this KROM, "
+                                    "or set control_map_origin \"external\" to attach it on your word");
+    if(!identity.empty()&&identity!=koopmanModelIdentity(model))
         throw std::invalid_argument("External control map does not match ordered eigenfunctions, normalization, physics or time convention");
     auto result=loadApproximateControlMap(path,prefix,model.eigenfunctionCount(),model.inputDimension());
     std::visit([&](auto& map) {
-        map.modelIdentity=koopmanModelIdentity(model);
-        if(identity.empty())map.provenance+="; UNVERIFIED legacy attachment: "+unverifiedLegacyReason;
+        map.modelIdentity=identity.empty()?koopmanModelIdentity(model):identity;
+        if(identity.empty())map.provenance+="; external map attached without a recorded K-ROM identity";
     },result);
     return result;
 }

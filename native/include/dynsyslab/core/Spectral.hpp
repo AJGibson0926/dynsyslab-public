@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <dynsyslab/core/Observable.hpp>
+#include <dynsyslab/core/Spectrum.hpp>
 #include <dynsyslab/core/Hankel.hpp>
 
 namespace dynsyslab::core {
@@ -30,8 +31,7 @@ struct DMDOptions {
 };
 
 struct DMDResult {
-    std::vector<std::complex<double>> discreteEigenvalues;
-    std::vector<std::complex<double>> continuousEigenvalues;
+    Spectrum spectrum;  // the sampled multipliers mu and their principal rates log(mu) / deltaTime
     std::vector<std::complex<double>> modes;       // featureDimension x rank
     std::vector<std::complex<double>> coordinates; // samples x rank
     std::vector<std::complex<double>> operatorMatrix;

@@ -1,5 +1,5 @@
-// dynsyslab_cli default archive root: source checkout, then the installer's runtime.json files,
-// then the per-user default; never the working directory.
+// dynsyslab_cli default archive root: DYNSYSLAB_ARCHIVE_DIR, then the installer's runtime.json,
+// source checkout, user runtime.json, per-user default; never the working directory.
 #include "../src/CliRuntimePaths.hpp"
 
 #include <chrono>
@@ -61,6 +61,11 @@ int main() {
         choice = resolveArchiveRoot(nested / "bin" / "dynsyslab-cli.exe", user);
         require(choice.source == "install_runtime" && fs::equivalent(choice.path, installArchives),
                 "an installation's runtime.json wins inside a checkout");
+
+        const auto chosen = root / "from-environment";  // DYNSYSLAB_ARCHIVE_DIR wins over runtime.json
+        choice = resolveArchiveRoot(nested / "bin" / "dynsyslab-cli.exe", user, chosen);
+        require(choice.source == "environment" && choice.path == chosen.lexically_normal(),
+                "DYNSYSLAB_ARCHIVE_DIR wins over every configured default");
 
         fs::remove_all(root);
         std::cout << "dynsyslab_cli_runtime_paths_tests: PASS\n";

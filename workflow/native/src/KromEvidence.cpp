@@ -75,23 +75,4 @@ std::vector<std::size_t> inheritedSourceModes(
     return result;
 }
 
-void inheritKromEvidence(
-    const dynsyslab::core::NpzRecord& parent,
-    const std::vector<std::size_t>& selectedModes,
-    std::map<std::string,dynsyslab::core::NpyArray>& output) {
-    for (const auto* name:{"training_states","training_coordinates","training_time",
-            "training_coordinate_velocities","training_coordinate_jacobians"})
-        if (parent.contains(name)) output[name]=parent.at(name);
-    if (parent.contains("eigenfunction_values"))
-        output["eigenfunction_values"]=selectedColumns(
-            parent.at("eigenfunction_values"),selectedModes);
-    const auto* discrete=parent.contains("discrete_eigenvalues")
-        ? &parent.at("discrete_eigenvalues")
-        : (parent.contains("eigenvalues")?&parent.at("eigenvalues"):nullptr);
-    if (discrete) {
-        output["discrete_eigenvalues"]=selectedVector(*discrete,selectedModes);
-        output["eigenvalues"]=output["discrete_eigenvalues"];
-    }
-}
-
 }  // namespace dynsyslab::workflow::postprocess_detail

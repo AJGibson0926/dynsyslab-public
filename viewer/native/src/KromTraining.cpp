@@ -38,9 +38,10 @@ std::optional<RecoveredStates> recoveredStates(const std::filesystem::path& sour
         for (const auto& [from, meta] : frontier) {
             std::vector<std::string> references;
             trainingPaths(meta, references);
-            if (!meta.at("source_krom").string().empty()) references.push_back(meta.at("source_krom").string());
+            for (const auto* named : {&meta.at("source_krom"), &meta.at("krom").at("parent").at("path")})
+                if (!named->string().empty()) references.push_back(named->string());
             for (const auto* block : {&meta.at("data_object").at("produced_by").at("inputs"),
-                                      &meta.at("eigenfunction_objects").at("origin").at("inputs")})
+                                      &meta.at("krom").at("origin").at("inputs")})
                 if (!block->isNull()) for (const auto& input : block->array()) references.push_back(input.at("path").string());
             for (const auto& encoded : references) {
                 auto p = std::filesystem::u8path(encoded);
@@ -82,40 +83,29 @@ double kromSampleTime(const json::Value& m) {
     return 0;
 }
 
+dynsyslab::core::NpzRecord composedKrom(const std::filesystem::path& source, dynsyslab::core::NpzRecord record) {
+    namespace c = dynsyslab::core;
+    try {
+        if (!c::isKrom(record) || json::parse(record.metadataJson()).at("krom").at("parent").isNull()) return record;
+        auto model = c::loadKoopmanModel(source);
+        model.clearParent();
+        auto composed = c::makeKoopmanArchive(model, record.metadataJson());
+        for (auto& [key, value] : record.arrays) composed.arrays.emplace(key, value);
+        auto parent = std::filesystem::u8path(json::parse(record.metadataJson()).at("krom").at("parent").at("path").string());
+        for (int depth = 0; depth < 64 && !parent.empty(); ++depth) {
+            const auto ancestor = c::readNpz(parent);
+            for (const auto& [key, value] : ancestor.arrays)
+                if (key != "metadata_json") composed.arrays.emplace(key, value);
+            parent = std::filesystem::u8path(json::parse(ancestor.metadataJson()).at("krom").at("parent").at("path").string());
+        }
+        return composed;
+    } catch (const std::exception&) {}  // shown as stored when a referenced object is missing
+    return record;
+}
+
 dynsyslab::core::KoopmanModel loadKromEigenfunctions(const std::filesystem::path& source,
-    const dynsyslab::core::NpzRecord& archive, const json::Value& metadata) {
-    if (!metadata.at("system_configuration").at("identifier").string().empty() || !metadata.at("system").string().empty()) {
-        return dynsyslab::core::loadKoopmanEigenfunctionModel(source);
-    }
-    std::vector<std::string> paths; trainingPaths(metadata,paths);
-    for (const auto& encoded : paths) {
-        auto p = std::filesystem::u8path(encoded); if (p.is_relative()) p = source.parent_path()/p;
-        if (p.lexically_normal() == source.lexically_normal()) continue;
-        dynsyslab::core::NpzRecord training;
-        try { training = dynsyslab::core::readNpz(p); } catch (const std::exception&) { continue; }
-        const auto meta = json::parse(training.metadataJson());
-        auto name = meta.at("system").string();
-        auto token = [](const std::string& text) { std::string r; for (const unsigned char c : text)
-            if (std::isalnum(c)) r.push_back(static_cast<char>(std::tolower(c))); return r; };
-        for (const auto& descriptor : dynsyslab::core::availableSystems())
-            if (token(name) == token(descriptor.identifier) || token(name) == token(descriptor.label)) name = descriptor.identifier;
-        if (name.empty()) continue;
-        dynsyslab::core::SystemConfiguration config; config.identifier = name;
-        const auto& legacy = meta.at("system_parameters");
-        config.preset = meta.at("system_preset").string(legacy.at("preset").at("key").string());
-        for (const auto* params : {&legacy.at("preset"),&legacy,&meta.at("resolved_system_parameters")})
-            for (const auto& [key,value] : params->object())
-                if (std::holds_alternative<double>(value.storage())) config.parameters[key] = value.number();
-        const auto system = dynsyslab::core::createSystem(config);
-        const auto* a = array(training,{"values","states"});
-        if (!a || !archive.contains("training_states")) continue;
-        const auto conversion = displayCoordinateTransform(meta,system->descriptor().stateDimension,
-            system->descriptor().preferredCoordinates);
-        if (conversion.coordinates != system->descriptor().preferredCoordinates ||
-            !aligned(archive.at("training_states").doubles(),transformDisplayStates(*a,conversion).doubles(),0)) continue;
-        return dynsyslab::core::loadKoopmanEigenfunctionModel(source,system->configuration());
-    }
-    throw std::runtime_error("Legacy KROM system metadata is unavailable in its explicitly recorded training archives");
+    const dynsyslab::core::NpzRecord&, const json::Value&) {
+    return dynsyslab::core::loadKoopmanModel(source);
 }
 
 KromTraining readKromTraining(const std::filesystem::path& source,
@@ -130,6 +120,12 @@ KromTraining readKromTraining(const std::filesystem::path& source,
     const auto expectedDimension = model.requiresExternalCoordinates()
         ? model.coordinateDimension() : model.stateDimension();
     std::optional<RecoveredStates> recovered;
+    std::optional<dynsyslab::core::NpyArray> interpolated;
+    if (const auto* scattered = model.scatteredEigenfunctions(); !states && scattered && !model.requiresExternalCoordinates()
+        && scattered->stateDimension == expectedDimension) {  // an interpolation holds its own training states
+        interpolated = dynsyslab::core::NpyArray::fromDoubles({scattered->samples, scattered->stateDimension}, scattered->trainingStates);
+        states = &*interpolated;
+    }
     if (!states && !model.requiresExternalCoordinates()) {
         recovered = recoveredStates(source, metadata, expectedDimension);
         if (recovered) states = &recovered->states;
@@ -209,7 +205,7 @@ KromTraining readKromTraining(const std::filesystem::path& source,
         result.coordinates.timeLabel = metadata.at("integration_form").string()
             == "dimensionless" ? "\\tau" : "t";
         result.coordinates.stateMultipliers.assign(dimension,1.0);
-        const auto& names = model.eigenfunctions().coordinateObservableNames;
+        const auto& names = model.coordinates().names;
         for (std::size_t axis = 0; axis < dimension; ++axis) {
             const auto name = axis < names.size() ? names[axis]
                 : "xi" + std::to_string(axis + 1);

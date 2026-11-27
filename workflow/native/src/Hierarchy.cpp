@@ -172,7 +172,7 @@ void publishHierarchy(
         dynsyslab::core::writeHierarchyAtomic(incoming, batch);
         auto existing = json::load(identity.manifestPath.wstring());
         const auto next = json::load(incoming.wstring());
-        if (existing.at("format").string() != "dynsyslab.hierarchy/v2"
+        if (existing.at("schema").string() != "dynsyslab.hierarchy/v2"
             || existing.at("id").string() != identity.batchId)
             throw std::runtime_error("cannot merge incompatible hierarchy manifests");
         for (const auto& system : next.at("systems").array())

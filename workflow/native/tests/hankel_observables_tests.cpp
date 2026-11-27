@@ -1,5 +1,5 @@
 #include <dynsyslab/core/DataObject.hpp>
-#include <dynsyslab/core/EigenfunctionArchive.hpp>
+#include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/workflow/Postprocess.hpp>
 #include <dynsyslab/workflow/CoordinateInverse.hpp>
 #include <algorithm>
@@ -144,8 +144,8 @@ void test(const std::filesystem::path& root) {
         const auto fit=core::readNpz(byMethod(explicitRun,"hdmd").at(0));
         require(!fit.contains("training_states"),"H-DMD must not copy the physical state");
         require(!fit.contains("training_coordinates")&&!fit.contains("domain__input"),"H-DMD must not copy its input");
-        const auto set=core::readEigenfunctionSet(fit,{"interpolation"});
-        const auto& interpolation=core::interpolationOf(set);
+        const auto set=core::readKoopmanModel(fit);
+        const auto& interpolation=set.interpolation();
         require(interpolation.coordinates().isPhysicalState(),"the default interpolation domain is the full state");
         const auto tt=fit.at("training_time").doubles();const auto ts=interpolation.points();
         require(interpolation.coordinates().dimension==2,"physical state width");

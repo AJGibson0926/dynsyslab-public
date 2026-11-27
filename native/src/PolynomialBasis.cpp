@@ -27,19 +27,4 @@ std::vector<std::size_t> polynomialExponentTable(
 }
 
 
-std::complex<double> evaluatePolynomialEigenfunction(const KoopmanSINDyResult& model,
-                                                     std::size_t eigenfunction,
-                                                     const double* state) {
-    if (eigenfunction >= model.continuousEigenvalues.size()) throw std::out_of_range("eigenfunction index");
-    return detail::polynomialValue(model.stateDimension,model.featureCount,model.exponents,
-        model.center,model.scale,model.coefficients.data()+eigenfunction*model.featureCount,state);
-}
-
-std::vector<std::complex<double>> gradientPolynomialEigenfunction(
-    const KoopmanSINDyResult& model, std::size_t eigenfunction, const double* state) {
-    if (eigenfunction >= model.continuousEigenvalues.size()) throw std::out_of_range("eigenfunction index");
-    return detail::polynomialGradient(model.stateDimension,model.featureCount,model.exponents,
-        model.center,model.scale,model.coefficients.data()+eigenfunction*model.featureCount,state);
-}
-
 } // namespace dynsyslab::core

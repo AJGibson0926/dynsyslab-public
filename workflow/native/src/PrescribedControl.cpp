@@ -185,7 +185,14 @@ PrescribedControl buildPrescribedControl(
     const auto scaling = system.coordinates();
     if (kind == "waveform") return waveform(settings, scaling);
     if (kind == "random_pulse") return randomPulse(settings, scaling);
-    throw std::invalid_argument("unknown prescribed controller: " + kind);
+    auto result = buildDesignedInput(kind, settings, scaling);
+    result.activeWindow = window(settings, scaling);
+    return result;
+}
+
+bool isPrescribedControl(const std::string& kind) {
+    return kind == "waveform" || kind == "random_pulse" || kind == "tabulated"
+        || kind == "command_tape" || kind == "telegraph_multisine" || kind == "symmetric_pulse" || kind == "pulse_branches";
 }
 
 }  // namespace dynsyslab::workflow::detail

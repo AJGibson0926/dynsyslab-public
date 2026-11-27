@@ -95,13 +95,13 @@ std::vector<double> StateSpaceLQRController::value(
                     reference(target_, time, stateDimension_));
 }
 
-const ContinuousLQRSolution& StateSpaceLQRController::lastSolution() const noexcept {
+const numerics::ContinuousLqrResult& StateSpaceLQRController::lastSolution() const noexcept {
     return last_;
 }
 
 bool StateSpaceLQRController::stateDependent() const noexcept { return stateDependent_; }
 
-FiniteHorizonLQRSolution solveFiniteHorizonLQR(
+numerics::FiniteHorizonLqrResult solveFiniteHorizonLQR(
     const std::vector<double>& generatorValues, const std::vector<double>& inputValues,
     const std::vector<double>& statePenaltyValues,
     const std::vector<double>& inputPenaltyValues, std::size_t states,
@@ -112,14 +112,9 @@ FiniteHorizonLQRSolution solveFiniteHorizonLQR(
     dimensions(inputPenaltyValues, inputs, inputs, "MPC R");
     if (!horizon || !std::isfinite(sampleTime) || sampleTime <= 0.0)
         throw std::invalid_argument("MPC horizon and sample time must be positive");
-    auto solved=numerics::solveFiniteHorizonLqr(
+    return numerics::solveFiniteHorizonLqr(
         generatorValues,inputValues,statePenaltyValues,inputPenaltyValues,
         states,inputs,horizon,sampleTime);
-    FiniteHorizonLQRSolution result;
-    result.stateDimension = states; result.inputDimension = inputs;
-    result.gain=std::move(solved.gain);
-    result.cost=std::move(solved.cost);
-    return result;
 }
 
 StateSpaceMPCController::StateSpaceMPCController(
@@ -156,7 +151,7 @@ std::vector<double> StateSpaceMPCController::value(
     return result;
 }
 
-const FiniteHorizonLQRSolution& StateSpaceMPCController::lastSolution() const noexcept {
+const numerics::FiniteHorizonLqrResult& StateSpaceMPCController::lastSolution() const noexcept {
     return last_;
 }
 

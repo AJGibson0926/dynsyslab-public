@@ -24,7 +24,7 @@ int main() {
         const auto edmd=dynsyslab::core::extendedDynamicModeDecomposition(
             states,samples,2,0.01,edmdOptions);
         require(edmd.featureCount==6,"quadratic two-state dictionary must have six features");
-        require(edmd.discreteEigenvalues.size()==6,"EDMD spectrum shape is wrong");
+        require(edmd.spectrum.values().size()==6,"EDMD spectrum shape is wrong");
         require(edmd.eigenfunctionValues.size()==samples*6,"EDMD values shape is wrong");
         double predictionError=0.0,referenceEnergy=0.0;
         auto features=[](double x,double y) {

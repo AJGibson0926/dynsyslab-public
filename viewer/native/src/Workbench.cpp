@@ -38,6 +38,7 @@ constexpr int kSortTrajectoriesId = 118;
 constexpr int kSortSizeId = 119;
 constexpr int kViewSelectId = 200;
 constexpr UINT_PTR kTaskTimer = 301;
+constexpr UINT_PTR kArchiveWatchTimer = 303;  // 302 is the background-check timeout
 HWND button(HWND parent, int id, const wchar_t* label, HFONT font) {
     HWND result = CreateWindowExW(0, L"BUTTON", label, WS_CHILD | WS_VISIBLE |
         WS_TABSTOP | BS_OWNERDRAW, 0, 0, 0, 0, parent,
@@ -174,6 +175,7 @@ bool Workbench::createChildren() {
     updateExportButtons();
     updatePageSelector();
     SetTimer(window_, kTaskTimer, 80, nullptr);
+    if (!arguments_.backgroundCheck) SetTimer(window_, kArchiveWatchTimer, 5000, nullptr);
     taskActive_ = true;
     task_ = std::async(std::launch::async, [this]() {
         AsyncResult result; result.kind = AsyncResult::Kind::Catalog;
@@ -365,6 +367,7 @@ LRESULT Workbench::message(UINT messageValue, WPARAM wparam, LPARAM lparam) {
         return 0;
     }
     if (messageValue == WM_TIMER && wparam == kTaskTimer) { pollTask(); return 0; }
+    if (messageValue == WM_TIMER && wparam == kArchiveWatchTimer) { watchArchive(); return 0; }
     if (messageValue == WM_TIMER && wparam == 302 && arguments_.backgroundCheck) {
         finishBackgroundCheck(2,L"Desktop startup timed out"); return 0;
     }

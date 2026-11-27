@@ -31,7 +31,7 @@ endif()
 if(DYNSYSLAB_COMPUTE_BUILD_CLI)
 add_executable(dynsyslab_cli src/Cli.cpp src/CliArguments.cpp src/CliRuntimePaths.cpp
   src/CliQuickstart.cpp src/CliViewerFigures.cpp src/CliResources.cpp
-  src/CliHub.cpp src/CliMcp.cpp src/CliProcess.cpp src/CliAgentSetup.cpp src/CliUsage.cpp src/CliArchiveTools.cpp
+  src/CliHub.cpp src/CliMcp.cpp src/CliProcess.cpp src/CliAgentSetup.cpp src/CliUsage.cpp src/CliArchiveTools.cpp src/CliArchive.cpp src/CliExperimentReport.cpp src/CliQueue.cpp
   src/CliDataPack.cpp)
   target_link_libraries(dynsyslab_cli PRIVATE dynsyslab_queue dynsyslab_math)
   target_compile_features(dynsyslab_cli PRIVATE cxx_std_17)

@@ -2,6 +2,7 @@
 #include <dynsyslab/workflow_c_api.h>
 #include <dynsyslab/workflow/ControlFactory.hpp>
 #include <dynsyslab/core/HistoryObservationArchive.hpp>
+#include <dynsyslab/core/DataObject.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <chrono>
 #include <cmath>
@@ -63,7 +64,10 @@ int main(){std::filesystem::path root;try{
     coordinateJob.at("methods").array().push_back(j::Value::Object{{"name","sindy"},
         {"settings",j::Value::Object{{"polynomial_degree",1.},{"threshold",0.},{"input_dimension",1.}}}});
     const auto coordinateFit=w::executeJob(coordinateJob,root/"archives",{});
-    const auto coordinateModel=c::loadKoopmanModel(coordinateFit.archives.back());
+    const auto coordinateModel=c::loadKoopmanModel([&]{  // the SINDy stage krom
+        for(auto at=coordinateFit.archives.rbegin();at!=coordinateFit.archives.rend();++at)
+            if(c::dataObjectKind(c::readNpz(*at).metadataJson())==c::object_kind::krom)return *at;
+        throw std::runtime_error("Coordinate SINDy published no K-ROM");}());
     check(coordinateModel.requiresExternalCoordinates()&&!coordinateModel.hasPhysicalSystem(),"Coordinate SINDy invented physical state dependence");
     check(coordinateModel.inputDimension()==1,"Measured SINDy lost the declared actuator count");
     check(coordinateModel.coordinates().providerIdentity==transform.identity(),"SINDy did not retain the frozen projection identity");

@@ -1,4 +1,5 @@
 #include "ObservablePhasePayload.hpp"
+#include <dynsyslab/core/SpectrumArchive.hpp>
 #include "PayloadSampling.hpp"
 #include <dynsyslab/core/DataObject.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
@@ -7,6 +8,7 @@
 #include <dynsyslab/core/PathSimplification.hpp>
 #include "dynsyslab_viewer/NativePayload.hpp"
 #include "KromPayload.hpp"
+#include "KromTraining.hpp"
 #include "ObservablePayload.hpp"
 #include "LatticePayload.hpp"
 #include "KoopmanValidationPayload.hpp"
@@ -23,6 +25,7 @@
 #include "LinearSystemsPayload.hpp"
 #include "LinearSystemsLoopPayload.hpp"
 #include "ArchiveMatrixPayload.hpp"
+#include "SystemViewDefaults.hpp"
 
 #include "dynsyslab_viewer/Json.hpp"
 
@@ -209,6 +212,10 @@ Payload trajectoryPayload(const std::filesystem::path& source, const std::string
     if (view == "three_d") {
         if (states->shape[1] < 3) throw std::runtime_error("three-state view requires three components");
         payload.figures.push_back(threeDimensionalFigure(suffix, labels, *states, indices));
+        if (const auto camera = systemCamera(metadataString(metadata, "system"))) {
+            payload.figures.back().cameraAzimuthDegrees = camera->first;
+            payload.figures.back().cameraElevationDegrees = camera->second;
+        }
         appendAnalyticOverlay(payload, record, coordinates, time, indices, states->shape[0], states->shape[1]);
         decorateTrajectory(payload, metadata, coordinates, time);
         return payload;
@@ -231,14 +238,20 @@ Payload trajectoryPayload(const std::filesystem::path& source, const std::string
 
 Payload spectrumPayload(const std::filesystem::path& source, const std::string& view,
                         const NpzRecord& record, const json::Value& metadata) {
-    const NpyArray* values = select(record, {"discrete_eigenvalues"}, 1);
-    bool discrete = values != nullptr;
-    if (!values) values = select(record, {"continuous_eigenvalues",
-                                          "lambda_values", "lambdas"}, 1);
-    if (!values) {
-        values = select(record, {"eigenvalues"}, 1);
-        discrete = metadataString(metadata, "eigenvalue_domain") != "continuous-time";
-    }
+    // A child krom stores no spectrum of its own: it is its parent's (on its modes).
+    std::optional<NpzRecord> referenced;
+    const auto& spectral = [&]() -> const NpzRecord& {
+        if (!dynsyslab::core::isKrom(record) || record.contains("continuous_eigenvalues") || record.contains("discrete_eigenvalues"))
+            return record;
+        const auto model = dynsyslab::core::loadKoopmanModel(source);
+        referenced.emplace();
+        dynsyslab::core::writeSpectrumArrays(*referenced, model.spectrum());
+        return *referenced;
+    }();
+    const NpyArray* values = select(spectral, {"discrete_eigenvalues"}, 1);
+    const bool discrete = values != nullptr;
+    if (!values) values = select(spectral, {"continuous_eigenvalues",
+                                            "lambda_values", "lambdas"}, 1);
     if (!values) throw std::runtime_error("archive has no one-dimensional eigenvalue spectrum");
     std::vector<std::complex<double>> spectrum;
     if (values->type == dynsyslab::core::ArrayType::complex128) spectrum = values->complexDoubles();
@@ -425,6 +438,8 @@ Payload buildNativePayload(const std::filesystem::path& source, const std::strin
     }
     if (view=="observability")
         return buildObservabilityPayload(source,view,record,metadata);
+    if (view=="bifurcation") return buildBifurcationPayload(source,view,record,metadata);
+    if (view=="observable_spectrum_comparison") return buildObservableSpectraPayload(source,view,record,metadata);
     if (view=="hankel_spectrum" || view=="gramian_spectrum" || view=="frequency_response" || view=="pole_zero"
         || isClassicalLinearSystemsView(view))
         return buildLinearSystemsPayload(source,view,record,metadata);
@@ -438,40 +453,8 @@ Payload buildNativePayload(const std::filesystem::path& source, const std::strin
     return trajectoryPayload(source, view, record, metadata);
 }
 
-namespace {
-// Data objects are shown composed: a reconstructions object on the eigenfunctions it is written over
-// (by its basis reference), and an eigenfunctions object with the reconstructions written over it
-// (found among the archive root's reconstructions objects).
-NpzRecord composedObject(const std::filesystem::path& source, NpzRecord record) {
-    namespace c = dynsyslab::core;
-    const auto kind = c::dataObjectKind(record.metadataJson());
-    try {
-        if (kind == c::object_kind::reconstructions) {
-            const auto basis = std::filesystem::u8path(
-                json::parse(record.metadataJson()).at("reconstructions").at("basis").at("path").string());
-            auto composed = c::readNpz(basis);
-            c::mergeReconstructions(composed, basis, record);
-            return composed;
-        }
-        if (kind == c::object_kind::eigenfunctions) {
-            const auto folder = source.parent_path().parent_path() / L"reconstructions";
-            const auto self = std::filesystem::weakly_canonical(source);
-            if (std::filesystem::is_directory(folder))
-                for (const auto& entry : std::filesystem::directory_iterator(folder)) {
-                    if (entry.path().extension() != L".npz") continue;
-                    const auto index = c::readNpzIndex(entry.path());
-                    const auto basis = json::parse(index.metadataJson).at("reconstructions").at("basis").at("path").string();
-                    if (basis.empty() || std::filesystem::weakly_canonical(std::filesystem::u8path(basis)) != self) continue;
-                    c::mergeReconstructions(record, source, c::readNpz(entry.path()));
-                }
-        }
-    } catch (const std::exception&) {}  // shown as stored when a referenced object is missing
-    return record;
-}
-}  // namespace
-
 Payload buildNativePayload(const std::filesystem::path& source, const std::string& view) {
-    const NpzRecord record = composedObject(source, dynsyslab::core::readNpz(source));
+    const NpzRecord record = composedKrom(source, dynsyslab::core::readNpz(source));
     json::Value metadata;
     if (!record.metadataJson().empty()) metadata = json::parse(record.metadataJson());
     return buildNativePayload(source, view, record, metadata);

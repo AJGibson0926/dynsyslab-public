@@ -2,6 +2,7 @@
 #include "dynsyslab_viewer/ArchiveFocus.hpp"
 #include "dynsyslab_viewer/NativePayload.hpp"
 #include "HierarchyPayload.hpp"
+#include "DocumentPayload.hpp"
 #include "CatalogPresentation.hpp"
 #include "RecordedArchives.hpp"
 #include "dynsyslab_viewer/KromWorkspace.hpp"
@@ -69,6 +70,7 @@ Payload Backend::loadPayload(const CatalogItem& item, const std::string& view) c
     if (item.kind == "batch" || item.kind == "system_run" || item.kind == "cluster")
         return finish(buildHierarchyPayload(item, view, config_.projectRoot, config_.archiveRoot));
     if (source.extension() == L".json") {
+        if (isDocumentPayloadFile(source)) return finish(buildDocumentPayload(source, view));
         if (item.kind == "forcing_campaign")
             return finish(buildHierarchyPayload(item, view, config_.projectRoot, config_.archiveRoot));
         return finish(Payload::load(source.wstring()));

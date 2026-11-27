@@ -1,7 +1,11 @@
 #include <dynsyslab/core/PDEParallel.hpp>
 
+#include "PDEParallelInternal.hpp"
+#include <dynsyslab/core/PDEHaloExchange.hpp>
+
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <mutex>
@@ -174,6 +178,26 @@ ParallelMeshPlan buildParallelMeshPlan(
     std::vector<std::vector<std::pair<std::size_t, std::size_t>>> axisCuts;
     for (std::size_t axis = 0; axis < mesh.shape.size(); ++axis)
         axisCuts.push_back(cuts(mesh.shape[axis], partitionShape[axis]));
+    return buildParallelMeshPlanFromCuts(std::move(mesh), std::move(axisCuts), ghostWidth, localWorkers);
+}
+
+ParallelMeshPlan buildParallelMeshPlanFromCuts(
+    StructuredMesh mesh, std::vector<std::vector<std::pair<std::size_t, std::size_t>>> axisCuts,
+    std::size_t ghostWidth, std::size_t localWorkers) {
+    mesh.validate();
+    if (axisCuts.size() != mesh.shape.size())
+        throw std::invalid_argument("parallel PDE cuts must match the mesh dimension");
+    std::vector<std::size_t> partitionShape;
+    for (std::size_t axis = 0; axis < axisCuts.size(); ++axis) {
+        const auto& axisCut = axisCuts[axis];
+        if (axisCut.empty() || axisCut.front().first != 0 || axisCut.back().second != mesh.shape[axis])
+            throw std::invalid_argument("parallel PDE cuts must cover each mesh axis");
+        for (std::size_t index = 0; index < axisCut.size(); ++index)
+            if (axisCut[index].second <= axisCut[index].first
+                || (index && axisCut[index].first != axisCut[index - 1].second))
+                throw std::invalid_argument("parallel PDE cuts must be contiguous and nonempty");
+        partitionShape.push_back(axisCut.size());
+    }
     ParallelMeshPlan result{std::move(mesh), std::move(partitionShape),
                             ghostWidth, localWorkers, {}};
     const std::size_t count = result.workerCount();
@@ -199,53 +223,113 @@ ParallelMeshPlan buildParallelMeshPlan(
     return result;
 }
 
+const char* pdeCommunicationName(PDECommunication communication) {
+    switch (communication) {
+    case PDECommunication::sharedMemory: return "shared_memory";
+    case PDECommunication::haloExchange: return "halo_exchange";
+    case PDECommunication::mpi: return "mpi";
+    }
+    return "shared_memory";
+}
+
+PDECommunication pdeCommunicationFromName(const std::string& name) {
+    if (name.empty() || name == "shared_memory" || name == "local") return PDECommunication::sharedMemory;
+    if (name == "halo_exchange") return PDECommunication::haloExchange;
+    if (name == "mpi") return PDECommunication::mpi;
+    throw std::invalid_argument("PDE communication must be shared_memory, halo_exchange or mpi");
+}
+
+namespace detail {
+
+void evaluatePartitioned(const ParallelMeshPlan& plan, const PDESubdomainRightHandSide& rhs,
+                         double time, const StructuredMesh& mesh, const double* field,
+                         std::size_t count, double* derivative, std::vector<double>* seconds) {
+    if (mesh.shape != plan.mesh.shape || mesh.spacing != plan.mesh.spacing
+        || mesh.origin != plan.mesh.origin || mesh.boundary != plan.mesh.boundary
+        || count % mesh.cellCount() != 0)
+        throw std::invalid_argument("parallel PDE field does not match its plan");
+    const std::size_t components = count / mesh.cellCount();
+    if (seconds) seconds->assign(plan.partitions.size(), 0.0);
+    // Halo exchange: each partition owns its interior and receives face halos from its
+    // neighbours (PDEHaloExchange.cpp); shared memory: each reads its window directly.
+    std::vector<std::vector<double>> padded;
+    if (plan.communication == PDECommunication::haloExchange) {
+        std::vector<std::vector<double>> interiors;
+        interiors.reserve(plan.partitions.size());
+        for (const auto& partition : plan.partitions)
+            interiors.push_back(gatherInterior(plan, partition, field, components));
+        padded = exchangeHalos(plan, interiors, components);
+    } else if (plan.communication == PDECommunication::mpi) {
+        throw std::invalid_argument(mpiInProcessMessage);
+    }
+    std::atomic<std::size_t> next{0};
+    std::atomic<bool> failed{false};
+    std::exception_ptr error;
+    std::mutex errorMutex;
+    const auto worker = [&] {
+        while (!failed.load(std::memory_order_relaxed)) {
+            const std::size_t index = next.fetch_add(1);
+            if (index >= plan.partitions.size()) return;
+            try {
+                const auto started = std::chrono::steady_clock::now();
+                const auto& partition = plan.partitions[index];
+                std::vector<std::size_t> ghostShape;
+                std::vector<double> ghosted;
+                if (padded.empty()) ghosted = ghostedField(plan, partition, field, components, ghostShape);
+                else { ghosted = std::move(padded[index]); ghostShape = paddedShape(plan, partition); }
+                std::vector<double> local(product(partition.shape()) * components);
+                rhs(time, mesh, plan, partition, ghosted.data(), ghostShape,
+                    components, local.data());
+                if (std::any_of(local.begin(), local.end(),
+                    [](double value) { return !std::isfinite(value); }))
+                    throw std::runtime_error("parallel PDE right-hand side is non-finite");
+                scatter(plan, partition, local, components, derivative);
+                if (seconds) (*seconds)[index] = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - started).count();
+            } catch (...) {
+                failed.store(true, std::memory_order_relaxed);
+                std::lock_guard<std::mutex> lock(errorMutex);
+                if (!error) error = std::current_exception();
+            }
+        }
+    };
+    const std::size_t workers = std::min(plan.localWorkers, plan.partitions.size());
+    std::vector<std::thread> threads;
+    threads.reserve(workers > 0 ? workers - 1 : 0);
+    for (std::size_t index = 1; index < workers; ++index)
+        threads.emplace_back(worker);
+    worker();
+    for (auto& thread : threads) thread.join();
+    if (error) std::rethrow_exception(error);
+}
+
+std::vector<double> gatherInterior(const ParallelMeshPlan& plan, const MeshPartition& partition,
+                                   const double* field, std::size_t components) {
+    const auto shape = partition.shape();
+    std::vector<double> local(product(shape) * components);
+    for (std::size_t cell = 0; cell < product(shape); ++cell) {
+        auto global = decode(cell, shape);
+        for (std::size_t axis = 0; axis < shape.size(); ++axis)
+            global[axis] += partition.interior[axis].first;
+        const std::size_t source = encode(global, plan.mesh.shape) * components;
+        std::copy(field + source, field + source + components,
+                  local.begin() + static_cast<std::ptrdiff_t>(cell * components));
+    }
+    return local;
+}
+
+}  // namespace detail
+
 PDERightHandSide partitionedPDERightHandSide(
     ParallelMeshPlan plan, PDESubdomainRightHandSide rhs) {
     plan.validate();
     if (!rhs) throw std::invalid_argument("parallel PDE right-hand side is empty");
+    if (plan.communication == PDECommunication::mpi)
+        throw std::invalid_argument(detail::mpiInProcessMessage);
     return [plan = std::move(plan), rhs = std::move(rhs)](
         double time, const StructuredMesh& mesh, const double* field,
         std::size_t count, double* derivative) {
-        if (mesh.shape != plan.mesh.shape || mesh.spacing != plan.mesh.spacing
-            || mesh.origin != plan.mesh.origin || mesh.boundary != plan.mesh.boundary
-            || count % mesh.cellCount() != 0)
-            throw std::invalid_argument("parallel PDE field does not match its plan");
-        const std::size_t components = count / mesh.cellCount();
-        std::atomic<std::size_t> next{0};
-        std::atomic<bool> failed{false};
-        std::exception_ptr error;
-        std::mutex errorMutex;
-        const auto worker = [&] {
-            while (!failed.load(std::memory_order_relaxed)) {
-                const std::size_t index = next.fetch_add(1);
-                if (index >= plan.partitions.size()) return;
-                try {
-                    const auto& partition = plan.partitions[index];
-                    std::vector<std::size_t> ghostShape;
-                    const auto ghosted = ghostedField(
-                        plan, partition, field, components, ghostShape);
-                    std::vector<double> local(product(partition.shape()) * components);
-                    rhs(time, mesh, plan, partition, ghosted.data(), ghostShape,
-                        components, local.data());
-                    if (std::any_of(local.begin(), local.end(),
-                        [](double value) { return !std::isfinite(value); }))
-                        throw std::runtime_error("parallel PDE right-hand side is non-finite");
-                    scatter(plan, partition, local, components, derivative);
-                } catch (...) {
-                    failed.store(true, std::memory_order_relaxed);
-                    std::lock_guard<std::mutex> lock(errorMutex);
-                    if (!error) error = std::current_exception();
-                }
-            }
-        };
-        const std::size_t workers = std::min(plan.localWorkers, plan.partitions.size());
-        std::vector<std::thread> threads;
-        threads.reserve(workers > 0 ? workers - 1 : 0);
-        for (std::size_t index = 1; index < workers; ++index)
-            threads.emplace_back(worker);
-        worker();
-        for (auto& thread : threads) thread.join();
-        if (error) std::rethrow_exception(error);
+        detail::evaluatePartitioned(plan, rhs, time, mesh, field, count, derivative, nullptr);
     };
 }
 

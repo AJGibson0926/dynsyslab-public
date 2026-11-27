@@ -54,11 +54,3 @@ result = workflow.run(job, r"C:\data\dynsyslab-archives")
 `NativeWorkflow.run` also accepts progress and cancellation callbacks plus
 thread and memory limits. These callbacks cross the versioned C ABI; Python is
 the caller, never the numerical execution runtime.
-
-## Source-reference code
-
-The repository temporarily retains historical Python scientific packages for
-parity evidence. They are excluded from the wheel. Maintainers working on an
-explicit migration comparison may install their numerical dependencies with
-`pip install -r requirements/reference-parity.txt`; new product behavior must
-go into the native API and cannot be added to those reference implementations.

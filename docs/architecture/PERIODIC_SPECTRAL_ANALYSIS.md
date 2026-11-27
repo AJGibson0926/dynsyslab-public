@@ -53,22 +53,16 @@ is bounded to fifty million complex entries. Requests above 100000 point/time
 pairs require an archive instead of inline JSON. Archives preserve ICs, offsets,
 equation fingerprints, full requests and the selected solution family per row.
 
-`tools/reference_checks/rigged_history_reference.m` is an optional verification
-adapter for the pinned upstream **complex** mpEDMD/Rigged-DMD routines. Its
-manifest supplies MAT history blocks, independent weight sets, explicit source
-and successor column indices, target column, kernel and spectral grids.
-All indices are one-based. It reduces weighted joint history blocks with QR
-and invokes unmodified upstream fitting. This is a reference check, not a
-MATLAB runtime dependency or a claim that the native real-dictionary KROM
-container directly stores a complex trial basis. Its synthetic regression is
-`test_rigged_history_reference.m`. The public helper contains no case equations,
-grids, fitted coefficients or numerical results.
+Parity with the pinned upstream mpEDMD and Rigged-DMD routines is held by
+the native `dynsyslab_colbrook_reference_tests`, against frozen upstream output (see
+[Spectral KROM](SPECTRAL_KROM.md)). That test also checks that compressing weighted
+joint history rows by block QR, which keeps every weighted product (Demmel et al.,
+doi:10.1137/080731992), leaves the fitted operator, density and wave packets
+unchanged. It checks too that whitening the dictionary changes only coefficients.
+The former MATLAB reference adapters were retired with the native port.
 
-The adapter also records source singular values, compression probes and two
-finite-sample invariance diagnostics: the relative change from the source to
-successor Gram matrix, and the successor Gram defect after source QR whitening.
-They test the supplied quadrature; a small defect alone does not certify
-dictionary completeness, the sampling measure, or a spectral approximation.
+A small Gram defect after whitening tests the supplied quadrature only. It does not
+certify dictionary completeness, the sampling measure, or a spectral approximation.
 
 For refinement, hold the evaluated observable, target time, kernel, validation
 states and error norm fixed. Vary spatial quadrature independently of dictionary

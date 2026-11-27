@@ -100,16 +100,16 @@ PeriodicSpectralReference periodicSpectralReference(const std::vector<math::Peri
 }
 PeriodicSpectralComparison comparePeriodicDelaySpectrum(const SpectralKROM&frozen,
     const std::vector<std::size_t>&channels,const std::vector<double>&offsets,
-    const std::vector<math::PeriodicSnapshotOrbit>&validation,const PeriodicSpectralReference&ref,bool legacy){
+    const std::vector<math::PeriodicSnapshotOrbit>&validation,const PeriodicSpectralReference&ref){
     frozen.validate();const auto selected=select(validation,channels);const auto audit=math::auditPeriodicQuadrature(validation,{});
-    json::Value contract;try{contract=json::parse(frozen.coordinateContract);}catch(const std::exception&){if(!legacy)throw std::invalid_argument("Legacy coordinate contract cannot be verified; explicit opt-in required");}
+    json::Value contract;try{contract=json::parse(frozen.coordinateContract);}catch(const std::exception&){throw std::invalid_argument("the K-ROM coordinate contract is unreadable; regenerate it");}
     if(contract.at("schema").string()=="dynsyslab.periodic-delay-coordinates/v1"){
         if(contract.at("sample_interval").number()!=frozen.sampleInterval)throw std::invalid_argument("Frozen coordinate/sample-clock mismatch");
         const auto&cs=contract.at("channels").array();const auto&ts=contract.at("time_offsets").array();
         if(cs.size()!=channels.size()||ts.size()!=offsets.size())throw std::invalid_argument("Frozen delay contract shape mismatch");
         for(std::size_t i=0;i<cs.size();++i)if(cs[i].number()!=double(channels[i]))throw std::invalid_argument("Frozen delay channel order mismatch");
         for(std::size_t i=0;i<ts.size();++i)if(ts[i].number()!=offsets[i])throw std::invalid_argument("Frozen time-offset contract mismatch");
-    }else if(!legacy)throw std::invalid_argument("Missing verified periodic-delay coordinate contract");
+    }else throw std::invalid_argument("Missing verified periodic-delay coordinate contract");
     if(ref.spectrum.density.size()!=ref.angles.size()||ref.packetRms.size()!=ref.centers.size()*validation.size())
         throw std::invalid_argument("Malformed periodic reference dimensions");
     const auto zero=std::find(offsets.begin(),offsets.end(),0.);const auto target=std::find(channels.begin(),channels.end(),ref.channel);

@@ -56,10 +56,10 @@ HistoryMeasurement historyMeasurement(const std::filesystem::path& path, const J
             if (datasetDynamics(source) != "unforced")
                 throw std::invalid_argument("Exact measurement rates require confirmed unforced data");
             const auto map = c::createSystem(systemConfiguration(source))->observableCatalog().at(name);
-            const auto q = c::TimeSeries::view(source.time, source.values.data(), source.samples, source.dimension);
-            const c::TimeSeries velocity(source.time, exactVelocities(source, false), source.dimension);
+            const auto q = c::TimeSeries::view(source.time(), source.values().data(), source.samples(), source.dimension());
+            const c::TimeSeries velocity(source.time(), exactVelocities(source, false), source.dimension());
             const auto mapped = c::transformCoordinates(q, map, &velocity);
-            out.rates = std::vector<double>(mapped.derivatives->valuesData(), mapped.derivatives->valuesData() + source.samples);
+            out.rates = std::vector<double>(mapped.derivatives->valuesData(), mapped.derivatives->valuesData() + source.samples());
         }
         out.name = name;
         return out;
@@ -73,22 +73,20 @@ HistoryMeasurement historyMeasurement(const std::filesystem::path& path, const J
         if (found == columns.end()) throw std::invalid_argument("History measurement is not a column of the coordinate series: " + name);
         k = std::size_t(found - columns.begin());
     }
-    if (k >= source.dimension) throw std::invalid_argument("History measurement column is out of range");
+    if (k >= source.dimension()) throw std::invalid_argument("History measurement column is out of range");
     out.name = columns[k];
     if (withRates) {
         const auto record = c::readNpz(path);
         if (!record.contains("coordinate_derivatives"))
             throw std::invalid_argument("Exact measurement rates need a coordinate archive with stored derivatives (system_derivatives)");
         const auto stored = record.at("coordinate_derivatives").doubles();
-        std::vector<double> rates(source.samples);
-        for (std::size_t i = 0; i < source.samples; ++i) rates[i] = stored[i * source.dimension + k];
+        std::vector<double> rates(source.samples());
+        for (std::size_t i = 0; i < source.samples(); ++i) rates[i] = stored[i * source.dimension() + k];
         out.rates = std::move(rates);
     }
-    std::vector<double> column(source.samples);
-    for (std::size_t i = 0; i < source.samples; ++i) column[i] = source.values[i * source.dimension + k];
-    source.values = std::move(column);
-    source.dimension = 1;
-    out.series = std::move(source);
+    std::vector<double> column(source.samples());
+    for (std::size_t i = 0; i < source.samples(); ++i) column[i] = source.values()[i * source.dimension() + k];
+    out.series = withSeries(source, source.time(), std::move(column), 1);
     return out;
 }
 
@@ -112,10 +110,9 @@ SourceData physicalStates(const SourceData& source) {
         throw std::invalid_argument("Coordinate channels need a physical state source "
                                     "(or a coordinate archive that stores source_states)");
     const auto& states = record.at("source_states");
-    if (states.shape.size() != 2 || states.shape[0] != source.samples)
+    if (states.shape.size() != 2 || states.shape[0] != source.samples())
         throw std::invalid_argument("source_states are not aligned with the coordinate samples");
-    SourceData out = source;
-    out.values = states.doubles(); out.dimension = states.shape[1];
+    auto out = withSeries(source, source.time(), states.doubles(), states.shape[1]);
     auto meta = source.metadataJson.empty() ? J{} : json::parse(source.metadataJson);
     if (std::holds_alternative<J::Object>(meta.storage())) {
         meta.object().erase("coordinate_provider"); meta.object().erase("coordinate_names");
@@ -130,17 +127,17 @@ c::CoordinateSeries channelCoordinates(const SourceData& given, const J& setting
         throw std::invalid_argument("Channel coordinates carry values only; use kind observable for exact rates");
     const auto channels = evaluateCoordinateChannels(source, settings.at("channels").array());
     const std::size_t width = channels.size();
-    std::vector<double> values(source.samples * width);
+    std::vector<double> values(source.samples() * width);
     J::Array names, provenance;
     for (std::size_t k = 0; k < width; ++k) {
-        for (std::size_t i = 0; i < source.samples; ++i) values[i * width + k] = channels[k].values[i];
+        for (std::size_t i = 0; i < source.samples(); ++i) values[i * width + k] = channels[k].values[i];
         names.emplace_back(channels[k].name);
         provenance.emplace_back(J::Object{{"name", channels[k].name}, {"base", channels[k].base},
             {"derivative_source", channels[k].derivative}, {"units", channels[k].units}});
     }
     meta.object()["coordinate_channels"] = std::move(provenance);
     if (settings.at("names").isNull()) meta.object()["coordinate_names"] = std::move(names);
-    return {c::TimeSeries(source.time, std::move(values), width), std::nullopt};
+    return {c::TimeSeries(source.time(), std::move(values), width), std::nullopt};
 }
 
 FittedHistory fitHistoryCoordinates(const SourceData& source, const J& settings,
@@ -159,13 +156,13 @@ FittedHistory fitHistoryCoordinates(const SourceData& source, const J& settings,
     std::vector<std::vector<double>> observations;
     std::vector<c::KoopmanDatasetReference> references;
     for (const auto& record : records) {
-        if (record.dimension != 1) throw std::invalid_argument("History coordinates require a scalar measurement");
+        if (record.dimension() != 1) throw std::invalid_argument("History coordinates require a scalar measurement");
         if (datasetDynamics(record) != "unforced")
             throw std::invalid_argument("History basis training requires confirmed unforced observations");
         requireSameObservationSystem(records.front(), record);
         if (std::abs(uniformDeltaTime(record) * double(stride) - dt) > 1e-8 * dt)
             throw std::invalid_argument("Pooled history clocks differ");
-        observations.push_back(decimate(record.values, stride));
+        observations.push_back(decimate(record.values(), stride));
         references.push_back({std::filesystem::absolute(record.path).generic_u8string(), "training", "unforced", {}});
     }
     c::PooledHankelOptions options;
@@ -186,13 +183,13 @@ FittedHistory fitHistoryCoordinates(const SourceData& source, const J& settings,
     auto meta = json::parse(metadata(first, "history-transform", label, ""));
     meta.object()["dataset_references"] = c::koopmanDatasetReferencesJson(references);
     meta.object()["history_decimation"] = double(stride);
-    const auto directory = objectFolder(root, "coordinate-transform");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::coordinateMap);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(source.path.stem().u8string() + "__history-transform__" + timestamp()) + ".npz");
-    c::saveFrozenHistoryTransform(path, transform, json::dump(meta));
-    const auto measurement = c::TimeSeries(decimate(first.time, stride), decimate(first.values, stride), 1);
+    c::saveFrozenHistoryTransform(path, transform, withDataObject(json::dump(meta), dynsyslab::core::object_kind::coordinateMap, {}));
+    const auto measurement = c::TimeSeries(decimate(first.time(), stride), decimate(first.values(), stride), 1);
     if (!primary.rates) return {c::transformHistoryCoordinates(measurement, transform), path, transform};
-    const c::TimeSeries rates(decimate(first.time, stride), decimate(*primary.rates, stride), 1);
+    const c::TimeSeries rates(decimate(first.time(), stride), decimate(*primary.rates, stride), 1);
     return {c::transformHistoryCoordinates(measurement, transform, &rates), path, transform};
 }
 
@@ -200,21 +197,21 @@ std::optional<std::vector<double>> alignedSourceStates(const SourceData& source,
     // A physical record supplies its own states; a coordinate archive passes on
     // the physical states it carries, so chained coordinate changes keep them.
     std::vector<double> carried;
-    std::size_t width = source.dimension;
+    std::size_t width = source.dimension();
     if (!physical(source)) {
         const auto archive = c::readNpz(source.path);
         if (!archive.contains("source_states")) return std::nullopt;
         carried = archive.at("source_states").doubles();
         width = archive.at("source_states").shape.at(1);
     }
-    const auto& values = physical(source) ? source.values : carried;
+    const auto& values = physical(source) ? source.values() : carried;
     std::vector<double> states;
     states.reserve(coordinates.sampleCount() * width);
     std::size_t row = 0;
     for (std::size_t k = 0; k < coordinates.sampleCount(); ++k) {
         const double t = coordinates.timeData()[k];
-        while (row < source.samples && source.time[row] < t) ++row;
-        if (row == source.samples || source.time[row] != t) return std::nullopt;
+        while (row < source.samples() && source.time()[row] < t) ++row;
+        if (row == source.samples() || source.time()[row] != t) return std::nullopt;
         states.insert(states.end(), values.begin() + std::ptrdiff_t(row * width),
                       values.begin() + std::ptrdiff_t((row + 1) * width));
     }
@@ -228,7 +225,7 @@ ResolvedCoordinateInput analyticCoordinateInput(const SourceData& given, const j
     using J = json::Value;
     const auto meta = given.metadataJson.empty() ? J{} : json::parse(given.metadataJson);
     const auto kind = meta.at("coordinate_transform_kind").string();
-    if (meta.at("method").string() != "coordinate-transform" || meta.at("value_space").string() != "observation-coordinates"
+    if (kind.empty() || meta.at("value_space").string() != "observation-coordinates"
         || !meta.at("acoustic_receiver").isNull() || (kind != "identity" && kind != "observable" && kind != "channels"))
         return {given, settings};
     J::Array names;
@@ -248,7 +245,7 @@ ResolvedCoordinateInput analyticCoordinateInput(const SourceData& given, const j
     else if (!fixed.empty()) resolved.at("coordinate_observable") = fixed;
     else resolved.at("coordinate_expression") = meta.at("coordinate_definition");
     auto physicalSource = loadSource(std::filesystem::u8path(meta.at("source_archive").string()));
-    if (physicalSource.time != given.time)
+    if (physicalSource.time() != given.time())
         throw std::invalid_argument("Coordinate archive samples differ from its physical source");
     return {std::move(physicalSource), std::move(resolved)};
 }
@@ -264,20 +261,20 @@ dynsyslab::core::CoordinateSeries selectedColumns(const SourceData& source, cons
         std::size_t k = names.size();
         if (std::holds_alternative<double>(item.storage())) k = std::size_t(item.number());
         else k = std::size_t(std::find(names.begin(), names.end(), item.string()) - names.begin());
-        if (k >= source.dimension) throw std::invalid_argument("columns names a coordinate the input does not have");
+        if (k >= source.dimension()) throw std::invalid_argument("columns names a coordinate the input does not have");
         keep.push_back(k);
     }
     if (keep.empty()) throw std::invalid_argument("columns needs a nonempty list");
-    const std::size_t n = source.samples, d = source.dimension, w = keep.size();
+    const std::size_t n = source.samples(), d = source.dimension(), w = keep.size();
     std::vector<double> values(n * w);
-    for (std::size_t r = 0; r < n; ++r) for (std::size_t j = 0; j < w; ++j) values[r * w + j] = source.values[r * d + keep[j]];
+    for (std::size_t r = 0; r < n; ++r) for (std::size_t j = 0; j < w; ++j) values[r * w + j] = source.values()[r * d + keep[j]];
     std::optional<c::TimeSeries> rates;
     const auto record = c::readNpz(source.path);
     if (record.contains("coordinate_derivatives")) {
         const auto stored = record.at("coordinate_derivatives").doubles();
         std::vector<double> picked(n * w);
         for (std::size_t r = 0; r < n; ++r) for (std::size_t j = 0; j < w; ++j) picked[r * w + j] = stored[r * d + keep[j]];
-        rates = c::TimeSeries(source.time, std::move(picked), w);
+        rates = c::TimeSeries(source.time(), std::move(picked), w);
     }
     for (const char* key : {"coordinate_provider", "value_space", "coordinate_transform_identity", "coordinate_transform_archive",
                             "history_span", "warmup_samples", "derivative_evidence", "controller_kind"})
@@ -290,6 +287,6 @@ dynsyslab::core::CoordinateSeries selectedColumns(const SourceData& source, cons
     }
     if (settings.at("names").isNull()) meta.object()["coordinate_names"] = std::move(picked);
     meta.object()["coordinate_labels"] = std::move(labels);
-    return {c::TimeSeries(source.time, std::move(values), w), rates};
+    return {c::TimeSeries(source.time(), std::move(values), w), rates};
 }
 } // namespace dynsyslab::workflow::postprocess_detail

@@ -117,6 +117,11 @@ const std::vector<SystemDescriptor>& systemCatalog() {
          {"air_glycerol_water_50pct_20c", "Air in 50% glycerol-water at 20 C"},
          {"air_silicone_oil_100cst_25c", "Air in 100 cSt silicone oil at 25 C"},
          {"co2_water_20c", "CO2 in water at 20 C"}, {"co2_honey_25c", "CO2 in honey at 25 C"}}},
+        // The frozen dimensional baseline: the RPE model integrated in SI units
+        // (SystemsRPEBaseline.cpp).
+        {"rayleigh-plesset-dimensional-baseline", "Rayleigh-Plesset (dimensional baseline)", 2,
+         "dimensional", {"radius", "radial_velocity"}, {"R [m]", "dR/dt [m/s]"},
+         {{"air_water_20c", "Air in water at 20 C"}}},
         {"duffing", "Duffing", 2, "dimensionless", {"position", "velocity"},
          {"x", "dx/dt"}, {{"double_well_reference", "Canonical double well"},
          {"hardening_single_well", "Hardening single well"},
@@ -248,6 +253,7 @@ const std::vector<SystemDescriptor>& systemCatalog() {
                 }
             }
             descriptor.research.papers = detail::builtInResearchPapers(descriptor.identifier);
+            detail::attachPresetMetadata(descriptor);
             if (descriptor.identifier == "kuramoto")
                 descriptor.stateLabels = systemStateLabels(descriptor, descriptor.stateDimension);
         }

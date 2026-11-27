@@ -57,7 +57,7 @@ double relativeError(const R& prediction,const R& reference) {
 void spectrum(DmdControlResult& out,const R& basis,const R& stateAction) {
     const auto r=out.rank;
     const auto eig=numerics::eigensystem(out.operatorMatrix,r);
-    out.discreteEigenvalues=eig.eigenvalues;
+    out.spectrum=Spectrum::fromDiscreteMultipliers(eig.eigenvalues,out.deltaTime);
     const C w(eig.rightEigenvectors,r,r);
     out.modes=product(complex(basis),w).values;
     out.exactModes=product(complex(stateAction),w).values;

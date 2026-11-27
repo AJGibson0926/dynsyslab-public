@@ -51,7 +51,7 @@ std::filesystem::path runHistoryControlRegression(
     std::vector<Pair> rows;
     for (const auto& path : sources) {
         const auto source = loadSource(path);
-        if (source.inputs.empty() || source.inputDimension != 1)
+        if (source.inputs().empty() || source.inputDimension() != 1)
             throw std::invalid_argument("history_control_regression sources need a scalar control history");
         if (std::abs(uniformDeltaTime(source) - dt) > 1e-8 * dt)
             throw std::invalid_argument("forced source must be sampled on the history transform clock");
@@ -60,15 +60,15 @@ std::filesystem::path runHistoryControlRegression(
         const auto measurement = system->observableCatalog().at(name);
         c::CausalHistoryProjector projector(transform);
         std::optional<std::vector<Complex>> previous; double previousInput = 0.0;
-        const std::size_t inputRows = source.inputs.size() / source.inputDimension;
-        for (std::size_t k = 0; k < source.samples; ++k) {
-            const auto y = measurement.evaluateReal(source.values.data() + k * source.dimension).front();
-            const auto q = projector.push(source.time[k], y);
+        const std::size_t inputRows = source.inputs().size() / source.inputDimension();
+        for (std::size_t k = 0; k < source.samples(); ++k) {
+            const auto y = measurement.evaluateReal(source.values().data() + k * source.dimension()).front();
+            const auto q = projector.push(source.time()[k], y);
             if (!q) continue;
             auto psi = model.evaluateCoordinates(q->data());
             if (previous) rows.push_back({*previous, psi, previousInput});
             previous = std::move(psi);
-            previousInput = k < inputRows ? source.inputs[k] : 0.0;
+            previousInput = k < inputRows ? source.inputs()[k] : 0.0;
         }
     }
     for (const auto& row : rows) {
@@ -97,7 +97,7 @@ std::filesystem::path runHistoryControlRegression(
     model.setControlMap(representation, map);
     json::Value::Array sourceList; for (const auto& path : sources) sourceList.emplace_back(path.generic_u8string());
     json::Value::Object meta{
-        {"format", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("history-control-regression")},
+        {"schema", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("history-control-regression")},
         {"label", json::Value(label)}, {"source_krom", json::Value(kromPath.generic_u8string())},
         {"source_archive", json::Value(kromPath.generic_u8string())},
         {"forced_sources", json::Value(std::move(sourceList))},
@@ -106,15 +106,12 @@ std::filesystem::path runHistoryControlRegression(
         {"relative_residual", json::Value(targetEnergy > 0 ? std::sqrt(residualEnergy / targetEnergy) : 0.0)},
         {"control_map_time_domain", json::Value("continuous-time")}, {"delta_t", json::Value(dt)},
         {"independent_archive", json::Value(true)}};
-    const auto directory = objectFolder(root, "koopman-control-regression");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::krom);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(kromPath.stem().u8string()
         + "__history-control-regression__" + timestamp()) + ".npz");
-    std::map<std::string, c::NpyArray> extra;  // keep the KROM's training samples for Viewer
-    const auto parent = c::readNpz(kromPath);
-    for (const char* name : {"training_coordinates", "training_time", "training_states", "source_mode_indices"})
-        if (parent.contains(name)) extra[name] = parent.at(name);
-    c::saveKoopmanModel(path, model, json::dump(json::Value(std::move(meta))), std::move(extra));
+    // A child of the krom: its modes and the input map B fitted here (the parent keeps its training samples).
+    c::saveKoopmanModel(path, model, withDataObject(json::dump(json::Value(std::move(meta))), dynsyslab::core::object_kind::krom, {kromPath}));
     return path;
 }
 

@@ -72,7 +72,7 @@ int main() {
             "dynsyslab-scattered-krom-"+std::to_string(
                 std::chrono::high_resolution_clock::now().time_since_epoch().count())+".npz");
         core::saveKoopmanModel(path,source,
-            R"({"format":"dynsyslab.derived/v1","label":"Scattered KROM"})");
+            R"({"schema":"dynsyslab.derived/v1","label":"Scattered KROM"})");
         const auto loaded=core::loadKoopmanModel(path);
         require(loaded.evaluate(trainingPoint)==exact,
             "scattered KROM archive did not round trip");

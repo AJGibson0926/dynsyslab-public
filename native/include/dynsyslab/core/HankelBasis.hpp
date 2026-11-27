@@ -6,6 +6,7 @@
 //   whitened scaling  xi = Sigma^-1 U^T (h - mean)  (history-basis latent coordinates)
 // H-DMD's eigenfunctions are psi = W^-1 q for the same, uncentered window matrix.
 #include <dynsyslab/core/HankelRepresentations.hpp>
+#include <dynsyslab/core/TimeSeriesRecord.hpp>
 
 namespace dynsyslab::core {
 

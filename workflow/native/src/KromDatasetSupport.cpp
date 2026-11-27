@@ -9,14 +9,14 @@
 
 namespace dynsyslab::workflow::postprocess_detail {
 std::string datasetDynamics(const SourceData& source) {
-    if(std::any_of(source.inputs.begin(),source.inputs.end(),[](double u){return !std::isfinite(u)||u!=0.;}))
+    if(std::any_of(source.inputs().begin(),source.inputs().end(),[](double u){return !std::isfinite(u)||u!=0.;}))
         return "forced";
     const auto meta=source.metadataJson.empty()?json::Value{}:json::parse(source.metadataJson);
     const auto forcing=meta.at("forcing_type").string();
     const auto controller=meta.at("controller_kind").string(meta.at("controller_configuration").at("kind").string());
     if((!controller.empty()&&controller!="none") || (!forcing.empty()&&forcing!="free"&&forcing!="unforced"&&forcing!="none"&&forcing!="unknown"))
         return "forced";
-    if(!source.inputs.empty() || controller=="none" || forcing=="free" || forcing=="unforced")
+    if(!source.inputs().empty() || controller=="none" || forcing=="free" || forcing=="unforced")
         return "unforced";
     return "unknown";
 }
@@ -64,7 +64,13 @@ void requireTrainingDataRole(const std::string& method, const std::filesystem::p
     SourceData light; light.path = path;
     light.metadataJson = archive.metadataJson();
     for (const char* name : {"control_interval_values", "control_values"})
-        if (archive.contains(name)) { light.inputs = archive.at(name).doubles(); light.inputDimension = 1; break; }
+        if (archive.contains(name)) {  // only the input values are read: index them by row
+            auto inputs = archive.at(name).doubles();
+            std::vector<double> rows(inputs.size());
+            for (std::size_t k = 0; k < rows.size(); ++k) rows[k] = double(k);
+            light.record.inputs = dynsyslab::core::TimeSeries(std::move(rows), std::move(inputs), 1);
+            break;
+        }
     requireTrainingDataRole(method, light, settings);
 }
 
@@ -96,19 +102,20 @@ SourceData validationSamples(const SourceData& source,const dynsyslab::core::Koo
         if(multiple<1-1e-8 || std::abs(multiple-std::round(multiple))>1e-7)
             throw std::invalid_argument("Sampled-origin eigenfunctions must be validated at their fitted dt or an integer multiple");
     }
-    const double start=settings.at("start").number(source.time.front());
-    const double stop=settings.at("stop").number(source.time.back());
+    const double start=settings.at("start").number(source.time().front());
+    const double stop=settings.at("stop").number(source.time().back());
     if(!std::isfinite(start)||!std::isfinite(stop)||!(stop>start))
         throw std::invalid_argument("Validation interval requires finite start < stop");
-    SourceData result=source;result.time.clear();result.values.clear();result.inputs.clear();
-    for(std::size_t k=0;k<source.samples;k+=stride) {
-        if(source.time[k]<start-1e-10 || source.time[k]>stop+1e-10)continue;
-        result.time.push_back(source.time[k]);
-        result.values.insert(result.values.end(),source.values.begin()+k*source.dimension,
-            source.values.begin()+(k+1)*source.dimension);
+    std::vector<double> time,values;
+    for(std::size_t k=0;k<source.samples();k+=stride) {
+        if(source.time()[k]<start-1e-10 || source.time()[k]>stop+1e-10)continue;
+        time.push_back(source.time()[k]);
+        values.insert(values.end(),source.values().begin()+k*source.dimension(),
+            source.values().begin()+(k+1)*source.dimension());
     }
-    result.samples=result.time.size();result.inputDimension=0;
-    if(result.samples<3)throw std::invalid_argument("Validation selection has fewer than three samples");
+    auto result=withSeries(source,std::move(time),std::move(values),source.dimension());
+    result.record.inputs.reset();result.record.inputsOnIntervals=false;
+    if(result.samples()<3)throw std::invalid_argument("Validation selection has fewer than three samples");
     return result;
 }
 }

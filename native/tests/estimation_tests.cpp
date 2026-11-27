@@ -11,11 +11,9 @@ void require(bool condition,const char* message) {
 }
 
 dynsyslab::core::KoopmanModel twoModeModel() {
-    dynsyslab::core::KoopmanSINDyResult fit;
-    fit.continuousEigenvalues={{-1.0,0.0},{-2.0,0.0}};
-    fit.coefficients={{1.0,0.0},{0.0,0.0},{0.0,0.0},{1.0,0.0}};
-    fit.exponents={1,0,0,1}; fit.center={0.0,0.0}; fit.scale={1.0,1.0};
-    fit.stateDimension=2; fit.featureCount=2;
+    auto fit=dynsyslab::core::polynomialEigenfunctions(2,{1,0,0,1},
+        {{1.0,0.0},{0.0,0.0},{0.0,0.0},{1.0,0.0}},
+        dynsyslab::core::Spectrum::fromContinuousRates({{-1.0,0.0},{-2.0,0.0}}),{0.0,0.0},{1.0,1.0});
     dynsyslab::core::SystemConfiguration system;
     system.identifier="duffing"; system.preset="double_well_reference";
     dynsyslab::core::KoopmanModel model(std::move(fit),std::move(system));

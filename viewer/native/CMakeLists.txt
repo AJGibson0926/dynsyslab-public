@@ -48,6 +48,13 @@ add_library(dynsyslab_viewer_services STATIC
   src/LatticePayload.cpp
   src/NativePayload.cpp
   src/ArchiveMatrixPayload.cpp
+  src/SystemViewDefaults.cpp
+  src/PlotSvg.cpp
+  src/PlotHtml.cpp
+  src/ReportDocument.cpp
+  src/ReportPdf.cpp
+  src/DocumentPayload.cpp
+  src/ResearchFigurePayload.cpp
   src/ObservablePayload.cpp
   src/DomainFieldPayload.cpp
   src/ObservablePhasePayload.cpp
@@ -108,7 +115,7 @@ endif()
 
 install(TARGETS dynsyslab_viewer RUNTIME DESTINATION bin)
 
-add_executable(dynsyslab_viewer_cli tools/ViewerCli.cpp tools/ViewerSessionCli.cpp)
+add_executable(dynsyslab_viewer_cli tools/ViewerCli.cpp tools/ViewerSessionCli.cpp tools/ViewerReportCli.cpp)
 set_target_properties(dynsyslab_viewer_cli PROPERTIES OUTPUT_NAME "DynSysLabViewerCli")
 target_link_libraries(dynsyslab_viewer_cli PRIVATE dynsyslab_viewer_services)
 target_compile_features(dynsyslab_viewer_cli PRIVATE cxx_std_17)
@@ -129,6 +136,9 @@ install(FILES include/dynsyslab_viewer/ViewerSession.hpp
   DESTINATION include/dynsyslab_viewer)
 
 if(BUILD_TESTING AND DYNSYSLAB_VIEWER_BUILD_TESTS)
+  add_executable(dynsyslab_document_export_tests tests/document_export_tests.cpp)
+  target_link_libraries(dynsyslab_document_export_tests PRIVATE dynsyslab_viewer_services)
+  add_test(NAME dynsyslab_document_export_tests COMMAND dynsyslab_document_export_tests)
   add_executable(dynsyslab_time_series_overlay_tests tests/time_series_overlay_tests.cpp)
   target_link_libraries(dynsyslab_time_series_overlay_tests PRIVATE dynsyslab_viewer_services)
   add_test(NAME dynsyslab_time_series_overlay_tests COMMAND dynsyslab_time_series_overlay_tests)
@@ -193,6 +203,9 @@ if(BUILD_TESTING AND DYNSYSLAB_VIEWER_BUILD_TESTS)
   add_test(NAME dynsyslab_sindy_dynamics_payload_tests COMMAND dynsyslab_sindy_dynamics_payload_tests)
   target_link_libraries(dynsyslab_native_payload_tests PRIVATE dynsyslab_viewer_services)
   add_test(NAME dynsyslab_native_payload_tests COMMAND dynsyslab_native_payload_tests)
+  add_executable(dynsyslab_native_payload_catalog_tests tests/native_payload_catalog_tests.cpp)
+  target_link_libraries(dynsyslab_native_payload_catalog_tests PRIVATE dynsyslab_viewer_services)
+  add_test(NAME dynsyslab_native_payload_catalog_tests COMMAND dynsyslab_native_payload_catalog_tests)
   add_executable(dynsyslab_linear_systems_payload_tests tests/linear_systems_payload_tests.cpp)
   target_link_libraries(dynsyslab_linear_systems_payload_tests PRIVATE dynsyslab_viewer_services)
   add_test(NAME dynsyslab_linear_systems_payload_tests COMMAND dynsyslab_linear_systems_payload_tests)

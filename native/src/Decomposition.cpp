@@ -150,9 +150,7 @@ EDMDResult extendedDynamicModeDecomposition(
     result.stateDimension=dimension;
     result.featureCount=all.columns;
     result.deltaTime=step;
-    result.discreteEigenvalues=eigen.eigenvalues;
-    for(const auto value:result.discreteEigenvalues)
-        result.continuousEigenvalues.push_back(std::log(value)/step);
+    result.spectrum=Spectrum::fromDiscreteMultipliers(eigen.eigenvalues,step);
     result.operatorMatrix=operation.values;
     result.eigenfunctionCoefficients=coefficients.values;
     if(options.dictionary.kind==DictionaryKind::polynomial)
@@ -187,16 +185,23 @@ HAVOKResult havokDecomposition(
     const RMatrix rightTranspose{svd.rightTranspose,rank,columns};
     const RMatrix coordinates=transpose(rightTranspose);
     const double step=time[1]-time[0];
+    const auto order=options.derivativeOrder;
+    if(order!=1&&order!=2&&order!=4)throw std::invalid_argument("HAVOK derivative order must be 1, 2 or 4");
+    if(order==4&&columns<5)throw std::invalid_argument("fourth-order HAVOK derivatives need five delay columns");
     RMatrix derivative(columns,rank);
     for(std::size_t mode=0;mode<rank;++mode) {
-        derivative(0,mode)=(-3.0*coordinates(0,mode)
-            +4.0*coordinates(1,mode)-coordinates(2,mode))/(2.0*step);
+        const auto x=[&](std::size_t k){return coordinates(k,mode);};
+        if(order==1) {
+            derivative(0,mode)=(x(1)-x(0))/step;
+            derivative(columns-1,mode)=(x(columns-1)-x(columns-2))/step;
+        } else {
+            derivative(0,mode)=(-3.0*x(0)+4.0*x(1)-x(2))/(2.0*step);
+            derivative(columns-1,mode)=(3.0*x(columns-1)-4.0*x(columns-2)+x(columns-3))/(2.0*step);
+        }
         for(std::size_t sample=1;sample+1<columns;++sample)
-            derivative(sample,mode)=(coordinates(sample+1,mode)
-                -coordinates(sample-1,mode))/(2.0*step);
-        derivative(columns-1,mode)=(3.0*coordinates(columns-1,mode)
-            -4.0*coordinates(columns-2,mode)+coordinates(columns-3,mode))
-            /(2.0*step);
+            derivative(sample,mode)=order==4&&sample>=2&&sample+2<columns
+                ?(-x(sample+2)+8.0*x(sample+1)-8.0*x(sample-1)+x(sample-2))/(12.0*step)
+                :(x(sample+1)-x(sample-1))/(2.0*step);
     }
     RMatrix design(columns-1,rank),target(columns-1,rank-1);
     for(std::size_t sample=0;sample+1<columns;++sample) {

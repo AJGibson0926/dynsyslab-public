@@ -1,8 +1,10 @@
 #include <dynsyslab/workflow/LatticeSolve.hpp>
 #include <dynsyslab/workflow/Hierarchy.hpp>
 #include "WorkflowSupport.hpp"
+#include "SolveArchive.hpp"
 
 #include <dynsyslab/core/Archive.hpp>
+#include <dynsyslab/core/LongPath.hpp>
 #include <dynsyslab/core/Lattice.hpp>
 #include <dynsyslab/core/Text.hpp>
 
@@ -118,7 +120,8 @@ const dynsyslab::core::SystemDescriptor& descriptor(const std::string& identifie
 LatticeTrajectory runTrajectory(
     const dynsyslab::core::SystemConfiguration& configuration,
     std::vector<std::int64_t> sites, std::uint64_t seed, std::size_t sweeps,
-    const dynsyslab::core::ExecutionContext* execution) {
+    const dynsyslab::core::ExecutionContext* execution,
+    const dynsyslab::core::LatticeCheckpoint& checkpoint = {}) {
     const std::size_t size = integerParameter(configuration, "size", 2);
     LatticeTrajectory result;
     if (configuration.identifier == "potts") {
@@ -128,7 +131,7 @@ LatticeTrajectory runTrajectory(
         request.coupling = configuration.parameters.at("coupling");
         request.field = configuration.parameters.at("field");
         request.temperature = configuration.parameters.at("temperature");
-        request.seed = seed; request.sweeps = sweeps;
+        request.seed = seed; request.sweeps = sweeps; request.checkpoint = checkpoint;
         auto output = dynsyslab::core::runPotts2D(request, execution);
         result.observations = std::move(output.observations);
         result.initialObservation = std::move(output.initialObservation);
@@ -144,7 +147,7 @@ LatticeTrajectory runTrajectory(
     request.coupling = configuration.parameters.at("coupling");
     request.field = configuration.parameters.at("field");
     request.temperature = configuration.parameters.at("temperature");
-    request.seed = seed; request.sweeps = sweeps;
+    request.seed = seed; request.sweeps = sweeps; request.checkpoint = checkpoint;
     auto output = request.dimensions == 3
         ? dynsyslab::core::runIsing3D(request, execution)
         : dynsyslab::core::runIsing2D(request, execution);
@@ -164,7 +167,7 @@ std::string metadata(
     std::size_t index, std::uint64_t seed, double start, std::size_t sweeps,
     const std::string& created) {
     std::ostringstream out;
-    out << "{\"format\":\"dynsyslab.solution/v1\",\"label\":\""
+    out << "{\"schema\":\"dynsyslab.solution/v1\",\"label\":\""
         << detail::jsonEscape(job.at("label").string("lattice-solve"))
         << "\",\"system\":\"" << resolved.identifier << "\",\"system_label\":\""
         << detail::jsonEscape(description.label)
@@ -267,8 +270,32 @@ SolveResult executeLatticeSolve(
             active = &local;
         }
         const std::uint64_t trajectorySeed = seed + index;
+        const std::string label = job.at("label").string("lattice-solve")
+            + (count == 1 ? "" : "-trajectory-" + std::to_string(index));
+        const auto path = directory / dynsyslab::core::wide(
+            detail::safeName(label, "lattice-solve") + "__" + created + ".npz");
+        // history.checkpoint_interval (sweeps): observations so far and the current lattice go to
+        // <archive>.partial.npz, removed once the trajectory is archived.
+        dynsyslab::core::LatticeCheckpoint checkpoint;
+        const auto partial = detail::partialArchivePath(path);
+        if (const double interval = detail::checkpointInterval(job); interval > 0.0) {
+            checkpoint.interval = std::max<std::size_t>(1, static_cast<std::size_t>(std::llround(interval)));
+            checkpoint.callback = [&, index](std::size_t done, const std::vector<double>& observations,
+                                             const std::vector<std::int64_t>& spins) {
+                std::vector<double> times(done);
+                for (std::size_t sweep = 0; sweep < done; ++sweep) times[sweep] = start + sweep;
+                const std::size_t rank = resolved.identifier == "ising_3d" ? 3 : 2;
+                detail::writePartialSeries(partial, times.data(), done, observations.data(), 2,
+                    json::dump(json::Value(json::Value::Object{
+                        {"schema", std::string("dynsyslab.solution-checkpoint/v1")},
+                        {"trajectory_index", static_cast<double>(index)},
+                        {"completed_sweeps", static_cast<double>(done)}})),
+                    {{"lattice_current", dynsyslab::core::NpyArray::fromInt64s(
+                        std::vector<std::size_t>(rank, size), spins)}});
+            };
+        }
         auto trajectory = runTrajectory(
-            resolved, std::move(sites[index]), trajectorySeed, sweeps, active);
+            resolved, std::move(sites[index]), trajectorySeed, sweeps, active, checkpoint);
         initialObservations.insert(initialObservations.end(),
             trajectory.initialObservation.begin(), trajectory.initialObservation.end());
         std::vector<double> time(sweeps);
@@ -284,11 +311,8 @@ SolveResult executeLatticeSolve(
         archive.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(
             metadata(job, resolved, description, hierarchy, trajectory, index,
                      trajectorySeed, start, sweeps, created));
-        const std::string label = job.at("label").string("lattice-solve")
-            + (count == 1 ? "" : "-trajectory-" + std::to_string(index));
-        const auto path = directory / dynsyslab::core::wide(
-            detail::safeName(label, "lattice-solve") + "__" + created + ".npz");
         dynsyslab::core::writeNpzAtomic(path, archive);
+        { std::error_code ignored; std::filesystem::remove(dynsyslab::core::extendedLengthPath(partial), ignored); }
         archives.push_back(path);
         detail::atomicProgress(progressPath, static_cast<double>(index + 1) / count,
             index + 1, count, "Archived lattice trajectory");

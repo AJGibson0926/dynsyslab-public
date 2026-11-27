@@ -1,7 +1,7 @@
 #pragma once
-// Builds the H-DMD spectrum and eigenfunction objects from a fit (see core/EigenfunctionObjects.hpp).
+// Builds the H-DMD K-ROM (spectrum and eigenfunctions, core/KoopmanModel.hpp) from a fit.
 #include "HankelAnalysis.hpp"
-#include <dynsyslab/core/EigenfunctionObjects.hpp>
+#include <dynsyslab/core/KoopmanModel.hpp>
 #include <dynsyslab/core/HankelRepresentations.hpp>
 #include <dynsyslab/core/Spectral.hpp>
 
@@ -22,7 +22,7 @@ struct HdmdFitContext {
 // Spectrum, samples, origin and representations, ordered by setting "representations":
 // "interpolation" (the shared interpolation on setting "interpolation_domain", default the full
 // state; SampledDomain.hpp) and "expansion" (the window map).
-[[nodiscard]] dynsyslab::core::EigenfunctionSet hdmdEigenfunctionSet(
+[[nodiscard]] dynsyslab::core::KoopmanModel hdmdEigenfunctions(
     const dynsyslab::core::HankelDMDResult& result, const HdmdFitContext& context);
 
 }  // namespace dynsyslab::workflow::postprocess_detail

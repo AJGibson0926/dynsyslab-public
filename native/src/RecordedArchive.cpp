@@ -1,7 +1,9 @@
 // readNpz / readNpzIndex with recorded archives (Archive.hpp): a derived archive that stores how to
-// recompute its arrays is replayed by the reader its writer registered for its schema.
+// recompute its arrays is replayed by the reader its writer registered for its schema. Time arrays
+// kept in a shared grid (TimeGrid.hpp) are restored first.
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/Json.hpp>
+#include <dynsyslab/core/TimeGrid.hpp>
 
 #include <map>
 #include <mutex>
@@ -34,6 +36,7 @@ bool isRecordedArchive(const std::string& metadataJson) {
 
 NpzRecord readNpz(const std::filesystem::path& path) {
     auto stored = readNpzStored(path);
+    attachTimeGrids(path, stored);  // archives that reference a shared time grid (TimeGrid.hpp)
     const auto text = stored.metadataJson();
     if (!isRecordedArchive(text)) return stored;
     const auto schema = json::parse(text).at("recorded_archive").at("schema").string();
@@ -51,6 +54,7 @@ NpzRecord readNpz(const std::filesystem::path& path) {
 
 NpzIndex readNpzIndex(const std::filesystem::path& path) {
     auto index = readNpzIndexStored(path);
+    addTimeGridNames(index);
     if (!isRecordedArchive(index.metadataJson)) return index;
     const auto metadata = json::parse(index.metadataJson);  // kept alive: the loop reads into it
     for (const auto& name : metadata.at("recorded_archive").at("arrays").array())

@@ -98,7 +98,7 @@ ControllerSetup buildEstimatedController(const json::Value& source,
     const auto mapPath=settings.at("control_map_archive").string();
     if(!mapPath.empty())model.setControlMap(representation,core::loadApproximateControlMap(
         core::wide(mapPath),settings.at("control_map_prefix").string(),model,
-        settings.at("unverified_control_map_reason").string()));
+        settings.at("control_map_origin").string()=="external"));
     // KLQE binding shared with the Estimator module (design, sensors, initial estimate, intercepts).
     auto bound=bindKlqe(estimator,model,system);
     bound.sampleTime=dt;

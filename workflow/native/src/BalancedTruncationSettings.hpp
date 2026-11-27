@@ -80,8 +80,9 @@ inline void storeKlqrReduction(const core::KoopmanLQRController& controller, cor
     archive.arrays["klqr_reduction_error_bound"] =
         core::NpyArray::fromDoubles({1}, {controller.lastReductionErrorBound()});
     const auto& last = controller.lastSolution();
+    const std::size_t states = last.closedLoopPoles.size();  // one closed-loop pole per state
     archive.arrays["klqr_gain"] = core::NpyArray::fromDoubles(
-        {last.inputDimension, last.stateDimension}, last.gain);
+        {states ? last.gain.size() / states : 0, states}, last.gain);
     archive.arrays["klqr_closed_loop_poles"] = core::NpyArray::fromComplex(
         {last.closedLoopPoles.size()}, last.closedLoopPoles);
 }

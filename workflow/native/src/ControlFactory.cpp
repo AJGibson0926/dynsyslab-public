@@ -17,6 +17,7 @@
 #include <dynsyslab/workflow/ControlTargets.hpp>
 
 #include "PrescribedControl.hpp"
+#include "ControlFactoryInternal.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -27,10 +28,7 @@
 #include <utility>
 
 namespace dynsyslab::workflow {
-namespace {
-
-using dynsyslab::core::ScalarControlLaw;
-using dynsyslab::core::StateTargetFunction;
+namespace control_factory_detail {
 
 std::vector<double> numbers(const json::Value& value) {
     std::vector<double> result;
@@ -60,6 +58,48 @@ std::vector<double> squareMatrix(const json::Value& source,
         throw std::invalid_argument(std::string(name) + " must be finite");
     return result;
 }
+
+std::size_t positiveCount(const json::Value& source, std::size_t fallback,
+                          const char* name) {
+    const double value = source.number(static_cast<double>(fallback));
+    if (!std::isfinite(value) || value < 1.0 || std::floor(value) != value
+        || value > 9007199254740991.0)
+        throw std::invalid_argument(std::string(name) + " must be a positive integer");
+    return static_cast<std::size_t>(value);
+}
+
+
+Clock resolveClock(const std::string& kind, const json::Value& solver,
+                   const json::Value& settings, double fallback,
+                   bool sampledRequired) {
+    const std::string requested = solver.at("control_evaluation").string("automatic");
+    const bool sampled = requested == "sampled"
+        || (requested == "automatic" && sampledRequired);
+    if (requested != "automatic" && requested != "sampled"
+        && requested != "continuous_rhs")
+        throw std::invalid_argument("control_evaluation must be automatic, sampled, or continuous_rhs");
+    if (requested == "continuous_rhs" && sampledRequired)
+        throw std::invalid_argument(kind
+            + " requires a sampled controller clock; continuous RHS evaluation is unsafe");
+    Clock result;
+    if (!sampled) return result;
+    result.mode = dynsyslab::core::ControlEvaluationMode::sampled;
+    result.label = "sampled";
+    result.sampleTime = !solver.at("control_sample_time").isNull()
+        ? solver.at("control_sample_time").number()
+        : (!settings.at("sample_time").isNull()
+            ? settings.at("sample_time").number() : fallback);
+    if (!std::isfinite(result.sampleTime) || result.sampleTime <= 0.0)
+        throw std::invalid_argument("sampled control requires a positive control sample time");
+    return result;
+}
+
+}  // namespace control_factory_detail
+using namespace control_factory_detail;
+namespace {
+
+using dynsyslab::core::ScalarControlLaw;
+using dynsyslab::core::StateTargetFunction;
 
 std::vector<double> explicitMatrix(const json::Value& source,
                                    std::size_t rows, std::size_t columns,
@@ -113,47 +153,6 @@ ScalarControlLaw withWindow(ScalarControlLaw law, std::vector<double> active) {
         if (time < active[0] || time > active[1]) return 0.0;
         return law(trajectory, time, state);
     };
-}
-
-std::size_t positiveCount(const json::Value& source, std::size_t fallback,
-                          const char* name) {
-    const double value = source.number(static_cast<double>(fallback));
-    if (!std::isfinite(value) || value < 1.0 || std::floor(value) != value
-        || value > 9007199254740991.0)
-        throw std::invalid_argument(std::string(name) + " must be a positive integer");
-    return static_cast<std::size_t>(value);
-}
-
-struct Clock {
-    dynsyslab::core::ControlEvaluationMode mode{
-        dynsyslab::core::ControlEvaluationMode::continuousRhs};
-    std::string label{"continuous_rhs"};
-    double sampleTime{};
-};
-
-Clock resolveClock(const std::string& kind, const json::Value& solver,
-                   const json::Value& settings, double fallback,
-                   bool sampledRequired) {
-    const std::string requested = solver.at("control_evaluation").string("automatic");
-    const bool sampled = requested == "sampled"
-        || (requested == "automatic" && sampledRequired);
-    if (requested != "automatic" && requested != "sampled"
-        && requested != "continuous_rhs")
-        throw std::invalid_argument("control_evaluation must be automatic, sampled, or continuous_rhs");
-    if (requested == "continuous_rhs" && sampledRequired)
-        throw std::invalid_argument(kind
-            + " requires a sampled controller clock; continuous RHS evaluation is unsafe");
-    Clock result;
-    if (!sampled) return result;
-    result.mode = dynsyslab::core::ControlEvaluationMode::sampled;
-    result.label = "sampled";
-    result.sampleTime = !solver.at("control_sample_time").isNull()
-        ? solver.at("control_sample_time").number()
-        : (!settings.at("sample_time").isNull()
-            ? settings.at("sample_time").number() : fallback);
-    if (!std::isfinite(result.sampleTime) || result.sampleTime <= 0.0)
-        throw std::invalid_argument("sampled control requires a positive control sample time");
-    return result;
 }
 
 void requireScalarInput(const dynsyslab::core::ODESystem& system,
@@ -216,24 +215,41 @@ ControllerSetup buildController(
                                                 std::move(applied));
     }
     const std::size_t states = system.descriptor().stateDimension;
-    const bool prescribedKind = kind == "waveform" || kind == "random_pulse";
+    const bool prescribedKind = detail::isPrescribedControl(kind);
     const auto& targetSpec=source.at("target");
     const auto targetSpace=targetSpec.at("space").string("state");
-    if(targetSpace!="state"&&targetSpace!="observable")
-        throw std::invalid_argument("control target space must be state or observable");
+    if(targetSpace!="state"&&targetSpace!="observable"&&targetSpace!="lifted")
+        throw std::invalid_argument("control target space must be state, observable or lifted");
     const bool observableTarget=targetSpace=="observable";
+    const bool liftedTarget=targetSpace=="lifted";  // z_ref in the K-ROM's real split coordinates
     if(observableTarget&&kind!="klqr"&&kind!="kmpc"&&kind!="io_delay_lqr")
         throw std::invalid_argument("observable-coordinate targets require Koopman control");
-    StateTargetFunction target = prescribedKind || observableTarget ? StateTargetFunction{}
+    if(liftedTarget&&kind!="klqr"&&kind!="kmpc")
+        throw std::invalid_argument("lifted targets require KLQR or KMPC");
+    StateTargetFunction target = prescribedKind || observableTarget || liftedTarget ? StateTargetFunction{}
         : resolveControlTarget(targetSpec, states);
     const auto point = linearizationPoint(settings, fallbackState, states);
-    requireScalarInput(system, point.data());
+    // actuation "additive_state": the input enters as xdot = f(x) + B u with B the n x 1
+    // input_matrix (or the explicit LQR B), instead of through the system's input channel.
+    const auto actuation = settings.at("actuation").string("system_input");
+    if (actuation != "system_input" && actuation != "additive_state")
+        throw std::invalid_argument("controller actuation must be system_input or additive_state");
+    const bool additive = actuation == "additive_state";
+    if (additive && !prescribedKind && kind != "pid"
+        && !((kind == "lqr" || kind == "mpc" || kind == "klqr" || kind == "kmpc")
+             && !(settings.at("B").isNull() && settings.at("input_matrix").isNull())))
+        throw std::invalid_argument("additive_state actuation supports prescribed inputs, pid, and lqr, mpc, klqr or kmpc with an explicit B");
+    if (!additive) requireScalarInput(system, point.data());
 
     ControllerSetup result;
     bool historyClock=false;
-    if (kind == "waveform" || kind == "random_pulse") {
+    if (!prescribedKind && buildMultiInputController(kind, settings, solver, system, trajectoryCount,
+                                                     defaultSampleTime, target, result))
+        return result;
+    if (prescribedKind) {
         auto prescribed = detail::buildPrescribedControl(kind, settings, system);
         result.kind = kind; result.family = "prescribed";
+        result.trajectoryMetadata = std::move(prescribed.trajectoryMetadata);
         result.policy.value = withWindow(std::move(prescribed.law),
                                          std::move(prescribed.activeWindow));
         result.settingsCoordinates = std::move(prescribed.settingsCoordinates);
@@ -266,6 +282,16 @@ ControllerSetup buildController(
                 trajectoryCount, [A, B, Q, R, states, target] {
                     return std::make_shared<dynsyslab::core::StateSpaceLQRController>(
                         A, B, Q, R, states, 1, target);
+                });
+        } else if (!settings.at("sdc_A").isNull()) {
+            // User SDC factorisation f(x) = A(x) x, B(x) (ControlFactoryClassical.cpp).
+            const auto userA = sdcFactor(settings.at("sdc_A"), states, states, system, "sdc_A");
+            const auto userB = settings.at("sdc_B").isNull() ? dynsyslab::core::StateMatrixFunction(input)
+                : sdcFactor(settings.at("sdc_B"), states, 1, system, "sdc_B");
+            result.policy.value = controllerBank<dynsyslab::core::StateSpaceLQRController>(
+                trajectoryCount, [userA, userB, Q, R, states, target] {
+                    return std::make_shared<dynsyslab::core::StateSpaceLQRController>(
+                        userA, userB, Q, R, states, 1, target);
                 });
         } else {
             result.policy.value = controllerBank<dynsyslab::core::StateSpaceLQRController>(
@@ -342,174 +368,8 @@ ControllerSetup buildController(
         result.modelBindingEvidence = std::move(io.evidence);
         result.kind = kind; result.family = "io_delay";
     } else if (kind == "klqr" || kind == "kmpc") {
-        const std::string path = settings.at("krom").string();
-        if (path.empty())
-            throw std::invalid_argument("Koopman control requires a KROM archive path");
-        std::vector<std::size_t> selected;
-        for (const double value : numbers(settings.at("selected_modes"))) {
-            if (!std::isfinite(value) || value < 0.0 || std::floor(value) != value)
-                throw std::invalid_argument("selected_modes must contain nonnegative integers");
-            if (value > 9007199254740991.0)
-                throw std::invalid_argument("selected_modes index is too large");
-            selected.push_back(static_cast<std::size_t>(value));
-        }
-        auto model = std::make_shared<dynsyslab::core::KoopmanModel>(
-            dynsyslab::core::loadKoopmanModel(
-                dynsyslab::core::wide(path), system.configuration(), selected, modelBindingOptions(settings)));
-        result.modelBindingEvidence=json::parse(model->bindingEvidenceJson());
-        std::optional<dynsyslab::core::FrozenHistoryTransform> history;
-        if(model->coordinates().computableFromMeasurements()) {
-            auto map=postprocess_detail::loadMeasurementMap(*model,dynsyslab::core::wide(path),settings);
-            const auto transformPath=map.path;
-            history=std::move(map.transform);
-            if(history->retainedCoordinates().size()!=model->coordinateDimension())
-                throw std::invalid_argument("History coordinate count differs from KROM");
-            if(history->timeUnits()!="model-time"&&history->timeUnits()!=system.coordinates().modelTimeUnits)
-                throw std::invalid_argument("History transform must use the simulator model clock; resample explicitly");
-            const auto clock=resolveClock(kind,solver,settings,history->sampleInterval(),true);
-            if(std::abs(clock.sampleTime-history->sampleInterval())>1e-10*history->sampleInterval())
-                throw std::invalid_argument("Controller measurement clock must match the frozen history transform");
-            historyClock=true;result.policy.evaluation=clock.mode;result.policy.sampleTime=clock.sampleTime;
-            result.evaluation=clock.label;result.sampleTime=clock.sampleTime;
-            result.modelBindingEvidence.object()["history_transform_identity"]=history->identity();
-            result.modelBindingEvidence.object()["history_transform_path"]=transformPath;
-            result.modelBindingEvidence.object()["unverified_transform_reason"]=settings.at("unverified_transform_reason");
-        }
-        if (model->inputDimension() != 1)
-            throw std::invalid_argument("current native integrator supports scalar-input Koopman control");
-        auto referenceSpace=dynsyslab::core::KoopmanTargetSpace::dynamicalState;
-        const auto historyMeasurement=[&]() {
-            const auto name=settings.at("measurement_observable").string(history->measurement());
-            if(name.empty())throw std::invalid_argument("History control requires a simulator measurement observable");
-            return system.observableCatalog().at(name);
-        };
-        if(observableTarget) {
-            referenceSpace=dynsyslab::core::KoopmanTargetSpace::observableCoordinates;
-            if(targetSpec.at("kind").string()=="from_state") {
-                result.target=resolveControlTarget(targetSpec.at("state_target"),states);
-                if(history) {
-                    // xi_ref: frozen projection of the measured observable along the state target.
-                    target=detail::historyCoordinateTarget(result.target,*history,historyMeasurement());
-                } else {
-                    const auto coordinates=model->coordinateObservable();
-                    target=[stateTarget=result.target,coordinates](double time) {
-                        const auto x=stateTarget(time); return coordinates.evaluateReal(x.data());
-                    };
-                }
-            } else target=resolveControlTarget(targetSpec,model->coordinateDimension());
-            result.observableTarget=target;
-            result.targetObservableNames=model->coordinates().names;
-            result.targetSpace="observable";
-        }
-        const auto Q = squareMatrix(settings.at("Q"), model->splitDimension(), "Q");
-        const auto R = squareMatrix(settings.at("R"), model->inputDimension(), "R");
-        const std::string representation = settings.at("control_representation").string("exact");
-        const std::string mapArchive=settings.at("control_map_archive").string();
-        if (!mapArchive.empty()) {
-            if (representation=="exact")
-                throw std::invalid_argument(
-                    "an external control-map archive requires a non-exact representation name");
-            model->setControlMap(representation,
-                dynsyslab::core::loadApproximateControlMap(
-                    dynsyslab::core::wide(mapArchive),
-                    settings.at("control_map_prefix").string(),
-                    *model,settings.at("unverified_control_map_reason").string()));
-            result.modelBindingEvidence.object()["control_map_provenance"]=std::visit(
-                [](const auto& map){return map.provenance;},model->storedControlMap(representation));
-        }
-        const auto reduction=parseBalancedTruncation(settings.at("balanced_truncation"));
-        if(reduction&&kind!="klqr")
-            throw std::invalid_argument("balanced_truncation applies to klqr (and klqe), not "+kind);
-        if(reduction)result.modelBindingEvidence.object()["controller_balanced_truncation"]=
-            balancedTruncationRequest(*reduction);
-        const bool historyExact=representation=="history_exact";
-        std::optional<detail::BoundBilinearCertificate> certificate;
-        if(!settings.at("bilinear_certificate").isNull()) {
-            if(kind!="klqr"||historyExact)
-                throw std::invalid_argument("bilinear_certificate applies to klqr with a stored bilinear map");
-            certificate=detail::bindBilinearCertificate(settings,*model,representation);
-            result.modelBindingEvidence.object()["bilinear_certificate"]=certificate->evidence;
-        }
-        if(historyExact&&(!history||kind!="klqr"))
-            throw std::invalid_argument("control_representation history_exact needs a causal-history KROM and klqr");
-        if (kind == "klqr" && historyExact) {
-            auto controller = std::make_shared<dynsyslab::core::KoopmanLQRController>(
-                model, Q, R, target, "external", referenceSpace);
-            if(reduction)controller->setBalancedReduction(*reduction);
-            std::shared_ptr<const dynsyslab::core::ODESystem> plant=
-                dynsyslab::core::createSystem(system.configuration());
-            result.policy.value=detail::historyExactControlLaw(std::move(controller),model,*history,
-                historyMeasurement(),std::move(plant),trajectoryCount,settings.at("warmup_input").number(0));
-            result.modelBindingEvidence.object()["control_map_provenance"]=
-                "history_exact: grad_xi psi * newest-sample weight * L_g(measurement), from simulator state";
-        } else if (kind == "klqr") {
-            auto controller = std::make_shared<dynsyslab::core::KoopmanLQRController>(
-                model, Q, R, target, representation, referenceSpace);
-            if(reduction)controller->setBalancedReduction(*reduction);
-            applyKlqrAugmentations(*controller, *model, settings);
-            if(certificate)controller->setCertifiedFeedback(certificate->feedback);
-            if(controller->stateful())
-                result.modelBindingEvidence.object()["klqr_augmentations"]=klqrAugmentationEvidence(settings);
-            if(const auto& online=settings.at("online_measurement");!online.isNull()) {
-                // Signal-only feedback: coordinates (y, y') from one sensor and a causal differentiator.
-                if(history||controller->stateful()||representation=="exact"||model->coordinateDimension()!=2)
-                    throw std::invalid_argument("online_measurement needs a two-coordinate KROM, a stored input map and a stateless KLQR");
-                const auto clock=resolveClock(kind,solver,settings,defaultSampleTime,true);
-                dynsyslab::core::DerivativeSpec derivative;derivative.method="backward2";
-                if(!online.at("derivative").isNull())derivative=parseDerivativeSpec(online.at("derivative"));
-                result.policy.value=detail::measuredJetControlLaw(*controller,
-                    system.observableCatalog().at(online.at("observable").string("far_field_acoustic_echo")),
-                    derivative,clock.sampleTime,trajectoryCount,
-                    static_cast<std::size_t>(online.at("warmup_samples").number(3)),settings.at("warmup_input").number(0));
-                result.modelBindingEvidence.object()["online_measurement"]=online;
-            } else if(history)result.policy.value=detail::coordinateControllerBank(*controller,trajectoryCount);
-            else if(controller->stateful()) {
-                // Integral/PID states: one controller copy per trajectory, sampled clock (below).
-                auto bank=std::make_shared<std::vector<dynsyslab::core::KoopmanLQRController>>(
-                    trajectoryCount,*controller);
-                result.policy.value=[bank](std::size_t trajectory,double time,const double* state) {
-                    return bank->at(trajectory).value(time,state).front();
-                };
-            } else {
-                if(reduction)result.appendDiagnostics=[controller](std::size_t,dynsyslab::core::NpzRecord& archive) {
-                    storeKlqrReduction(*controller,archive);
-                };
-                result.policy.value = [controller = std::move(controller)](
-                    std::size_t, double time, const double* state) {
-                    return controller->value(time, state).front();
-                };
-            }
-        } else {
-            const auto clock = resolveClock(kind, solver, settings, history?history->sampleInterval():defaultSampleTime, true);
-            auto limits = numbers(settings.at("control_limit"));
-            if (limits.empty() && !settings.at("control_limit").isNull())
-                limits.push_back(settings.at("control_limit").number());
-            auto controller = std::make_shared<dynsyslab::core::KoopmanMPCController>(
-                model, Q, R, target,
-                positiveCount(settings.at("horizon"), 20, "KMPC horizon"),
-                clock.sampleTime,
-                representation, std::move(limits), referenceSpace);
-            if(history)result.policy.value=detail::coordinateControllerBank(*controller,trajectoryCount);
-            else result.policy.value = [controller = std::move(controller)](
-                std::size_t, double time, const double* state) {
-                return controller->value(time, state).front();
-            };
-            result.policy.evaluation = clock.mode;
-            result.policy.sampleTime = clock.sampleTime;
-            result.evaluation = clock.label; result.sampleTime = clock.sampleTime;
-        }
-        if(history) {
-            if(!observableTarget&&target)throw std::invalid_argument("History-coordinate control needs an observable-coordinate target");
-            const auto observable=settings.at("measurement_observable").string(history->measurement());
-            if(observable.empty())throw std::invalid_argument("History control requires a simulator measurement observable");
-            const auto catalog=system.observableCatalog();
-            if(!history->measurement().empty()&&catalog.at(observable).descriptor().name!=catalog.at(history->measurement()).descriptor().name)
-                throw std::invalid_argument("Deployment measurement differs from frozen history training measurement");
-            if(!historyExact)  // history_exact already built its own measurement law
-                result.policy.value=detail::historyControlLaw(std::move(result.policy.value),*history,
-                    catalog.at(observable),trajectoryCount,settings.at("warmup_input").number(0));
-        }
-        result.kind = kind; result.family = "koopman";
+        buildKoopmanControl(kind, settings, targetSpec, solver, system, trajectoryCount, defaultSampleTime,
+                            states, observableTarget, target, historyClock, result);
     } else {
         throw std::runtime_error(kind
             + " controller has not yet been ported to the native control core");
@@ -543,10 +403,18 @@ ControllerSetup buildController(
                     json::Value(json::Value::Array{json::Value(cap->first), json::Value(cap->second)});
         }
     }
-    if (kind != "waveform" && kind != "random_pulse")
+    if (!prescribedKind && result.policy.value)
         result.policy.value = withWindow(std::move(result.policy.value),
                                          activeWindow(settings));
-    if(!observableTarget)result.target = std::move(target);
+    else if (!prescribedKind && !activeWindow(settings).empty())
+        throw std::invalid_argument("active_time_window applies to scalar-input controllers");
+    if (additive && result.policy.additiveMatrix.empty()) {  // multi-input K-ROM control set its own B
+        const auto& matrix = settings.at("input_matrix").isNull() ? settings.at("B") : settings.at("input_matrix");
+        result.policy.additiveMatrix = explicitMatrix(matrix, states, 1, "input_matrix");
+        result.policy.inputDimension = 1;
+    }
+    if(liftedTarget)result.targetSpace="lifted";
+    else if(!observableTarget)result.target = std::move(target);
     return result;
 }
 

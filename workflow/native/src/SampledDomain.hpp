@@ -11,7 +11,7 @@
 //                    observable, else the sampled values themselves (measured data)
 // Without a producing system only "input" exists, and null falls back to it.
 #include "PostprocessInternal.hpp"
-#include <dynsyslab/core/EigenfunctionObjects.hpp>
+#include <dynsyslab/core/KoopmanModel.hpp>
 #include <dynsyslab/core/FunctionInterpolation.hpp>
 #include <dynsyslab/core/TimeSeriesRecord.hpp>
 
@@ -28,9 +28,9 @@ struct SampleStates {
 [[nodiscard]] std::optional<SampleStates> statesAtSamples(const dynsyslab::core::TimeSeriesRecord& record,
                                                           const std::vector<double>& times);
 
-// The full state at an eigenfunction set's training samples, through its origin: its input series,
-// then the solver record they point to. Throws when the series has no producing system.
-[[nodiscard]] SampleStates trainingStates(const dynsyslab::core::EigenfunctionSet& set);
+// The full state at a K-ROM's training samples, through its origin: its input series, then the
+// solver record they point to. Throws when the series has no producing system.
+[[nodiscard]] SampleStates trainingStates(const dynsyslab::core::KoopmanModel& set);
 
 struct SampledDomain {
     dynsyslab::core::FunctionDomain domain;  // bound when it has a state map

@@ -1,4 +1,5 @@
 #include <optional>
+#include <dynsyslab/core/SpectrumArchive.hpp>
 #include "ExpansionArchive.hpp"
 #include "ObjectPublishing.hpp"
 #include "TimeSeriesSource.hpp"
@@ -67,12 +68,12 @@ dynsyslab::core::SystemConfiguration configuration(const std::string& text) {
 }
 std::filesystem::path destination(const std::filesystem::path& root,
     const std::filesystem::path& source,const std::string& method) {
-    return postprocess_detail::objectFolder(root, method)/dynsyslab::core::wide(safe(source.stem().u8string()
+    return postprocess_detail::kindFolder(root, method == "havok" ? dynsyslab::core::object_kind::dynamicalModel : dynsyslab::core::object_kind::krom)/dynsyslab::core::wide(safe(source.stem().u8string()
         +"__"+method+"__"+timestamp())+".npz");
 }
 std::string metadata(const std::filesystem::path& source,const std::string& method,
     const std::string& label,const std::string& details) {
-    return "{\"format\":\"dynsyslab.derived/v1\",\"label\":\""+escape(label)
+    return "{\"schema\":\"dynsyslab.derived/v1\",\"label\":\""+escape(label)
         +"\",\"method\":\""+method+"\",\"source_archive\":\""
         +escape(source.u8string())+"\",\"execution_backend\":{\"name\":\"native-cpp\","
          "\"compiled\":true,\"python_required\":false},"+details+"}";
@@ -123,11 +124,7 @@ std::filesystem::path runDecompositionPostprocess(
         } else throw std::invalid_argument("EDMD dictionary must be polynomial or rbf");
         const auto result=dynsyslab::core::extendedDynamicModeDecomposition(
             states,samples,dimension,deltaTime(time),options);
-        output.arrays["eigenvalues"]=dynsyslab::core::NpyArray::fromComplex(
-            {result.featureCount},result.discreteEigenvalues);
-        output.arrays["discrete_eigenvalues"]=output.arrays["eigenvalues"];
-        output.arrays["continuous_eigenvalues"]=dynsyslab::core::NpyArray::fromComplex(
-            {result.featureCount},result.continuousEigenvalues);
+        dynsyslab::core::writeSpectrumArrays(output,result.spectrum);
         output.arrays["modes"]=dynsyslab::core::NpyArray::fromComplex(
             {dimension,result.featureCount},result.modes);
         output.arrays["eigenfunction_values"]=dynsyslab::core::NpyArray::fromComplex(
@@ -161,8 +158,7 @@ std::filesystem::path runDecompositionPostprocess(
             try { system=configuration(source.metadataJson()); } catch (const std::exception&) {}
             expansion.emplace(dynsyslab::core::EigenfunctionFitResult{
                 dynsyslab::core::FunctionExpansion(basis,std::move(coefficients),snapshotDomain(source.metadataJson(),dimension,system)),
-                dynsyslab::core::Spectrum::fromStoredRates(result.continuousEigenvalues,result.deltaTime,
-                    dynsyslab::core::EigenvalueDomain::discreteTime),{}});
+                result.spectrum,{}});
             expansionSystem=system;
         } catch (const std::exception& error) { expansionReason=error.what(); }
         details="\"dictionary\":\""+kind+"\",\"feature_count\":"
@@ -173,6 +169,7 @@ std::filesystem::path runDecompositionPostprocess(
         options.delays=static_cast<std::size_t>(settings.at("delays").number(100));
         options.rank=static_cast<std::size_t>(settings.at("rank").number(15));
         options.observableIndex=static_cast<std::size_t>(settings.at("observable").number());
+        options.derivativeOrder=static_cast<std::size_t>(settings.at("derivative_order").number(2));
         const std::string observableName=settings.at("observable").string();
         dynsyslab::core::HAVOKResult result;
         if (observableName.empty())
@@ -202,19 +199,26 @@ std::filesystem::path runDecompositionPostprocess(
             {result.rank,result.embeddedSamples},result.rightSingularVectors);
         output.arrays["observable"]=dynsyslab::core::NpyArray::fromDoubles({samples},result.observable);
         details="\"delays\":"+std::to_string(result.delays)+",\"rank\":"
-            +std::to_string(result.rank)+",\"observable\":\""
+            +std::to_string(result.rank)+",\"derivative_order\":"+std::to_string(options.derivativeOrder)+",\"observable\":\""
             +escape(observableName.empty()?std::to_string(options.observableIndex):observableName)+"\"";
     } else throw std::invalid_argument("unknown decomposition stage");
     const auto meta=metadata(sourcePath,method,label,details);
     output.arrays["metadata_json"]=dynsyslab::core::NpyArray::fromString(meta);
     // EDMD (Williams, Kevrekidis & Rowley, J. Nonlinear Sci. 25, 2015) publishes its eigenfunctions as a
     // data object: the spectrum and its expansion in the dictionary; modes and operator are properties.
+    std::string kind = method == "havok" ? dynsyslab::core::object_kind::dynamicalModel : dynsyslab::core::object_kind::krom;
     if (expansion) {
         dynsyslab::core::DataOrigin origin{method,settings,{postprocess_detail::dataReference(sourcePath,"time_series")}};
-        if (!writeExpansionEigenfunctions(output,*expansion,origin,time,expansionValues,{},meta,expansionReason))
-            output.arrays["expansion_contract_skipped"]=dynsyslab::core::NpyArray::fromString(expansionReason);
+        if (!writeExpansionKrom(output,*expansion,origin,time,expansionValues,{},meta,expansionReason)) expansion.reset();
     }
-    const auto path=destination(root,sourcePath,method);
+    if (method == "edmd" && !expansion) {  // no K-ROM: the spectrum, modes and operator as a report
+        kind = dynsyslab::core::object_kind::report;
+        output.arrays["expansion_contract_skipped"]=dynsyslab::core::NpyArray::fromString(expansionReason);
+    }
+    auto path=destination(root,sourcePath,method);
+    if (kind == dynsyslab::core::object_kind::report)
+        path = postprocess_detail::kindFolder(root, kind) / path.filename();
+    postprocess_detail::stampDataObject(output, kind, method, {});
     dynsyslab::core::writeNpzAtomic(path,output); return path;
 }
 

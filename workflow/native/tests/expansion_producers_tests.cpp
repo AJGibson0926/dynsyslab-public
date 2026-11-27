@@ -1,5 +1,5 @@
 // DMD, EDMD and hand-written eigenfunctions produce K-ROMs that evaluate in their own bases.
-#include <dynsyslab/core/EigenfunctionArchive.hpp>
+#include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/Json.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
@@ -30,7 +30,7 @@ json::Value job(const std::filesystem::path& source, const char* method, json::V
 void reproducesStoredValues(const std::filesystem::path& archivePath, const std::vector<double>& states,
                             const std::string& what) {
     const auto archive = core::readNpz(archivePath);
-    require(archive.contains("expansion_coefficients") && core::hasEigenfunctionObjects(archive),
+    require(archive.contains("expansion_coefficients") && core::isKrom(archive),
             what + " stored no eigenfunctions object with its expansion");
     const auto model = core::loadKoopmanModel(archivePath);
     const auto stored = archive.at("eigenfunction_values").complexDoubles();
@@ -64,7 +64,7 @@ int main() {
         source.arrays["time"] = core::NpyArray::fromDoubles({samples}, time);
         source.arrays["values"] = core::NpyArray::fromDoubles({samples, 2}, states);
         source.arrays["metadata_json"] = core::NpyArray::fromString(
-            R"({"format":"dynsyslab.trajectory/v1","label":"source","system":"duffing","system_preset":"double_well_reference","resolved_system_parameters":{},"integration_form":"dimensionless"})");
+            R"({"schema":"dynsyslab.trajectory/v1","label":"source","system":"duffing","system_preset":"double_well_reference","resolved_system_parameters":{},"integration_form":"dimensionless"})");
         core::writeNpzAtomic(sourcePath, source);
 
         const auto dmd = dynsyslab::workflow::executeJob(job(sourcePath, "dmd", {{"rank", 2.0}}), root / "dmd");
@@ -100,7 +100,7 @@ int main() {
         const auto triangularPath = root / "triangular.npz";
         core::NpzRecord triangular = source;
         triangular.arrays["metadata_json"] = core::NpyArray::fromString(
-            R"({"format":"dynsyslab.trajectory/v1","label":"source","system":"quadratic_triangular","system_preset":"gradient_closed_reference","resolved_system_parameters":{},"integration_form":"dimensionless"})");
+            R"({"schema":"dynsyslab.trajectory/v1","label":"source","system":"quadratic_triangular","system_preset":"gradient_closed_reference","resolved_system_parameters":{},"integration_form":"dimensionless"})");
         core::writeNpzAtomic(triangularPath, triangular);
         const auto library = dynsyslab::workflow::executeJob(job(triangularPath, "eigenfunction_expansion", {
             {"library", json::Value::Array{"eta"}}}), root / "library");

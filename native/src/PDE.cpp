@@ -81,6 +81,8 @@ PDEIntegrationResult integratePDE(
     const PDERightHandSide& rhs, const ExecutionContext* execution) {
     mesh.validate();
     if (!rhs) throw std::invalid_argument("PDE right-hand side is empty");
+    if (options.method == PDEIntegrationMethod::adaptive)
+        return integratePDEAdaptive(mesh, fieldShape, initialField, options, rhs, execution);
     if (!std::isfinite(options.initialTime) || !std::isfinite(options.finalTime)
         || !std::isfinite(options.outputStep) || !std::isfinite(options.internalStep)
         || !(options.initialTime < options.finalTime) || options.outputStep <= 0.0

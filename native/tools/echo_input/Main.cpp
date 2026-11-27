@@ -34,7 +34,8 @@ int main(int argc,char** argv) {
             throw std::invalid_argument("completed experiment is immutable; choose a new output directory");
         const auto model=core::loadKoopmanModel(source);
         const auto archive=core::readNpz(source);
-        const auto f=frozen(archive,model.eigenfunctions());
+        const auto f=frozen(archive,core::EigenfunctionFitResult{model.expansion(),model.spectrum(),
+            model.fitDiagnostics()});
         const auto config=model.systemConfiguration();
         if(argc==4) {
             if(std::string(argv[3])=="--short-history") {
@@ -79,7 +80,8 @@ int main(int argc,char** argv) {
                 {"amplitude",amplitude},{"frequency",frequency},{"phase",0.37}});
         }
         std::vector<std::pair<std::string,core::HistoryInputMap>> maps;
-        const std::array<double,2> scale{f.polynomial.scale[0],f.polynomial.scale[1]};
+        const std::array<double,2> scale{f.polynomial.functions.monomialTable().scale[0],
+            f.polynomial.functions.monomialTable().scale[1]};
         maps.emplace_back("constant-small",core::fitHistoryInputMap(small,f.multiplier,f.controlStep,0,scale));
         maps.emplace_back("bilinear-small",core::fitHistoryInputMap(small,f.multiplier,f.controlStep,1,scale));
         for(std::size_t degree=0;degree<=1;++degree)

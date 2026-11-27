@@ -7,6 +7,7 @@
 #include <dynsyslab/workflow/Postprocess.hpp>
 
 #include "KromControlSearchSupport.hpp"
+#include "KromControlSearchVariants.hpp"
 #include "WorkflowSupport.hpp"
 
 #include <algorithm>
@@ -88,7 +89,8 @@ json::Value runCase(const json::Value& job,const dynsyslab::core::KoopmanModel& 
 
 json::Value ledger(const json::Value& job,const std::filesystem::path& parent,
     const json::Value::Array& controlled,const json::Value::Array& attempts,
-    const std::string& status,const std::string& stopReason){json::Value::Object result;
+    const std::string& status,const std::string& stopReason,const json::Value& schedule={}){json::Value::Object result;
+    if(!schedule.isNull())result["schedule"]=schedule;
     result["schema"]="dynsyslab.krom-control-search/v1";result["label"]=job.at("label").string();
     result["status"]=status;result["stop_reason"]=stopReason;
     result["parent_krom"]=parent.generic_u8string();result["controlled_sources"]=json::Value(controlled);
@@ -100,10 +102,14 @@ std::filesystem::path archiveCampaign(const json::Value& job,
     const std::filesystem::path& destination,const std::filesystem::path& parent,
     const json::Value::Array& controlled,const json::Value::Array& attempts,
     const std::string& stopReason){const std::size_t count=attempts.size();
-    const std::string cases[] {"exact","constant","bilinear"};
+    // exact, constant and bilinear, then every map variant that any attempt ran.
+    std::vector<std::string> cases{"exact","constant","bilinear"};
+    for(const auto& attempt:attempts)for(const auto& [name,value]:attempt.at("cases").object())
+        if(std::find(cases.begin(),cases.end(),name)==cases.end())cases.push_back(name);
+    const std::size_t columns=cases.size();
     std::vector<double> attemptNumber,modeCount,selection,modeOffsets{0.0},modeIndices;
-    std::vector<double> release(count*3,std::numeric_limits<double>::quiet_NaN());
-    std::vector<double> finalError=release,controlPeak=release,success(count*3,0.0);
+    std::vector<double> release(count*columns,std::numeric_limits<double>::quiet_NaN());
+    std::vector<double> finalError=release,controlPeak=release,success(count*columns,0.0);
     std::vector<double> constantMap(count,std::numeric_limits<double>::quiet_NaN());
     std::vector<double> bilinearMap=constantMap;
     const double releaseTolerance=job.at("success").at("release_error_tolerance").number();
@@ -119,16 +125,16 @@ std::filesystem::path archiveCampaign(const json::Value& job,
             std::numeric_limits<double>::quiet_NaN());
         bilinearMap[row]=attempt.at("bilinear_error_mean").number(
             std::numeric_limits<double>::quiet_NaN());
-        for(std::size_t column=0;column<3;++column){const auto& item=attempt.at("cases").at(cases[column]);
+        for(std::size_t column=0;column<columns;++column){const auto& item=attempt.at("cases").at(cases[column]);
             if(item.at("status").string()=="complete"){const auto& metrics=item.at("metrics");
-                release[row*3+column]=metrics.at("distance_to_target_at_release").number();
-                finalError[row*3+column]=metrics.at("final_distance_to_reference").number();
-                controlPeak[row*3+column]=metrics.at("control_peak_abs").number();
-                success[row*3+column]=succeeded(item,releaseTolerance,finalTolerance)?1.0:0.0;
+                release[row*columns+column]=metrics.at("distance_to_target_at_release").number();
+                finalError[row*columns+column]=metrics.at("final_distance_to_reference").number();
+                controlPeak[row*columns+column]=metrics.at("control_peak_abs").number();
+                success[row*columns+column]=succeeded(item,releaseTolerance,finalTolerance)?1.0:0.0;
                 resultArchives.emplace_back(item.at("archive").string());}}
         const auto regression=attempt.at("regressed_krom").string();
         if(!regression.empty())resultArchives.emplace_back(regression);}
-    json::Value::Object metadata;metadata["format"]="dynsyslab.derived/v1";
+    json::Value::Object metadata;metadata["schema"]="dynsyslab.derived/v1";
     metadata["method"]="krom-control-search";metadata["label"]=job.at("label").string();
     metadata["system"]=dynsyslab::core::loadKoopmanModel(parent)
         .systemConfiguration().identifier;metadata["source_archive"]=parent.generic_u8string();
@@ -136,6 +142,8 @@ std::filesystem::path archiveCampaign(const json::Value& job,
     metadata["result_archives"]=json::Value(std::move(resultArchives));
     metadata["stop_reason"]=stopReason;metadata["attempt_count"]=static_cast<double>(count);
     metadata["control_cases"]=json::Value::Array{json::Value("exact"),json::Value("constant"),json::Value("bilinear")};
+    json::Value::Array variantNames;for(std::size_t k=3;k<cases.size();++k)variantNames.emplace_back(cases[k]);
+    metadata["map_variant_cases"]=json::Value(std::move(variantNames));
     metadata["initial_state"]=job.at("initial_state");metadata["target_state"]=job.at("target_state");
     metadata["final_reference_state"]=job.at("final_reference_state");
     metadata["success_policy"]=job.at("success");metadata["screening_policy"]=job.at("screening");
@@ -149,10 +157,18 @@ std::filesystem::path archiveCampaign(const json::Value& job,
     archive.arrays["candidate_selection_score"]=dynsyslab::core::NpyArray::fromDoubles({count},selection);
     archive.arrays["candidate_mode_offsets"]=dynsyslab::core::NpyArray::fromDoubles({count+1},modeOffsets);
     archive.arrays["candidate_mode_indices"]=dynsyslab::core::NpyArray::fromDoubles({modeIndices.size()},modeIndices);
-    archive.arrays["release_error"]=dynsyslab::core::NpyArray::fromDoubles({count,3},release);
-    archive.arrays["final_error"]=dynsyslab::core::NpyArray::fromDoubles({count,3},finalError);
-    archive.arrays["control_peak"]=dynsyslab::core::NpyArray::fromDoubles({count,3},controlPeak);
-    archive.arrays["case_success"]=dynsyslab::core::NpyArray::fromDoubles({count,3},success);
+    // The three standard cases keep their (attempt x 3) arrays; map variants go to variant_* arrays
+    // (attempt x variants, named by metadata.map_variant_cases).
+    const auto split=[&](const char* name,const std::vector<double>& values) {
+        std::vector<double> standard,variants;
+        for(std::size_t row=0;row<count;++row)for(std::size_t column=0;column<columns;++column)
+            (column<3?standard:variants).push_back(values[row*columns+column]);
+        archive.arrays[name]=dynsyslab::core::NpyArray::fromDoubles({count,3},standard);
+        if(columns>3)archive.arrays[std::string("variant_")+name]=
+            dynsyslab::core::NpyArray::fromDoubles({count,columns-3},variants);
+    };
+    split("release_error",release);split("final_error",finalError);
+    split("control_peak",controlPeak);split("case_success",success);
     archive.arrays["constant_error_mean"]=dynsyslab::core::NpyArray::fromDoubles({count},constantMap);
     archive.arrays["bilinear_error_mean"]=dynsyslab::core::NpyArray::fromDoubles({count},bilinearMap);
     dynsyslab::core::writeNpzAtomic(destination,archive);return destination;}
@@ -187,7 +203,8 @@ json::Value planKromControlSearch(const json::Value& job){const auto parent=
     result["parent_mode_count"]=static_cast<double>(model.liftedDimension());
     result["maximum_mode_count"]=static_cast<double>(std::min(modeCount,model.liftedDimension()));
     result["maximum_attempts"]=static_cast<double>(attempts);
-    result["control_cases_per_attempt"]=3.0;result["controlled_source_count"]=
+    result["control_cases_per_attempt"]=3.0+static_cast<double>(
+        job.at("screening").at("map_variants").isNull()?1:job.at("screening").at("map_variants").array().size());result["controlled_source_count"]=
         static_cast<double>(controlled.size());result["python_required"]=false;
     result["archive_policy"]="durable ledger plus immutable campaign/attempt archives";
     return json::Value(std::move(result));}
@@ -206,19 +223,29 @@ RunResult executeKromControlSearch(const json::Value& job,
     options.retainedCandidates=std::max<std::size_t>(maxAttempts,positiveInteger(
         job.at("screening").at("retained_candidates"),100,10000,"retained_candidates"));
     options.seedModeCount=positiveInteger(job.at("screening").at("seed_mode_count"),12,1000,"seed_mode_count");
-    const auto candidates=dynsyslab::core::rankKromControlCandidates(parent,initial,target,options);
+    std::size_t controlledSamples=0;
+    const auto controlledPath=std::filesystem::u8path(controlled.front().string());
+    const auto controlledValues=search_detail::controlledStates(controlledPath,controlledSamples);
+    json::Value scheduleEvidence;
+    const auto candidates=search_detail::scheduleCandidates(job,
+        dynsyslab::core::rankKromControlCandidates(parent,initial,target,options),parent,
+        controlledValues,controlledSamples,scheduleEvidence);
     const auto directory=archiveRoot/L"derived"/L"krom-control-search"/
         dynsyslab::core::wide(detail::safeName(job.at("label").string(),"krom-control-search")
             +"__"+detail::timestamp());std::filesystem::create_directories(directory);
-    const auto ledgerPath=directory/L"campaign-ledger.json";json::Value::Array attempts;
+    const auto ledgerPath=directory/L"campaign-ledger.json";
+    json::Value::Array attempts=search_detail::resumedAttempts(job);  // resume_from: kept, not rerun
+    const std::size_t resumed=attempts.size();std::string priorExact;
     const double releaseTolerance=job.at("success").at("release_error_tolerance").number(0.02);
     const double finalTolerance=job.at("success").at("final_error_tolerance").number(0.1);
     const bool stopOnSuccess=job.at("screening").at("stop_on_bilinear_success").boolean(true);
-    const std::size_t planned=std::min(maxAttempts,candidates.size())*5,attemptLimit=std::min(maxAttempts,candidates.size());
+    const std::size_t planned=std::min(maxAttempts,candidates.size())*6,attemptLimit=std::min(maxAttempts,candidates.size());
     if(!planned)throw std::runtime_error("KROM screening produced no control candidates");
     std::size_t complete=0;std::string stopReason="hard-attempt-limit-reached";
     report(progressPath,execution,0.0,0,planned,"Screening KROM candidates");
-    for(std::size_t attempt=0;attempt<attemptLimit;++attempt){const auto& candidate=candidates[attempt];
+    for(std::size_t index=0,attempt=resumed;index<candidates.size()&&attempt<std::max(attemptLimit,resumed);++index){
+        const auto& candidate=candidates[index];
+        if(search_detail::attempted(attempts,candidate.modeIndices)&&index>=job.at("screening").at("schedule").array().size())continue;
         json::Value::Object record;record["attempt_number"]=static_cast<double>(attempt+1);
         record["candidate"]=search_detail::candidateJson(candidate);json::Value::Object cases;
         std::filesystem::path extracted,regressed;std::string regressionFailure;
@@ -249,14 +276,25 @@ RunResult executeKromControlSearch(const json::Value& job,
                 representation,attempt+1,archiveRoot,progressPath,execution,complete,planned);
             report(progressPath,execution,static_cast<double>(++complete)/planned,complete,planned,
                 "Evaluated "+representation+" KLQR control");}
-        record["cases"]=json::Value(cases);attempts.emplace_back(json::Value(std::move(record)));
-        search_detail::writeJsonAtomic(ledgerPath,ledger(job,parentPath,controlled,attempts,"running","in-progress"));
+        if(succeeded(cases.at("exact"),releaseTolerance,finalTolerance))priorExact=cases.at("exact").at("archive").string(priorExact);
+        if(!extracted.empty())for(const auto& variant:search_detail::fitMapVariants(job,extracted,controlledValues,
+                controlledSamples,priorExact,directory,attempt+1)){
+            if(!variant.failure.empty())cases[variant.name]=json::Value::Object{{"status","failed"},
+                {"representation",variant.name},{"message",variant.failure}};
+            else {auto item=runCase(job,parent,variant.archive,variant.name,attempt+1,archiveRoot,progressPath,
+                    execution,complete,planned);
+                item.object()["map_relative_residual"]=variant.relativeResidual;
+                item.object()["map_archive"]=variant.archive.generic_u8string();cases[variant.name]=std::move(item);}
+            report(progressPath,execution,static_cast<double>(std::min(++complete,planned))/planned,
+                std::min(complete,planned),planned,"Evaluated "+variant.name+" KLQR control");}
+        record["cases"]=json::Value(cases);attempts.emplace_back(json::Value(std::move(record)));++attempt;
+        search_detail::writeJsonAtomic(ledgerPath,ledger(job,parentPath,controlled,attempts,"running","in-progress",scheduleEvidence));
         if(stopOnSuccess&&succeeded(cases.at("bilinear"),releaseTolerance,finalTolerance)){
             stopReason="bilinear-success";break;}
-        if(attempt+1==candidates.size())stopReason="candidate-list-exhausted";}
+        if(index+1==candidates.size())stopReason="candidate-list-exhausted";}
     const auto campaignPath=archiveCampaign(job,directory/L"campaign.npz",parentPath,
         controlled,attempts,stopReason);search_detail::writeJsonAtomic(ledgerPath,
-            ledger(job,parentPath,controlled,attempts,"complete",stopReason));
+            ledger(job,parentPath,controlled,attempts,"complete",stopReason,scheduleEvidence));
     report(progressPath,execution,1.0,planned,planned,"KROM control search archived");
     std::wstring summary=L"Native KROM control search completed\r\n\r\nAttempts: "+
         std::to_wstring(attempts.size())+L"\r\nStop reason: "+dynsyslab::core::wide(stopReason)

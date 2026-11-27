@@ -74,6 +74,27 @@ void registerRecordedArchiveReader(const std::string& schema, RecordedArchiveRea
 void writeNpzAtomic(const std::filesystem::path& path, const NpzRecord& record);
 // Atomically create a completed archive; fail if the destination already exists.
 void writeNpzAtomicNew(const std::filesystem::path& path, const NpzRecord& record);
+
+// ZIP codec of written archives (PKWARE APPNOTE 6.3.10 methods 8, 14 and 0; deflate is RFC 1951,
+// LZMA is Pavlov's LZMA SDK format). All three are lossless and readable by numpy.load. LZMA is
+// usually densest for smooth trajectories; stored is fastest. See docs/ARCHIVE_MANAGEMENT.md.
+enum class ArchiveCompression { deflate, lzma, stored };
+// "deflate" | "lzma" | "stored" (also "store"); throws std::invalid_argument otherwise.
+[[nodiscard]] ArchiveCompression parseArchiveCompression(const std::string& name);
+[[nodiscard]] std::string archiveCompressionName(ArchiveCompression compression);
+// Codec for new archives: the process setting when set, else the DYNSYSLAB_COMPRESSION
+// environment variable, else deflate.
+[[nodiscard]] ArchiveCompression archiveCompression();
+void setArchiveCompression(ArchiveCompression compression);
+
+struct NpzWriteOptions {
+    ArchiveCompression compression{ArchiveCompression::deflate};
+    bool replaceExisting{true};
+    // false writes metadata_json byte-for-byte (lossless rewrites such as recompression).
+    bool addRunProvenance{true};
+};
+// Atomic write with explicit options (writeNpzAtomic uses archiveCompression()).
+void writeNpz(const std::filesystem::path& path, const NpzRecord& record, const NpzWriteOptions& options);
 // Writes a ZIP of text entries in the given order, with fixed timestamps (byte-reproducible).
 void writeTextZip(const std::filesystem::path& path,
                   const std::vector<std::pair<std::string, std::string>>& entries);

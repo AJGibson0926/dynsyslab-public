@@ -38,6 +38,7 @@ add_library(dynsyslab_ui_support STATIC
   ${DYNSYSLAB_VIEWER_NATIVE}/src/FolderTab.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotSeries.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotHeatmap.cpp
+  ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotColorbar.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/ComplexHeatmap.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/MathTextDrawing.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotCanvasInteraction.cpp
@@ -49,9 +50,9 @@ add_library(dynsyslab_ui_support STATIC
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotProbeOverlay.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/PlotPanelChrome.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/ArchiveCatalog.cpp
+  ${DYNSYSLAB_VIEWER_NATIVE}/src/SystemViewDefaults.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/ArchiveFocus.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/HierarchyCatalog.cpp
-  ${DYNSYSLAB_VIEWER_NATIVE}/src/LegacyHierarchyCatalog.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/Process.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/RuntimePaths.cpp
   ${DYNSYSLAB_VIEWER_NATIVE}/src/StartupDiagnostics.cpp

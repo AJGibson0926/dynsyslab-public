@@ -7,7 +7,6 @@ import tempfile
 import unittest
 
 from compute_workbench.contracts import solve_template
-from compute_workbench.execution import execute_job, plan_job
 from compute_workbench.native_workflow import (
     NativeWorkflow, NativeWorkflowCancelled, NativeWorkflowError,
     NativeWorkflowResourceLimit, find_library,
@@ -53,23 +52,6 @@ class NativeWorkflowAdapterTests(unittest.TestCase):
         self.assertEqual(plan["schema"], "dynsyslab.workflow-plan/v1")
         self.assertEqual(plan["controller"], "pid")
         self.assertEqual(plan["output_samples_per_trajectory"], 1001)
-
-    def test_public_execution_api_delegates_to_native(self):
-        job = solve_template()
-        job["time"].update({"stop": 0.02, "output_step": 0.01})
-        self.assertEqual(plan_job(job, ROOT)["schema"],
-                         "dynsyslab.workflow-plan/v1")
-        with tempfile.TemporaryDirectory() as directory:
-            previous = os.environ.get("DYNSYSLAB_ARCHIVE_DIR")
-            os.environ["DYNSYSLAB_ARCHIVE_DIR"] = directory
-            try:
-                result = execute_job(job, ROOT)
-            finally:
-                if previous is None:
-                    os.environ.pop("DYNSYSLAB_ARCHIVE_DIR", None)
-                else:
-                    os.environ["DYNSYSLAB_ARCHIVE_DIR"] = previous
-        self.assertEqual(result["execution_backend"], "native-cpp")
 
     def test_native_validation_error_keeps_status(self):
         with tempfile.TemporaryDirectory() as directory:

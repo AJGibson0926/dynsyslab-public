@@ -308,3 +308,14 @@ Validation covers default, constant and observable-scaled sensors, both workflow
 paths, and a complete sampled feedback solve. The latter checks at every sample
 that the archived measurement equals the actual state readout plus the direct
 term formed with `previous_applied_input`, including gated and limited commands.
+
+## Measured data and external control maps
+
+A measurement source that records no dynamical system (for example laboratory data) may drive a
+K-ROM trained on a physical system only when the estimation job sets
+`"measurement_origin": "external"`; the result records `measurement_origin` (`solve`, `external` or
+`unrecorded`). Likewise a control-map archive (`control_map_archive`) that records no K-ROM identity,
+such as a map fitted outside the suite, is refused unless the controller or KLQE settings say
+`"control_map_origin": "external"`; it is then attached to the loaded K-ROM and its provenance says
+it was attached without a recorded identity. A map that records the identity of a different K-ROM is
+always refused.

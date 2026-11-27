@@ -11,7 +11,7 @@
 #include <dynsyslab/core/CoordinateTransform.hpp>
 #include <dynsyslab/core/HistoryObservationArchive.hpp>
 #include <dynsyslab/core/FileDigest.hpp>
-#include <dynsyslab/core/EigenfunctionArchive.hpp>
+#include <dynsyslab/core/KoopmanArchive.hpp>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -33,9 +33,9 @@ core::Observable receiverMap(const SourceData& source, const json::Value& settin
     const auto& map=catalog.at(name);
     const double range=receiver.rangeMetres();
     const double radius0=system->configuration().parameters.at("equilibrium_radius_m");
-    if(source.dimension!=2)throw std::invalid_argument("Receiver pressures require RPE radius and velocity");
-    for(std::size_t row=0;row<source.samples;++row) {
-        const double radius=radius0*source.values[row*2];
+    if(source.dimension()!=2)throw std::invalid_argument("Receiver pressures require RPE radius and velocity");
+    for(std::size_t row=0;row<source.samples();++row) {
+        const double radius=radius0*source.values()[row*2];
         if(!(radius>0 && radius<range))
             throw std::invalid_argument("Receiver must be outside the bubble at every recorded state");
     }
@@ -57,11 +57,11 @@ namespace {
 core::CoordinateSeries measuredDerivativeCoordinates(const SourceData& source, const json::Value& settings,
                                                      json::Value& meta, bool physicalSource) {
     namespace c = dynsyslab::core;
-    const std::size_t n = source.samples;
+    const std::size_t n = source.samples();
     if (n < 5) throw std::invalid_argument("measured_derivatives needs at least 5 samples");
-    const double dt = source.time[1] - source.time[0];
+    const double dt = source.time()[1] - source.time()[0];
     for (std::size_t i = 2; i < n; ++i)
-        if (std::abs((source.time[i] - source.time[i - 1]) - dt) > 1e-9 * std::max(1.0, std::abs(dt)))
+        if (std::abs((source.time()[i] - source.time()[i - 1]) - dt) > 1e-9 * std::max(1.0, std::abs(dt)))
             throw std::invalid_argument("measured_derivatives needs uniformly sampled data");
     std::vector<std::vector<double>> channels, clean; std::vector<std::string> names;
     std::vector<std::vector<double>> reference;
@@ -75,7 +75,7 @@ core::CoordinateSeries measuredDerivativeCoordinates(const SourceData& source, c
             const auto& map = catalog.at(name);
             if (map.outputDimension() != 1) throw std::invalid_argument("measured_derivatives channels must be scalar: " + name);
             std::vector<double> y(n);
-            for (std::size_t i = 0; i < n; ++i) y[i] = map.evaluateReal(&source.values[i * source.dimension]).front();
+            for (std::size_t i = 0; i < n; ++i) y[i] = map.evaluateReal(&source.values()[i * source.dimension()]).front();
             return y;
         };
         for (const auto& name : observables) { channels.push_back(evaluate(name)); names.push_back(name); }
@@ -83,8 +83,8 @@ core::CoordinateSeries measuredDerivativeCoordinates(const SourceData& source, c
     } else {
         for (const auto& v : settings.at("columns").array()) {
             const double k = v.number(-1);
-            if (!(k >= 0) || k >= double(source.dimension) || k != std::floor(k)) throw std::invalid_argument("measured_derivatives column out of range");
-            std::vector<double> y(n); for (std::size_t i = 0; i < n; ++i) y[i] = source.values[i * source.dimension + std::size_t(k)];
+            if (!(k >= 0) || k >= double(source.dimension()) || k != std::floor(k)) throw std::invalid_argument("measured_derivatives column out of range");
+            std::vector<double> y(n); for (std::size_t i = 0; i < n; ++i) y[i] = source.values()[i * source.dimension() + std::size_t(k)];
             channels.push_back(y); names.push_back("q_" + std::to_string(std::size_t(k) + 1));
         }
     }
@@ -129,7 +129,7 @@ core::CoordinateSeries measuredDerivativeCoordinates(const SourceData& source, c
         for (const auto& name : names) { out.emplace_back(name); out.emplace_back(name + "_dot"); }
         meta.object()["coordinate_names"] = std::move(out);
     }
-    return {c::TimeSeries(source.time, values, 2 * m), c::TimeSeries(source.time, rates, 2 * m)};
+    return {c::TimeSeries(source.time(), values, 2 * m), c::TimeSeries(source.time(), rates, 2 * m)};
 }
 
 // One coordinate change computed in memory: the full archive (arrays and metadata) and the settings
@@ -166,9 +166,9 @@ CoordinateStep computeCoordinateStep(const SourceData& source,const json::Value&
     // History coordinates of an earlier coordinate archive take its stored exact rates.
     if(modelRates&&!physicalSource&&kind!="history")
         throw std::invalid_argument("System derivatives require physical-state source data");
-    const auto q=c::TimeSeries::view(source.time,source.values.data(),source.samples,source.dimension);
+    const auto q=c::TimeSeries::view(source.time(),source.values().data(),source.samples(),source.dimension());
     std::optional<c::TimeSeries> rates;
-    if(modelRates&&physicalSource)rates=c::TimeSeries(source.time,exactVelocities(source,false),source.dimension);
+    if(modelRates&&physicalSource)rates=c::TimeSeries(source.time(),exactVelocities(source,false),source.dimension());
     auto result=c::CoordinateSeries{q,rates};
     auto meta=json::parse(metadata(source,"coordinate-transform",label,""));
     meta.object()["coordinate_provider"]="measured";
@@ -182,9 +182,11 @@ CoordinateStep computeCoordinateStep(const SourceData& source,const json::Value&
     if(kind=="channels")result=channelCoordinates(source,settings,meta);
     if(kind=="columns")result=selectedColumns(source,settings,original,meta);
     if(kind=="measured_derivatives")result=measuredDerivativeCoordinates(source,settings,meta,physicalSource);
+    if(kind=="resample")result=resampledCoordinates(source,settings,meta);
+    if(kind=="delay_taps")result=delayTapCoordinates(source,settings,meta);
     std::optional<c::Observable> analyticMap;  // for the closure diagnostic
     if(eigenfunction) {
-        // An eigenfunction is an observable: {"object": eigenfunctions archive, "mode": j,
+        // An eigenfunction is an observable: {"object": krom archive, "mode": j,
         // "representation": "interpolation" | "expansion"}, evaluated along the series by
         // Observable::evaluate (at each state, or at each sample's window for a window map).
         const auto& spec=settings.at("eigenfunction");
@@ -192,8 +194,9 @@ CoordinateStep computeCoordinateStep(const SourceData& source,const json::Value&
         const auto mode=std::size_t(spec.at("mode").number(0));
         std::optional<c::ObservableCatalog> catalog;
         try{catalog=c::createSystem(systemConfiguration(source))->observableCatalog();}catch(const std::exception&){}
-        const auto psi=c::readEigenfunction(c::readNpz(objectPath),mode,spec.at("representation").string(),
-                                            catalog?&*catalog:nullptr);
+        const auto representation=spec.at("representation").string();
+        const auto all=c::loadKoopmanModel(objectPath).eigenfunction(mode,catalog?&*catalog:nullptr);
+        const auto psi=representation.empty()?all:all.as(representation);
         result=c::CoordinateSeries{psi.evaluate(q),std::nullopt};
         replayable=false;  // values depend on the eigenfunctions object as well as the source: keep them
         meta.object()["coordinate_names"]=json::Value::Array{"Re psi_"+std::to_string(mode),"Im psi_"+std::to_string(mode)};
@@ -259,8 +262,8 @@ CoordinateStep computeCoordinateStep(const SourceData& source,const json::Value&
         meta.object()["value_space"]="history-coordinates";
         meta.object()["coordinate_transform_identity"]=fitted.transform.identity();
         meta.object()["coordinate_transform_archive"]=std::filesystem::absolute(fitted.transformArchive).generic_u8string();
-        meta.object()["history_span"]=double(fitted.transform.basis().delays-1)*fitted.transform.sampleInterval();
-        meta.object()["warmup_samples"]=double(fitted.transform.basis().delays-1);
+        meta.object()["history_span"]=double(fitted.transform.basis().rows-1)*fitted.transform.sampleInterval();
+        meta.object()["warmup_samples"]=double(fitted.transform.basis().rows-1);
         meta.object()["controller_kind"]="none";
         meta.object()["input_history_source"]=std::filesystem::absolute(source.path).generic_u8string();
         json::Value::Array names,labels;
@@ -293,9 +296,9 @@ CoordinateStep computeCoordinateStep(const SourceData& source,const json::Value&
         }
         const auto measured=column?column->series
             :loadObservationSource(source.path,settings.at("measurement_array").string("echo_values"),observable);
-        auto measurement=c::TimeSeries::view(measured.time,measured.values.data(),measured.samples,measured.dimension);
+        auto measurement=c::TimeSeries::view(measured.time(),measured.values().data(),measured.samples(),measured.dimension());
         std::optional<c::TimeSeries> measurementRates;
-        if(column&&column->rates)measurementRates=c::TimeSeries(measured.time,*column->rates,1);
+        if(column&&column->rates)measurementRates=c::TimeSeries(measured.time(),*column->rates,1);
         else if(modelRates) {
             const auto map=c::createSystem(systemConfiguration(source))->observableCatalog().at(observable);
             // Exact reference is meaningful only when samples are this analytic observable.
@@ -313,15 +316,15 @@ CoordinateStep computeCoordinateStep(const SourceData& source,const json::Value&
         meta.object()["value_space"]="history-coordinates";
         meta.object()["coordinate_transform_identity"]=transform.identity();
         meta.object()["coordinate_transform_archive"]=std::filesystem::absolute(path).generic_u8string();
-        meta.object()["history_span"]=double(transform.basis().delays-1)*transform.sampleInterval();
+        meta.object()["history_span"]=double(transform.basis().rows-1)*transform.sampleInterval();
         meta.object()["derivative_evidence"]=modelRates?"frozen-projection-of-analytic-measurement-rate":"none";
-        meta.object()["warmup_samples"]=double(transform.basis().delays-1);
+        meta.object()["warmup_samples"]=double(transform.basis().rows-1);
         json::Value::Array names,labels;
         for(std::size_t j=1;j<=result.coordinates.componentCount();++j) {
             names.emplace_back("xi_"+std::to_string(j));labels.emplace_back("\\xi_{"+std::to_string(j)+"}");}
         if(settings.at("names").isNull())meta.object()["coordinate_names"]=std::move(names);
         meta.object()["coordinate_labels"]=std::move(labels);
-    } else if(kind!="identity"&&kind!="observable"&&kind!="channels"&&kind!="columns"&&kind!="measured_derivatives")throw std::invalid_argument("Unknown coordinate transform kind");
+    } else if(kind!="identity"&&kind!="observable"&&kind!="channels"&&kind!="columns"&&kind!="measured_derivatives"&&kind!="resample"&&kind!="delay_taps")throw std::invalid_argument("Unknown coordinate transform kind");
     const auto& z=result.coordinates;const auto n=z.sampleCount(),d=z.componentCount();
     c::NpzRecord archive;
     archive.arrays["time"]=c::NpyArray::fromDoubles({n},{z.timeData(),z.timeData()+n});
@@ -333,6 +336,7 @@ CoordinateStep computeCoordinateStep(const SourceData& source,const json::Value&
     // Retain the inverse when one exists (see CoordinateInverse.hpp).
     if(kind=="identity")recordCoordinateInverse(source,"exact","identity",z,meta,archive);
     else if(kind=="history")recordCoordinateInverse(source,"readout","",z,meta,archive);
+    else if(kind=="resample")recordCoordinateInverse(source,"none","resampling changes the clock; the source archive keeps the original samples",z,meta,archive);
     else {
         const auto& found=meta.at("coordinate_diagnostics").at("crossings").at("noninjective_witnesses");
         recordCoordinateInverse(source,"none",kind=="columns"?"a column subset discards the other coordinates"
@@ -340,8 +344,8 @@ CoordinateStep computeCoordinateStep(const SourceData& source,const json::Value&
             :"no inverse is implemented for this map",z,meta,archive);
     }
     // Measured coordinates of a forced record keep its inputs, so input_map can regress on them.
-    if(kind=="measured_derivatives"&&source.inputDimension&&source.inputs.size()==n*source.inputDimension)
-        archive.arrays["control_values"]=c::NpyArray::fromDoubles({n,source.inputDimension},source.inputs);
+    if(kind=="measured_derivatives"&&source.inputDimension()&&source.inputs().size()==n*source.inputDimension())
+        archive.arrays["control_values"]=c::NpyArray::fromDoubles({n,source.inputDimension()},source.inputs());
     if(result.derivatives)archive.arrays["coordinate_derivatives"]=c::NpyArray::fromDoubles({n,d},
         {result.derivatives->valuesData(),result.derivatives->valuesData()+n*d});
     // Optional display labels (TeX), one per coordinate, e.g. ["e","e'"].
@@ -368,7 +372,7 @@ std::filesystem::path runCoordinateStep(const SourceData& source,const json::Val
     namespace c=dynsyslab::core;
     auto step=computeCoordinateStep(source,settings,root,label);
     if(settings.at("store_values").boolean(false)||!step.replayable)
-        return publish(root,source,"coordinate-transform",label,std::move(step.archive));
+        return publishObject(root, source, dynsyslab::core::object_kind::timeSeries, "coordinate-transform",std::move(step.archive));
     auto meta=json::parse(step.archive.metadataJson());
     json::Value::Array arrays;
     for(const auto& [name,array]:step.archive.arrays)if(name!="metadata_json")arrays.emplace_back(name);
@@ -378,7 +382,7 @@ std::filesystem::path runCoordinateStep(const SourceData& source,const json::Val
         {"settings",step.recorded},{"label",label}};
     c::NpzRecord record;
     record.arrays["metadata_json"]=c::NpyArray::fromString(json::dump(meta));
-    return publish(root,source,"coordinate-transform",label,std::move(record));
+    return publishObject(root, source, dynsyslab::core::object_kind::timeSeries, "coordinate-transform",std::move(record));
 }
 
 // Replays a recorded coordinate change: checks that its source is unchanged, loads it (replaying it

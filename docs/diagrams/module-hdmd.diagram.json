@@ -17,7 +17,7 @@
        {"id": "load", "kind": "module", "label": "Load and crop", "icon": "time_series",
         "notes": {"loadSource": "npz → SourceData", "time_window": "[50, 80]"}},
        {"id": "hankel", "kind": "module", "label": "Hankel pair X, Y", "icon": "matrix",
-        "notes": {"window_alignment": "start (default)", "matrix_size": "2000 columns", "sampling_window": "20000",
+        "notes": {"window_alignment": "end (default)", "matrix_size": "2000 columns", "sampling_window": "20000",
                   "sample_stride": "10", "Y": "X shifted one sample"}},
        {"id": "svd", "kind": "module", "label": "Truncated SVD", "icon": "svd",
         "notes": {"X": "U Σ Vᵀ", "svd_tolerance": "1e-10", "rank": "0 (numerical rank)"}}

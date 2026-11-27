@@ -1,4 +1,6 @@
 #include "../src/AnimationPlayer.hpp"
+#include "../src/PlotSvg.hpp"
+#include "../src/DocumentPayload.hpp"
 #include <iterator>
 #include "dynsyslab_viewer/ViewerSession.hpp"
 #include "dynsyslab_viewer/TimeSeriesOverlay.hpp"
@@ -132,7 +134,8 @@ void viewerSessionUsage() {
     std::cout
         << "  Archive views (see docs/architecture/VIEWER_CLI.md):\n"
         << "  panels (--id id | --source path)              routes and panel labels of one archive\n"
-        << "  render (--id id | --source path) --output plot.png [--view route|label] [--panel label]\n"
+        << "  render (--id id | --source path) --output plot.png|plot.svg|plot.html [--view route|label] [--panel label]\n"
+        << "         .svg: the page as vector graphics; .html: every page, interactive (zoom, pan, readout), offline\n"
         << "         [--start t --stop t] [--coordinates dimensional|dimensionless] [--scale auto|linear|log|symlog]\n"
         << "         [--compare-source path | --compare-id id ...] [--label text ...] [--color #RRGGBB ...]\n"
         << "         [--title text] [--x-range low:high] [--y-range low:high] [--width 1100 --height 760] [--page 0 | --figure 0]\n"
@@ -234,10 +237,18 @@ int viewerSessionCommand(int argc,wchar_t** argv) {
             if (args.values.count(L"--parent")) parent = args.text(L"--parent");
             result = session.tree(args.text(L"--search"),parent);
         } else {
+            std::optional<dsl::Payload> document;
             if (!args.get(L"--id").empty() && !args.get(L"--source").empty())
                 throw std::runtime_error("Select with either --id or --source");
             if (!args.get(L"--id").empty()) session.select(args.text(L"--id"));
-            else if (!args.get(L"--source").empty()) session.selectSource(args.get(L"--source"));
+            else if (!args.get(L"--source").empty()) {
+                // A JSON result document (DocumentPayload.hpp) renders without being in the data tree.
+                try { session.selectSource(args.get(L"--source")); }
+                catch (const std::exception&) {
+                    if (!dsl::isDocumentPayloadFile(args.get(L"--source"))) throw;
+                    document = dsl::buildDocumentPayload(std::filesystem::path(args.get(L"--source")), args.text(L"--view"));
+                }
+            }
             else throw std::runtime_error("Select a data-tree item with --id or --source");
             if (command == L"phase-space") {
                 const auto options = args.get(L"--options").empty() ? dsl::json::Value{} : dsl::json::load(args.get(L"--options"));
@@ -283,9 +294,9 @@ int viewerSessionCommand(int argc,wchar_t** argv) {
                         }
                     }
                 }
-                if (session.selected().kind != "krom" && (args.values.count(L"--modes") || args.values.count(L"--complex-display")))
+                if (!document && session.selected().kind != "krom" && (args.values.count(L"--modes") || args.values.count(L"--complex-display")))
                     throw std::runtime_error("KROM options require a KROM data-tree item");
-                auto payload = session.workspace(request);
+                auto payload = document ? *document : session.workspace(request);
                 if (args.values.count(L"--title"))
                     for (auto& figure : payload.figures)
                         figure.title = payload.figures.size() == 1 ? args.text(L"--title")
@@ -334,11 +345,21 @@ int viewerSessionCommand(int argc,wchar_t** argv) {
                         options.figure = static_cast<std::size_t>(args.number(L"--figure",0));
                     }
                     const auto output = args.get(L"--output");
+                    const auto extension = std::filesystem::path(output).extension().wstring();
+                    if (extension == L".svg" || extension == L".html") {  // vector / interactive export
+                        const auto path = dynsyslab::core::prepareOutputFile(output,"--output");
+                        std::ofstream file(path, std::ios::binary);
+                        file << (extension == L".svg" ? dsl::payloadSvg(payload, options.page, options.width, options.height)
+                                                      : dsl::payloadHtml(payload, payload.tileName.empty() ? payload.view : payload.tileName));
+                        if (!file) throw std::runtime_error("Unable to write " + path.u8string());
+                        result = dsl::json::Value::Object{{"schema","dynsyslab.viewer.render/v1"},{"output",path.u8string()},
+                            {"format",extension == L".svg" ? "svg" : "html"},{"page_count",static_cast<double>(dsl::pageCount(payload))}};
+                    } else
                     result = dsl::renderPlotPng(payload, output.empty() ? std::filesystem::path(output)
                         : dynsyslab::core::prepareOutputFile(output,"--output"), options);
                 } else result = dsl::inspectPlot(payload,args.samples);
                 result.object()["workspace"] = workspace;
-                result.object()["selected_id"] = session.selected().id;
+                result.object()["selected_id"] = document ? std::string("document") : session.selected().id;
                 result.object()["focus_label"] = session.catalog().focusLabel;
             }
         }

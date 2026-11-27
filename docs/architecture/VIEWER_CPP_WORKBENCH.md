@@ -144,9 +144,9 @@ coordinate convention, preset, and equation fingerprint. Campaign, free,
 forced, KLQR-test, and Bψ-identification status remain tags and properties; they
 do not insert extra levels into the solve hierarchy. Batch, System, and Cluster
 nodes expose bounded aggregate plots, while Trajectory nodes expose the actual
-finished solution. The catalog reads both current `dynsyslab.hierarchy/v2`
-manifests and legacy `dynsyslab.hierarchy/v1` NPZ manifests without rewriting
-the archives. Draft and queued Solver jobs remain excluded.
+finished solution. The catalog reads `dynsyslab.hierarchy/v2` manifests
+without rewriting the archives; `dynsyslab.hierarchy/v1` NPZ manifests are no
+longer read. Draft and queued Solver jobs remain excluded.
 
 KROMs, spectra, control-map fits, error fields, and estimates remain
 independently selectable records beneath study groups. Their provenance links
@@ -323,11 +323,10 @@ Mode indices are local retained indices; mathematical labels preserve archived
 ancestral identities when available. Selection only changes the display.
 Permanent extraction remains a Post-processor operation.
 
-Native KoopmanModel evaluators handle polynomial and scattered models. The
-native evaluator-only import loadKoopmanEigenfunctionModel preserves explicit
-legacy conjugate modes while leaving control imports' independent-mode
-realization unchanged. Legacy system parameters are resolved only from
-explicit training provenance, validated against retained native states.
+Native KoopmanModel evaluators handle polynomial and scattered models; the
+Viewer loads every K-ROM through `loadKoopmanModel`, which follows its
+eigenfunctions reference. Training states come from the K-ROM, from its
+interpolation's own samples, or from the series its references lead to.
 Training timestamps are retained or recovered from aligned source trajectories
 with their coordinate conversion. Time resets and archived offsets keep
 trajectories separate. Missing timestamps use the archived time step with a
@@ -399,18 +398,17 @@ published to the primary archive.
 
 ### Native catalog and payload services
 
-Archive discovery is deliberately outside the display loop. Archiver owns
+Archive discovery is deliberately outside the display loop. The native archive service owns
 `archives/management/archive_index.sqlite`; every published NPZ has a compact
 row containing its archive-relative pointer, byte size, nanosecond modification
 stamp, SHA-256 content digest, array names, and a versioned compact metadata
 projection. Successful native solve and post-processing publication update just
 their new records. The
-`dynsyslab-cli archive index` and optional `python -m archiver.cli index`
-commands perform an explicit reconciliation for externally copied or legacy
+`dynsyslab-cli archive index` command performs an explicit reconciliation for externally copied or legacy
 files. Reconciliation uses path/size/mtime as its cheap test and only reopens and
 rehashes new or changed records. Missing pointers are removed transactionally.
 
-Viewer and the Solver/Post-processor trust this Archiver-owned database at
+Viewer and the Solver/Post-processor trust this archive-owned database at
 startup; opening either application does not scan or reconcile the archive
 backend. A generation-keyed presentation snapshot avoids reconstructing an
 unchanged catalogue on every launch. Archive publication advances the generation
@@ -611,7 +609,7 @@ libraries. It never locates or launches Python.
 
 ## Verification
 
-The native catalog/payload tests and optional Python compatibility tests verify:
+The native catalog/payload tests and the CLI contract tests verify:
 
 - catalog classification for trajectories, controlled attempts, KROMs,
   control-map errors, POD data, and campaigns, plus exclusion of non-renderable
@@ -790,7 +788,7 @@ inspector and plot into memory. It writes `workbench-check.json` and exits with 
 nonzero status on failure. `--background-refresh-count` is optional (0–20).
 The same project/archive/catalog/Mask overrides as ordinary Viewer startup apply.
 Unlike `--smoke-test`, this checks the actual tree and desktop event loop. Refresh
-uses the Archiver's normal index reconciliation; use a fixture archive for tests.
+uses the archive service's normal index reconciliation; use a fixture archive for tests.
 
 An explicitly supplied active Mask with no matching records displays an empty
 tree with its name. Malformed or unreadable existing Mask files report an error

@@ -53,6 +53,7 @@ json::Value analyticDescriptorJson(const dynsyslab::core::AnalyticSolutionDescri
 json::Value evaluateAnalyticQuery(const json::Value &request) {
     if (request.at("schema").string() != "dynsyslab.analytic-query/v1")
         throw std::invalid_argument("Unsupported analytic query schema");
+    if (request.at("operation").string() == "phase_cover") return evaluatePhaseCoverQuery(request);  // PhaseCoverQuery.cpp
     const auto &spec = request.at("system");
     dynsyslab::core::SystemConfiguration config;
     config.identifier = spec.at("name").string(spec.at("identifier").string());

@@ -173,7 +173,11 @@ Spectrum Spectrum::extract(const std::vector<std::size_t> &modes) const {
         result.rateAvailable_.push_back(rateAvailable_.at(j));
         if (!branches_.empty())
             result.branches_.push_back(branches_.at(j));
+        if (!residuals_.empty())
+            result.residuals_.push_back(residuals_.at(j));
     }
+    result.continuous_ = continuous_;
+    result.pseudospectrum_ = pseudospectrum_;
     result.pairConjugates();
     return result;
 }
@@ -187,6 +191,43 @@ Eigenvalue Spectrum::eigenvalue(std::size_t mode) const {
                : sampleInterval_ > 0 ? std::exp(e.continuous * sampleInterval_) : std::complex<double>{};
     if (mode < conjugates_.size()) e.conjugate = conjugates_[mode];
     return e;
+}
+Eigenpair Spectrum::pair(std::size_t mode) const {
+    return {eigenvalue(mode), std::nullopt, residual(mode)};
+}
+const std::optional<EigenpairResidual>& Spectrum::residual(std::size_t mode) const {
+    static const std::optional<EigenpairResidual> none;
+    if (mode >= size()) throw std::out_of_range("eigenpair index");
+    return residuals_.empty() ? none : residuals_[mode];
+}
+bool Spectrum::hasResiduals() const noexcept {
+    return std::any_of(residuals_.begin(), residuals_.end(), [](const auto& r) { return r.has_value(); });
+}
+Spectrum& Spectrum::setResidual(std::size_t mode, std::optional<EigenpairResidual> value) {
+    if (mode >= size()) throw std::out_of_range("eigenpair index");
+    if (value && (!std::isfinite(value->value) || value->value < 0 || value->definition.empty()))
+        throw std::invalid_argument("an eigenpair residual is a finite nonnegative value with a definition");
+    if (residuals_.empty()) residuals_.resize(size());
+    residuals_[mode] = std::move(value);
+    return *this;
+}
+Spectrum& Spectrum::setResiduals(const std::vector<double>& values, const std::string& definition, const std::string& scope) {
+    if (!values.empty() && values.size() != size()) throw std::invalid_argument("one residual per eigenpair");
+    residuals_.clear();
+    for (std::size_t j = 0; j < values.size(); ++j) setResidual(j, EigenpairResidual{values[j], definition, scope});
+    return *this;
+}
+Spectrum& Spectrum::setPseudospectrum(std::optional<Pseudospectrum> pseudospectrum) {
+    if (pseudospectrum) pseudospectrum->validate();
+    pseudospectrum_ = std::move(pseudospectrum);
+    return *this;
+}
+Spectrum& Spectrum::adoptEvidence(const Spectrum& other) {
+    if (other.size() != size()) throw std::invalid_argument("spectral evidence belongs to a spectrum of another size");
+    residuals_ = other.residuals_;
+    continuous_ = other.continuous_;
+    pseudospectrum_ = other.pseudospectrum_;
+    return *this;
 }
 std::vector<Eigenvalue> Spectrum::eigenvalues() const {
     std::vector<Eigenvalue> out;

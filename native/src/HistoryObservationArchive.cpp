@@ -7,25 +7,25 @@ namespace dynsyslab::core {
 void writeFrozenHistoryTransform(NpzRecord& a,const FrozenHistoryTransform& transform) {
     if(!(transform.sampleInterval()>0))throw std::invalid_argument("Published history transform needs a sample interval");
     const auto& b=transform.basis();
-    a.arrays["left_singular_vectors"]=NpyArray::fromDoubles({b.delays,b.rank},b.leftSingularVectors);
+    a.arrays["left_singular_vectors"]=NpyArray::fromDoubles({b.rows,b.rank},b.leftSingularVectors);
     a.arrays["singular_values"]=NpyArray::fromDoubles({b.rank},b.singularValues);
     if(!b.cumulativeEnergy.empty())a.arrays["cumulative_energy"]=NpyArray::fromDoubles({b.cumulativeEnergy.size()},b.cumulativeEnergy);
     a.arrays["observation_scale"]=NpyArray::fromDoubles({1},{b.observationScale});
     a.arrays["history_sample_time"]=NpyArray::fromDoubles({1},{transform.sampleInterval()});
-    a.arrays["history_delay_samples"]=NpyArray::fromDoubles({1},{double(b.delays)});
+    a.arrays["history_delay_samples"]=NpyArray::fromDoubles({1},{double(b.rows)});
     json::Value::Array coordinates;for(auto n:transform.retainedCoordinates())coordinates.emplace_back(double(n));
     a.arrays["history_transform_json"]=NpyArray::fromString(json::dump(json::Value::Object{
         {"schema","dynsyslab.history-transform/v1"},{"identity",transform.identity()},
         {"sample_interval",transform.sampleInterval()},{"retained_coordinates",coordinates},
         {"measurement",transform.measurement()},{"time_units",transform.timeUnits()},
         {"observation_units",transform.observationUnits()},
-        {"training_trajectories",double(b.trainingTrajectories)},{"training_windows",double(b.trainingWindows)},
-        {"total_hankel_energy",b.totalHankelEnergy}}));
+        {"training_trajectories",double(b.trajectories)},{"training_windows",double(b.columns)},
+        {"total_hankel_energy",b.totalEnergy}}));
 }
 FrozenHistoryTransform readFrozenHistoryTransform(const NpzRecord& a) {
     const auto& u=a.at("left_singular_vectors");
     if(u.shape.size()!=2)throw std::invalid_argument("History U must be delay x rank");
-    PooledHankelBasis b;b.delays=u.shape[0];b.rank=u.shape[1];b.leftSingularVectors=u.doubles();
+    HankelLeftBasis b;b.rows=u.shape[0];b.rank=u.shape[1];b.leftSingularVectors=u.doubles();
     b.singularValues=a.at("singular_values").doubles();
     if(a.contains("cumulative_energy"))b.cumulativeEnergy=a.at("cumulative_energy").doubles();
     if(a.contains("observation_scale"))b.observationScale=a.at("observation_scale").doubles().at(0);
@@ -41,8 +41,8 @@ FrozenHistoryTransform readFrozenHistoryTransform(const NpzRecord& a) {
         const auto spec=json::parse(a.at("history_transform_json").string());
         if(spec.at("schema").string()!="dynsyslab.history-transform/v1")throw std::invalid_argument("Unsupported history transform schema");
         for(const auto& n:spec.at("retained_coordinates").array())coordinates.push_back(size(n));
-        b.trainingTrajectories=size(spec.at("training_trajectories"));b.trainingWindows=size(spec.at("training_windows"));
-        b.totalHankelEnergy=spec.at("total_hankel_energy").number();
+        b.trajectories=size(spec.at("training_trajectories"));b.columns=size(spec.at("training_windows"));
+        b.totalEnergy=spec.at("total_hankel_energy").number();
         FrozenHistoryTransform transform(std::move(b),spec.at("sample_interval").number(-1),std::move(coordinates),
             spec.at("measurement").string(),spec.at("time_units").string(),spec.at("observation_units").string());
         if(transform.sampleInterval()<=0||transform.identity()!=spec.at("identity").string())
@@ -66,7 +66,7 @@ void saveFrozenHistoryTransform(const std::filesystem::path& path,
     const FrozenHistoryTransform& transform,const std::string& metadata) {
     auto meta=json::parse(metadata);
     if(!std::holds_alternative<json::Value::Object>(meta.storage()))throw std::invalid_argument("Transform metadata must be an object");
-    meta.object()["format"]="dynsyslab.derived/v1";meta.object()["method"]="history-transform";
+    meta.object()["schema"]="dynsyslab.derived/v1";meta.object()["method"]="history-transform";
     meta.object()["transform_identity"]=transform.identity();
     NpzRecord a;writeFrozenHistoryTransform(a,transform);
     a.arrays["metadata_json"]=NpyArray::fromString(json::dump(meta));writeNpzAtomic(path,a);

@@ -32,22 +32,22 @@ void testRecoveryAndEigenfunctions() {
     require(fit.hasEigenfunctions,"complex linear eigenfunctions missing");
     const auto predicted=core::predictDmdControl(fit,x,u,count);
     const auto values=core::evaluateDmdControlEigenfunctions(fit,x,count);
-    const auto polynomial=fit.expansion();
+    const auto polynomial=fit.eigenfunctionSet();
     for(std::size_t mode=0;mode<fit.rank;++mode)
-        require(std::abs(core::evaluatePolynomialEigenfunction(polynomial,mode,x.data())
+        require(std::abs(polynomial.functions.evaluate(mode,x.data())
             -values[mode])<1e-12,"DMDc shared polynomial export failed");
     require(values.size()==count*fit.rank,"wrong eigenfunction evaluation shape");
     for(std::size_t i=0;i<y.size();++i) require(std::abs(predicted[i]-y[i])<1e-12,"prediction API failed");
     for(std::size_t mode=0;mode<n;++mode) {
-        require(std::abs(fit.discreteEigenvalues[mode].real()-.91)<1e-12
-            &&std::abs(std::abs(fit.discreteEigenvalues[mode].imag())-.18)<1e-12,"wrong spectrum");
+        require(std::abs(fit.spectrum.values()[mode].real()-.91)<1e-12
+            &&std::abs(std::abs(fit.spectrum.values()[mode].imag())-.18)<1e-12,"wrong spectrum");
         for(std::size_t j=0;j<n;++j) {
             std::complex<double> la=0,lb=0;
             for(std::size_t i=0;i<n;++i) {
                 const auto l=fit.eigenfunctionCoefficients[mode*n+i];
                 la+=l*a[i*n+j]; lb+=l*b[i*m+j];
             }
-            require(std::abs(la-fit.discreteEigenvalues[mode]*fit.eigenfunctionCoefficients[mode*n+j])<1e-12,
+            require(std::abs(la-fit.spectrum.values()[mode]*fit.eigenfunctionCoefficients[mode*n+j])<1e-12,
                 "left eigenfunction coefficients violate L A = Lambda L");
             require(std::abs(lb-fit.modalInputMatrix[mode*m+j])<1e-12,"modal B is not L B");
         }
@@ -58,7 +58,7 @@ void testRecoveryAndEigenfunctions() {
                 next+=fit.eigenfunctionCoefficients[mode*n+j]*y[k*n+j];
                 drive+=fit.modalInputMatrix[mode*m+j]*u[k*m+j];
             }
-            require(std::abs(next-fit.discreteEigenvalues[mode]*psi-drive)<1e-12,
+            require(std::abs(next-fit.spectrum.values()[mode]*psi-drive)<1e-12,
                 "forced eigenfunction evolution failed");
         }
     }
@@ -83,7 +83,7 @@ void testRecoveryAndEigenfunctions() {
         state=core::predictDmdControl(fit,state,{0,0},1);
         const auto actual=core::evaluateDmdControlEigenfunctions(fit,state,1);
         for(std::size_t j=0;j<n;++j) {
-            ideal[j]*=fit.discreteEigenvalues[j];
+            ideal[j]*=fit.spectrum.values()[j];
             require(std::abs(actual[j]-ideal[j])<1e-12,"unforced semigroup law failed");
         }
     }
@@ -116,7 +116,7 @@ void testIdentifiabilityAndValidation() {
     rejects([&]{(void)core::dynamicModeDecompositionWithControl(x,y,u,5,1,1,1,opts);});
     // Zero eigenvalue is a valid discrete model; no log(0) in the core.
     const auto zero=core::dynamicModeDecompositionWithControl(x,u,u,5,1,1,1);
-    require(std::abs(zero.discreteEigenvalues[0])<1e-14,"zero discrete multiplier mishandled");
+    require(std::abs(zero.spectrum.values()[0])<1e-14,"zero discrete multiplier mishandled");
 }
 } // namespace
 int main() {

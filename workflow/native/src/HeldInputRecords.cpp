@@ -17,7 +17,7 @@ using Complex = std::complex<double>;
 enum class Hold { always, ifUnchanged };
 
 Hold holdKind(const SourceData& source, double dt, bool strict) {
-    if (source.inputs.size() == (source.samples - 1) * source.inputDimension) return Hold::always;
+    if (source.inputs().size() == (source.samples() - 1) * source.inputDimension()) return Hold::always;
     if (!strict) return Hold::always;  // legacy history regression: every pair uses u_k
     if (source.metadataJson.empty()) return Hold::ifUnchanged;
     const auto meta = json::parse(source.metadataJson);
@@ -32,11 +32,11 @@ Hold holdKind(const SourceData& source, double dt, bool strict) {
 
 bool insideWindow(const json::Value& window, const SourceData& s, std::size_t k) {
     if (window.isNull()) return true;
-    if (window.array().size() != s.dimension)
+    if (window.array().size() != s.dimension())
         throw std::invalid_argument("state_window needs one [low, high] pair per state component");
-    for (std::size_t j = 0; j < s.dimension; ++j) {
+    for (std::size_t j = 0; j < s.dimension(); ++j) {
         const auto& bounds = window.array().at(j).array();
-        const double value = s.values[k * s.dimension + j];
+        const double value = s.values()[k * s.dimension() + j];
         if (value < bounds.at(0).number() || value > bounds.at(1).number()) return false;
     }
     return true;
@@ -55,7 +55,7 @@ HeldInputRecords heldInputRecords(const c::KoopmanModel& model, const c::FrozenH
     if (history) out.sampleTime = transform->sampleInterval();
     for (const auto& path : sources) {
         const auto source = loadSource(path);
-        if (source.inputs.empty() || source.inputDimension != 1 || datasetDynamics(source) != "forced")
+        if (source.inputs().empty() || source.inputDimension() != 1 || datasetDynamics(source) != "forced")
             throw std::invalid_argument("input_map regression needs forced records with a scalar control history: "
                                         + path.generic_u8string());
         const double dt = uniformDeltaTime(source);
@@ -63,7 +63,7 @@ HeldInputRecords heldInputRecords(const c::KoopmanModel& model, const c::FrozenH
         if (std::abs(dt - out.sampleTime) > 1e-8 * out.sampleTime)
             throw std::invalid_argument(history ? "forced record must be sampled on the history transform clock"
                                                 : "forced records must share one sample time");
-        if (external && source.dimension != model.coordinateDimension())
+        if (external && source.dimension() != model.coordinateDimension())
             throw std::invalid_argument("forced record coordinates differ from the KROM coordinates");
         if (!history && !external) c::requireCompatibleSystems(model.systemConfiguration(), systemConfiguration(source));
         const auto hold = holdKind(source, dt, strictHold);
@@ -76,25 +76,25 @@ HeldInputRecords heldInputRecords(const c::KoopmanModel& model, const c::FrozenH
             projector.emplace(*transform);
         }
         const auto lift = [&](std::size_t k) -> std::optional<std::vector<Complex>> {
-            const double* row = source.values.data() + k * source.dimension;
-            if (std::any_of(row, row + source.dimension, [](double v) { return !std::isfinite(v); })) return std::nullopt;
+            const double* row = source.values().data() + k * source.dimension();
+            if (std::any_of(row, row + source.dimension(), [](double v) { return !std::isfinite(v); })) return std::nullopt;
             if (history) {
-                const auto q = projector->push(source.time[k], measurement->evaluateReal(row).front());
+                const auto q = projector->push(source.time()[k], measurement->evaluateReal(row).front());
                 if (!q) return std::nullopt;
                 return model.evaluateCoordinates(q->data());
             }
             return external ? model.evaluateCoordinates(row) : model.evaluate(row);
         };
-        const std::size_t inputRows = source.inputs.size();
+        const std::size_t inputRows = source.inputs().size();
         std::optional<std::vector<Complex>> previous;
         std::size_t previousIndex = 0;
-        for (std::size_t k = 0; k < source.samples; ++k) {
+        for (std::size_t k = 0; k < source.samples(); ++k) {
             auto psi = lift(k);
             if (!psi) { previous.reset(); continue; }
-            if (previous && previousIndex + 1 == k && source.time[previousIndex] >= fitStart
+            if (previous && previousIndex + 1 == k && source.time()[previousIndex] >= fitStart
                 && insideWindow(window, source, previousIndex) && insideWindow(window, source, k)) {
-                const double u = previousIndex < inputRows ? source.inputs[previousIndex] : 0.0;
-                const bool changed = hold == Hold::ifUnchanged && k < inputRows && source.inputs[k] != u;
+                const double u = previousIndex < inputRows ? source.inputs()[previousIndex] : 0.0;
+                const bool changed = hold == Hold::ifUnchanged && k < inputRows && source.inputs()[k] != u;
                 if (changed) ++out.droppedAtInputChange;
                 else if (std::isfinite(u)) out.rows.push_back({*previous, *psi, u});
             }

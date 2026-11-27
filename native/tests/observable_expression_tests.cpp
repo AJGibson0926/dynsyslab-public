@@ -23,11 +23,9 @@ void checkForceKoopmanCoordinates() {
             config.parameters={{"mass_kg",2.3},{"length_m",.7},{"damping_n_m_s",.19}};
         const auto system=createSystem(config);
         const auto observable=system->observableCatalog().at(item.second);
-        KoopmanSINDyResult fixture; fixture.stateDimension=1; fixture.dynamicalStateDimension=2;
-        fixture.featureCount=1; fixture.center={.3}; fixture.scale={1.7}; fixture.exponents={1};
-        fixture.coefficients={1.}; fixture.continuousEigenvalues={-1.};
-        fixture.coordinateObservableNames={item.second};
-        fixture.coordinateObservableDefinition=json::dump(observable.expressionDefinition());
+        auto domain=FunctionDomain::fromStateMap(observable); domain.names={item.second};
+        const auto fixture=polynomialEigenfunctions(1,{1},{1.},Spectrum::fromContinuousRates({-1.}),
+            {.3},{1.7},std::move(domain));
         const KoopmanModel model(fixture,config);
         const double state[]{.8,-.4};
         const auto j=observable.jacobian(state); const auto b=system->inputMatrix(state);
@@ -35,7 +33,7 @@ void checkForceKoopmanCoordinates() {
         close(model.exactControlMap(state)[0].real(),(j[0].real()*b[0]+j[1].real()*b[1])/1.7);
         const auto path=std::filesystem::temp_directory_path()/("dynsyslab-force-krom-"
             +item.second+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".npz");
-        savePolynomialKoopmanModel(path,model);
+        saveKoopmanModel(path,model);
         const auto restored=loadKoopmanModel(path); std::filesystem::remove(path);
         close(restored.evaluate(state)[0].real(),model.evaluate(state)[0].real());
         close(restored.exactControlMap(state)[0].real(),model.exactControlMap(state)[0].real());
@@ -73,10 +71,9 @@ int main(){try{
         const auto dj=dt.jacobian(x);close(dt2.evaluateReal(x)[0],dj[0].real()*velocity[0]+dj[1].real()*velocity[1]);
         close(Observable::fromExpressionDefinition(echo.expressionDefinition()).evaluateReal(x)[0],echo.evaluateReal(x)[0]);
     }
-    KoopmanSINDyResult fit;fit.stateDimension=1;fit.dynamicalStateDimension=2;fit.featureCount=1;
-    fit.center={0};fit.scale={1};fit.exponents={1};fit.coefficients={1.};fit.continuousEigenvalues={-1.};
-    fit.coordinateObservableNames={"far_field_acoustic_echo"};
-    fit.coordinateObservableDefinition=json::dump(echo.expressionDefinition());
+    auto echoDomain=FunctionDomain::fromStateMap(echo);echoDomain.names={"far_field_acoustic_echo"};
+    const auto fit=polynomialEigenfunctions(1,{1},{1.},Spectrum::fromContinuousRates({-1.}),{0},{1},
+        std::move(echoDomain));
     auto model=std::make_shared<KoopmanModel>(fit,config);
     const std::vector<double> target{1.1,.2};const auto targetEcho=echo.evaluateReal(target.data());
     KoopmanLQRController stateReference(model,{2.},{.1},[target](double){return target;});
@@ -87,7 +84,7 @@ int main(){try{
     close(b[0].real(),j[0].real()*input[0]+j[1].real()*input[1]);
     const auto file=std::filesystem::temp_directory_path()/("dynsyslab-expression-"
         +std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".npz");
-    savePolynomialKoopmanModel(file,*model);
+    saveKoopmanModel(file,*model);
     const auto restored=loadKoopmanModel(file);
     std::filesystem::remove(file);
     close(restored.evaluate(probe)[0].real(),model->evaluate(probe)[0].real());

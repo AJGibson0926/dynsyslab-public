@@ -111,7 +111,7 @@ strings; floating JSON numbers are rejected there. Exponents are nonnegative
 JSON integers. A vector field is a list of d such polynomials. Rationalizing
 measured floating coefficients is an explicit caller decision, not evidence
 that the fitted model is exact. These proof objects are distinct from the
-canonical floating-point `PolynomialEigenfunctionSet` runtime bank.
+canonical floating-point eigenfunctions (`EigenfunctionFitResult`, a `FunctionExpansion` and its `Spectrum`).
 
 Actions and required fields:
 

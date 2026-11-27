@@ -1,58 +1,135 @@
 #include <dynsyslab/core/Integrator.hpp>
 
 #include "IntegratorBackend.hpp"
+#include <dynsyslab/core/ControllerCallLog.hpp>
 #include <dynsyslab/core/Execution.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 
+// One driver for every native ODE method: the output clock (uniform or arbitrary), the
+// zero-order-hold control clock, validity and magnitude guards, the per-trajectory step
+// budget, checkpoints and pause, and the failure policy. Method references are listed in
+// Integrator.hpp and docs/architecture/NATIVE_SOLVER.md.
+
 namespace dynsyslab::core {
-namespace {
+namespace detail {
 
-struct StepContext {
-    ODESystem& system;
-    const ScalarControlPolicy& controller;
-    const double* heldInput{};
-    std::size_t trajectory{};
-    IntegrationStatistics& statistics;
-    const ExecutionContext* execution{};
-
-    void rhs(double time, const double* state, double* derivative) {
-        if (execution) execution->checkpoint();
-        if (controller) {
-            double input{};
-            if (controller.evaluation == ControlEvaluationMode::sampled)
-                input = *heldInput;
-            else {
-                input = controller.value(trajectory, time, state);
-                ++statistics.controllerCalls;
-            }
-            system.rhsWithInput(time, state, input, derivative);
+void RhsContext::rhs(double time, const double* state, double* derivative) {
+    if (execution) execution->checkpoint();
+    if (control) {
+        if (control.evaluation == ControlEvaluationMode::sampled) input = heldInput;
+        else {
+            control.evaluate(trajectory, time, state, input.data());
+            ++statistics.controllerCalls;
+            if (options.controllerCallLog)
+                options.controllerCallLog->record(trajectory, time, state, input.data(),
+                    ControllerCallLog::rightHandSide, ControllerCallLog::pending);
+        }
+        if (control.additiveMatrix.empty()) {
+            system.rhsWithInput(time, state, input[0], derivative);
         } else {
             system.rhs(time, state, derivative);
+            const std::size_t n = system.descriptor().stateDimension, m = input.size();
+            for (std::size_t row = 0; row < n; ++row)
+                for (std::size_t column = 0; column < m; ++column)
+                    derivative[row] += control.additiveMatrix[row * m + column] * input[column];
         }
-        ++statistics.rightHandSideCalls;
+    } else {
+        system.rhs(time, state, derivative);
     }
-};
+    ++statistics.rightHandSideCalls;
+}
+
+void RhsContext::accept(double time, const double* state) const {
+    if (system.invalid(time, state))
+        throw std::runtime_error("native system left its validity domain");
+    const std::size_t n = system.descriptor().stateDimension;
+    double magnitude = 0.0;
+    for (std::size_t index = 0; index < n; ++index) {
+        const double value = state[index];
+        if (!std::isfinite(value))
+            throw std::runtime_error("state guard: non-finite state component "
+                                     + std::to_string(index));
+        if (index < options.stateLowerBounds.size() && value < options.stateLowerBounds[index])
+            throw std::runtime_error("state guard: component " + std::to_string(index)
+                                     + " fell below its lower bound");
+        if (index < options.stateUpperBounds.size() && value > options.stateUpperBounds[index])
+            throw std::runtime_error("state guard: component " + std::to_string(index)
+                                     + " exceeded its upper bound");
+        magnitude = std::max(magnitude, std::abs(value));
+    }
+    if (options.maximumStateMagnitude > 0.0 && magnitude > options.maximumStateMagnitude)
+        throw std::runtime_error("state guard: state magnitude exceeded its limit");
+}
+
+void RhsContext::countStep(bool accepted) {
+    if (trajectorySteps >= options.maximumInternalSteps)
+        throw std::runtime_error("native integrator exceeded its step budget (max_internal_steps)");
+    ++trajectorySteps;
+    if (accepted) ++statistics.acceptedSteps; else ++statistics.rejectedSteps;
+    // Right-hand-side calls since the previous decision belong to the step decided now.
+    if (options.controllerCallLog)
+        options.controllerCallLog->resolvePending(accepted ? ControllerCallLog::accepted
+                                                           : ControllerCallLog::rejected);
+}
+
+}  // namespace detail
+
+namespace {
+
+std::string lower(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char item) { return static_cast<char>(std::tolower(item)); });
+    return value;
+}
 
 void validate(const ODESystem& system, const std::vector<double>& initialStates,
               std::size_t trajectories, const IntegrationOptions& options) {
-    if (!trajectories || initialStates.size() != trajectories * system.descriptor().stateDimension)
+    const std::size_t n = system.descriptor().stateDimension;
+    if (!trajectories || initialStates.size() != trajectories * n)
         throw std::invalid_argument("initial states do not match the native system dimension");
     if (!std::isfinite(options.initialTime) || !std::isfinite(options.finalTime)
         || options.finalTime <= options.initialTime)
         throw std::invalid_argument("integration requires finite initialTime < finalTime");
-    if (!std::isfinite(options.outputStep) || options.outputStep <= 0.0)
+    if (options.outputTimes.empty()
+        && (!std::isfinite(options.outputStep) || options.outputStep <= 0.0))
         throw std::invalid_argument("integration outputStep must be positive and finite");
+    if (!options.outputTimes.empty()) {
+        if (options.outputTimes.size() < 2 || options.outputTimes.front() != options.initialTime
+            || options.outputTimes.back() != options.finalTime)
+            throw std::invalid_argument(
+                "integration outputTimes must start at initialTime and end at finalTime");
+        for (std::size_t index = 1; index < options.outputTimes.size(); ++index)
+            if (!(options.outputTimes[index] > options.outputTimes[index - 1]))
+                throw std::invalid_argument("integration outputTimes must be strictly increasing");
+    }
     if (!(options.relativeTolerance > 0.0) || !(options.absoluteTolerance > 0.0))
         throw std::invalid_argument("integration tolerances must be positive");
+    if (!options.maximumInternalSteps)
+        throw std::invalid_argument("integration step budget must be positive");
+    if ((!options.stateLowerBounds.empty() && options.stateLowerBounds.size() != n)
+        || (!options.stateUpperBounds.empty() && options.stateUpperBounds.size() != n))
+        throw std::invalid_argument("state guard bounds must cover every state");
+    if (options.checkpointInterval < 0.0 || !std::isfinite(options.checkpointInterval))
+        throw std::invalid_argument("checkpoint interval must be nonnegative");
 }
 
-void validateControl(const ScalarControlPolicy& control) {
+void validateControl(const ControlPolicy& control, std::size_t dimension) {
     if (!control) return;
+    if (!control.inputDimension) throw std::invalid_argument("control input dimension is zero");
+    if (control.vector && control.value)
+        throw std::invalid_argument("a control policy has either a scalar or a vector law");
+    if (control.additiveMatrix.empty() && control.inputDimension != 1)
+        throw std::invalid_argument(
+            "a vector input needs additive-state actuation (an n x m additiveMatrix)");
+    if (!control.additiveMatrix.empty()
+        && control.additiveMatrix.size() != dimension * control.inputDimension)
+        throw std::invalid_argument("additive actuation matrix must be state x input");
     if (control.evaluation == ControlEvaluationMode::sampled) {
         if (!std::isfinite(control.sampleTime) || control.sampleTime <= 0.0)
             throw std::invalid_argument("sampled control requires a positive finite sampleTime");
@@ -67,39 +144,21 @@ std::size_t checkedProduct(std::size_t left, std::size_t right) {
     return left * right;
 }
 
-std::size_t checkedSum(std::size_t left, std::size_t right) {
-    if (left > (std::numeric_limits<std::size_t>::max)() - right)
-        throw ExecutionLimitExceeded("native solution size overflows addressable memory");
-    return left + right;
-}
-
-std::size_t outputSamples(const IntegrationOptions& options) {
-    const long double count = std::ceil(
-        static_cast<long double>(options.finalTime - options.initialTime)
-        / static_cast<long double>(options.outputStep)) + 1.0L;
-    if (count > static_cast<long double>((std::numeric_limits<std::size_t>::max)()))
-        throw ExecutionLimitExceeded("native solution sample count is not addressable");
-    return static_cast<std::size_t>(count);
-}
-
-void requireSolutionMemory(const ExecutionContext* execution,
-                           std::size_t trajectories, std::size_t samples,
-                           std::size_t dimension, bool controlled) {
-    if (!execution || !execution->limits.maximumMemoryBytes) return;
-    const auto stateValues = checkedProduct(checkedProduct(trajectories, samples), dimension);
-    const auto controlValues = controlled ? checkedProduct(trajectories, samples) : 0;
-    const auto totalValues = checkedSum(checkedSum(stateValues, samples), controlValues);
-    execution->requireMemory(
-        checkedProduct(totalValues, sizeof(double)),
-        "ODE solution buffers");
-}
-
-void evaluateControl(const ScalarControlLaw& controller, std::size_t trajectory,
-                     double time, const double* state, double& output,
-                     IntegrationStatistics& statistics) {
-    if (!controller) return;
-    output = controller(trajectory, time, state);
-    ++statistics.controllerCalls;
+// Uniform grid t0 + k h, with the final time appended unless it lies on the grid.
+std::vector<double> outputClock(const IntegrationOptions& options) {
+    if (!options.outputTimes.empty()) return options.outputTimes;
+    const long double duration = static_cast<long double>(options.finalTime) - options.initialTime;
+    const long double ratio = duration / options.outputStep;
+    if (ratio > 1.0e15L) throw ExecutionLimitExceeded("native solution sample count is not addressable");
+    const auto intervals = static_cast<std::size_t>(std::floor(
+        ratio + 32.0L * std::numeric_limits<double>::epsilon() * std::max<long double>(1.0L, ratio)));
+    std::vector<double> result(intervals + 1);
+    for (std::size_t index = 0; index <= intervals; ++index)
+        result[index] = std::min(options.initialTime + index * options.outputStep, options.finalTime);
+    if (result.back() < options.finalTime - 16.0 * std::numeric_limits<double>::epsilon()
+        * std::max(1.0, std::abs(options.finalTime))) result.push_back(options.finalTime);
+    else result.back() = options.finalTime;
+    return result;
 }
 
 double tickTime(double origin, double period, std::size_t tick) {
@@ -116,95 +175,56 @@ bool reached(double time, double target) {
     return time + tolerance >= target;
 }
 
-void fixedStep(StepContext& context, IntegrationMethod method, double time, double dt,
-               std::vector<double>& state) {
-    const std::size_t n = state.size();
-    std::vector<double> k1(n), k2(n), k3(n), k4(n), work(n);
-    context.rhs(time, state.data(), k1.data());
-    if (method == IntegrationMethod::euler) {
-        for (std::size_t i = 0; i < n; ++i) state[i] += dt * k1[i];
-    } else {
-        for (std::size_t i = 0; i < n; ++i) work[i] = state[i] + 0.5*dt*k1[i];
-        context.rhs(time + 0.5*dt, work.data(), k2.data());
-        for (std::size_t i = 0; i < n; ++i) work[i] = state[i] + 0.5*dt*k2[i];
-        context.rhs(time + 0.5*dt, work.data(), k3.data());
-        for (std::size_t i = 0; i < n; ++i) work[i] = state[i] + dt*k3[i];
-        context.rhs(time + dt, work.data(), k4.data());
-        for (std::size_t i = 0; i < n; ++i)
-            state[i] += dt * (k1[i] + 2.0*k2[i] + 2.0*k3[i] + k4[i]) / 6.0;
-    }
-    ++context.statistics.acceptedSteps;
-}
-
-double adaptiveStep(StepContext& context, double time, double dt,
-                    std::vector<double>& state, double relativeTolerance,
-                    double absoluteTolerance, bool& accepted) {
-    const std::size_t n = state.size();
-    std::vector<double> k1(n), k2(n), k3(n), k4(n), k5(n), k6(n), k7(n), work(n),
-        fifth(n), fourth(n);
-    context.rhs(time, state.data(), k1.data());
-    for (std::size_t i=0;i<n;++i) work[i]=state[i]+dt*(1.0/5.0)*k1[i];
-    context.rhs(time+dt*(1.0/5.0),work.data(),k2.data());
-    for (std::size_t i=0;i<n;++i) work[i]=state[i]+dt*(3.0/40.0*k1[i]+9.0/40.0*k2[i]);
-    context.rhs(time+dt*(3.0/10.0),work.data(),k3.data());
-    for (std::size_t i=0;i<n;++i) work[i]=state[i]+dt*(44.0/45.0*k1[i]-56.0/15.0*k2[i]+32.0/9.0*k3[i]);
-    context.rhs(time+dt*(4.0/5.0),work.data(),k4.data());
-    for (std::size_t i=0;i<n;++i) work[i]=state[i]+dt*(19372.0/6561.0*k1[i]-25360.0/2187.0*k2[i]+64448.0/6561.0*k3[i]-212.0/729.0*k4[i]);
-    context.rhs(time+dt*(8.0/9.0),work.data(),k5.data());
-    for (std::size_t i=0;i<n;++i) work[i]=state[i]+dt*(9017.0/3168.0*k1[i]-355.0/33.0*k2[i]+46732.0/5247.0*k3[i]+49.0/176.0*k4[i]-5103.0/18656.0*k5[i]);
-    context.rhs(time+dt,work.data(),k6.data());
-    for (std::size_t i=0;i<n;++i) fifth[i]=state[i]+dt*(35.0/384.0*k1[i]+500.0/1113.0*k3[i]+125.0/192.0*k4[i]-2187.0/6784.0*k5[i]+11.0/84.0*k6[i]);
-    context.rhs(time+dt,fifth.data(),k7.data());
-    double error = 0.0;
-    for (std::size_t i=0;i<n;++i) {
-        fourth[i]=state[i]+dt*(5179.0/57600.0*k1[i]+7571.0/16695.0*k3[i]+393.0/640.0*k4[i]-92097.0/339200.0*k5[i]+187.0/2100.0*k6[i]+1.0/40.0*k7[i]);
-        const double scale=absoluteTolerance+relativeTolerance*std::max(std::abs(state[i]),std::abs(fifth[i]));
-        error=std::max(error,std::abs(fifth[i]-fourth[i])/scale);
-    }
-    accepted = error <= 1.0;
-    const double factor = error == 0.0 ? 5.0
-        : std::clamp(0.9*std::pow(error,-0.2),0.2,5.0);
-    if (accepted) state = std::move(fifth);
-    return dt * factor;
-}
-
-void integrateInterval(StepContext& context, const IntegrationOptions& options,
-                       double start, double end, double& candidateStep,
-                       std::vector<double>& state) {
-    double time = start;
-    if (options.method != IntegrationMethod::dormandPrince45) {
-        fixedStep(context, options.method, time, end - start, state);
-        return;
-    }
-    while (time < end) {
-        if (context.statistics.acceptedSteps + context.statistics.rejectedSteps
-            >= options.maximumInternalSteps)
-            throw std::runtime_error("native adaptive integrator exceeded maximumInternalSteps");
-        const double remaining = end - time;
-        const double roundoff = 16.0 * std::numeric_limits<double>::epsilon()
-            * std::max({1.0, std::abs(time), std::abs(end)});
-        if (remaining <= roundoff) break;
-        const double maximum = options.maximumStep > 0.0 ? options.maximumStep : options.outputStep;
-        const double dt = std::min({candidateStep, maximum, remaining});
-        if (dt <= std::numeric_limits<double>::epsilon() * std::max(1.0, std::abs(time)))
-            throw std::runtime_error("native adaptive integrator step underflow");
-        bool accepted = false;
-        const double suggested = adaptiveStep(context, time, dt, state,
-            options.relativeTolerance, options.absoluteTolerance, accepted);
-        candidateStep = std::min(maximum, suggested);
-        if (accepted) {
-            time += dt;
-            if (end - time <= roundoff) time = end;
-            ++context.statistics.acceptedSteps;
-            if (context.system.invalid(time, state.data()))
-                throw std::runtime_error("native system left its validity domain");
-        } else {
-            ++context.statistics.rejectedSteps;
-        }
+std::unique_ptr<detail::Stepper> makeStepper(const IntegrationOptions& options, std::size_t n) {
+    switch (options.method) {
+    case IntegrationMethod::radau5: return detail::makeRadauStepper(options, n);
+    case IntegrationMethod::bdf: case IntegrationMethod::adams: case IntegrationMethod::lsoda:
+        return detail::makeCvodeStepper(options, n);
+    default: return detail::makeExplicitStepper(options, n);
     }
 }
 
 }  // namespace
+
+IntegrationMethod integrationMethodFromName(const std::string& raw) {
+    const auto name = lower(raw);
+    if (name == "euler") return IntegrationMethod::euler;
+    if (name == "rk4") return IntegrationMethod::rk4;
+    if (name == "rk23" || name == "bs23" || name == "ode23") return IntegrationMethod::bogackiShampine23;
+    if (name == "rk45" || name == "dopri5" || name == "ode45") return IntegrationMethod::dormandPrince45;
+    if (name == "dop853") return IntegrationMethod::dormandPrince853;
+    if (name == "radau" || name == "radau5" || name == "radauiia") return IntegrationMethod::radau5;
+    if (name == "bdf" || name == "ode15s" || name == "cvode_bdf") return IntegrationMethod::bdf;
+    if (name == "adams" || name == "cvode_adams" || name == "ode113") return IntegrationMethod::adams;
+    if (name == "lsoda") return IntegrationMethod::lsoda;
+    throw std::invalid_argument("unknown ODE method '" + raw
+        + "'; native methods: Euler, RK4, RK23, RK45, DOP853, Radau, BDF, Adams, LSODA");
+}
+
+std::string integrationMethodName(IntegrationMethod method) {
+    switch (method) {
+    case IntegrationMethod::euler: return "Euler";
+    case IntegrationMethod::rk4: return "RK4";
+    case IntegrationMethod::bogackiShampine23: return "RK23";
+    case IntegrationMethod::dormandPrince45: return "RK45";
+    case IntegrationMethod::dormandPrince853: return "DOP853";
+    case IntegrationMethod::radau5: return "Radau";
+    case IntegrationMethod::bdf: return "BDF";
+    case IntegrationMethod::adams: return "Adams";
+    case IntegrationMethod::lsoda: return "LSODA";
+    }
+    return "unknown";
+}
+
+IntegrationFailure::IntegrationFailure(const std::string& reason, NativeSolution partial)
+    : std::runtime_error(reason),
+      partial_(std::make_shared<const NativeSolution>(std::move(partial))) {}
+
+void ControlPolicy::evaluate(std::size_t trajectory, double time, const double* state,
+                             double* input) const {
+    if (vector) vector(trajectory, time, state, input);
+    else input[0] = value(trajectory, time, state);
+}
 
 const double* NativeSolution::state(std::size_t trajectory, std::size_t sample) const {
     if (trajectory >= trajectoryCount || sample >= sampleCount)
@@ -216,136 +236,201 @@ double NativeSolution::control(std::size_t trajectory, std::size_t sample) const
     if (controlValues.empty()) throw std::logic_error("native solution has no control history");
     if (trajectory >= trajectoryCount || sample >= sampleCount)
         throw std::out_of_range("native solution control index");
-    return controlValues[trajectory * sampleCount + sample];
+    return controlValues[(trajectory * sampleCount + sample) * inputDimension];
 }
 
 TimeSeries NativeSolution::trajectorySeries(std::size_t trajectory) const {
     if (trajectory >= trajectoryCount) throw std::out_of_range("trajectory time series index");
-    return TimeSeries::view(time,
-        values.data() + trajectory * sampleCount * stateDimension,
-        sampleCount, stateDimension);
+    return TimeSeries::view(time, values.data() + trajectory * sampleCount * stateDimension,
+                            sampleCount, stateDimension);
 }
 
 TimeSeries NativeSolution::controlSeries(std::size_t trajectory) const {
     if (controlValues.empty()) throw std::logic_error("solution has no control time series");
     if (trajectory >= trajectoryCount) throw std::out_of_range("control time series index");
-    return TimeSeries::view(time, controlValues.data() + trajectory * sampleCount,
-                            sampleCount, 1);
+    return TimeSeries::view(time, controlValues.data() + trajectory * sampleCount * inputDimension,
+                            sampleCount, inputDimension);
 }
 
 NativeSolution integrate(ODESystem& system, const std::vector<double>& initialStates,
                          std::size_t trajectoryCount, const IntegrationOptions& options,
                          ScalarControlLaw controller, ProgressCallback progress,
                          const ExecutionContext* execution) {
+    ControlPolicy policy;
+    policy.value = std::move(controller);
     return integrateControlled(system, initialStates, trajectoryCount, options,
-        {std::move(controller), ControlEvaluationMode::continuousRhs, 0.0},
-        std::move(progress), execution);
+                               std::move(policy), std::move(progress), execution);
 }
 
 NativeSolution integrateControlled(
     ODESystem& system, const std::vector<double>& initialStates,
     std::size_t trajectoryCount, const IntegrationOptions& options,
-    ScalarControlPolicy controller, ProgressCallback progress,
+    ControlPolicy controller, ProgressCallback progress,
     const ExecutionContext* execution) {
+    const std::size_t n = system.descriptor().stateDimension;
     validate(system, initialStates, trajectoryCount, options);
-    validateControl(controller);
+    validateControl(controller, n);
     if (execution) execution->checkpoint();
-    if (options.method == IntegrationMethod::bdf)
-        return detail::integrateBDF(system, initialStates, trajectoryCount, options,
-                                    std::move(controller), std::move(progress), execution);
+    const std::size_t m = controller ? controller.inputDimension : 1;
     NativeSolution result;
+    result.time = outputClock(options);
     result.trajectoryCount = trajectoryCount;
-    result.stateDimension = system.descriptor().stateDimension;
+    result.stateDimension = n;
+    result.inputDimension = m;
     result.coordinateSystem = system.descriptor().preferredCoordinates;
-    result.sampleCount = outputSamples(options);
-    requireSolutionMemory(execution, trajectoryCount, result.sampleCount,
-                          result.stateDimension, static_cast<bool>(controller));
-    result.time.resize(result.sampleCount);
-    result.values.resize(trajectoryCount * result.sampleCount * result.stateDimension);
-    if (controller) result.controlValues.resize(trajectoryCount * result.sampleCount);
+    result.sampleCount = result.time.size();
+    if (execution && execution->limits.maximumMemoryBytes) {
+        const auto rows = checkedProduct(trajectoryCount, result.sampleCount);
+        const auto total = checkedProduct(rows, n + (controller ? m : 0)) + result.sampleCount;
+        execution->requireMemory(checkedProduct(total, sizeof(double)), "ODE solution buffers");
+    }
+    result.values.resize(trajectoryCount * result.sampleCount * n);
+    if (controller) result.controlValues.resize(trajectoryCount * result.sampleCount * m);
     result.completedSamples.assign(trajectoryCount, result.sampleCount);
     result.terminationReasons.assign(trajectoryCount, {});
-    for (std::size_t sample = 0; sample < result.sampleCount; ++sample)
-        result.time[sample] = std::min(options.initialTime + sample*options.outputStep, options.finalTime);
+    auto stepper = makeStepper(options, n);
+    const bool sampled = controller && controller.evaluation == ControlEvaluationMode::sampled;
     auto lastProgress = std::chrono::steady_clock::now();
     double lastFraction = -1.0;
+    double lastCheckpoint = options.initialTime;
+    const auto store = [&](std::size_t trajectory, std::size_t sample,
+                           const std::vector<double>& state, const std::vector<double>& held) {
+        std::copy(state.begin(), state.end(),
+                  result.values.begin() + (trajectory * result.sampleCount + sample) * n);
+        if (!controller) return;
+        double* stored = result.controlValues.data() + (trajectory * result.sampleCount + sample) * m;
+        if (sampled) std::copy(held.begin(), held.end(), stored);
+        else {
+            controller.evaluate(trajectory, result.time[sample], state.data(), stored);
+            ++result.statistics.controllerCalls;
+            if (options.controllerCallLog)
+                options.controllerCallLog->record(trajectory, result.time[sample], state.data(), stored,
+                    ControllerCallLog::outputSample, ControllerCallLog::accepted);
+        }
+    };
+    const auto logTick = [&](std::size_t trajectory, double time, const std::vector<double>& state,
+                             const std::vector<double>& held) {
+        if (options.controllerCallLog)
+            options.controllerCallLog->record(trajectory, time, state.data(), held.data(),
+                ControllerCallLog::sampleTick, ControllerCallLog::accepted);
+    };
+    const bool fixedStep = options.method == IntegrationMethod::euler
+        || options.method == IntegrationMethod::rk4;
     for (std::size_t trajectory = 0; trajectory < trajectoryCount; ++trajectory) {
+        if (result.paused) {
+            result.completedSamples[trajectory] = 0;
+            result.terminationReasons[trajectory] = "paused";
+            continue;
+        }
         if (execution) execution->checkpoint();
         system.resetRuntimeState();
-        std::vector<double> state(initialStates.begin() + trajectory*result.stateDimension,
-                                  initialStates.begin() + (trajectory + 1)*result.stateDimension);
-        std::copy(state.begin(), state.end(), result.values.begin()
-            + trajectory*result.sampleCount*result.stateDimension);
-        double heldInput{};
-        const bool sampled = controller.evaluation == ControlEvaluationMode::sampled;
-        if (controller && sampled)
-            evaluateControl(controller.value, trajectory, result.time[0], state.data(),
-                            heldInput, result.statistics);
-        if (controller) {
-            auto& stored = result.controlValues[trajectory * result.sampleCount];
-            if (sampled) stored = heldInput;
-            else evaluateControl(controller.value, trajectory, result.time[0],
-                                 state.data(), stored, result.statistics);
-        }
-        double candidateStep = options.initialStep > 0.0 ? options.initialStep
-            : std::min(options.outputStep, (options.finalTime - options.initialTime) / 100.0);
-        StepContext context{system, controller, &heldInput, trajectory,
-                            result.statistics, execution};
-        std::size_t tick = 1;
-        double nextTick = sampled
-            ? tickTime(options.initialTime, controller.sampleTime, tick)
-            : (std::numeric_limits<double>::infinity)();
-        std::size_t completed = 1;
+        std::vector<double> state(initialStates.begin() + trajectory * n,
+                                  initialStates.begin() + (trajectory + 1) * n);
+        std::vector<double> held(m);
+        detail::RhsContext context{system, controller, held, trajectory, result.statistics,
+                                   execution, options, 0, std::vector<double>(m)};
+        std::size_t completed = 0;
+        if (system.invalid(options.initialTime, state.data()))
+            throw std::invalid_argument("native initial state is outside the validity domain");
         try {
-        for (std::size_t sample = 1; sample < result.sampleCount; ++sample) {
-            double current = result.time[sample - 1];
-            const double target = result.time[sample];
-            while (!reached(current, target)) {
-                const double end = std::min(target, nextTick);
-                integrateInterval(context, options, current, end, candidateStep, state);
-                current = end;
-                if (sampled && reached(current, nextTick)) {
-                    evaluateControl(controller.value, trajectory, nextTick, state.data(),
-                                    heldInput, result.statistics);
-                    if (tick == (std::numeric_limits<std::size_t>::max)())
-                        throw std::runtime_error("sampled controller tick count overflowed");
-                    nextTick = tickTime(options.initialTime, controller.sampleTime, ++tick);
+            if (sampled) {
+                controller.evaluate(trajectory, options.initialTime, state.data(), held.data());
+                ++result.statistics.controllerCalls;
+                logTick(trajectory, options.initialTime, state, held);
+            }
+            store(trajectory, 0, state, held);
+            completed = 1;
+            stepper->restart(context, options.initialTime, state);
+            std::size_t tick = 1;
+            double nextTick = sampled ? tickTime(options.initialTime, controller.sampleTime, tick)
+                                      : (std::numeric_limits<double>::infinity)();
+            for (std::size_t sample = 1; sample < result.sampleCount; ++sample) {
+                double current = result.time[sample - 1];
+                const double target = result.time[sample];
+                while (!reached(current, target)) {
+                    const double end = std::min(target, nextTick);
+                    stepper->advance(context, current, end, state);
+                    current = end;
+                    if (sampled && reached(current, nextTick)) {
+                        controller.evaluate(trajectory, nextTick, state.data(), held.data());
+                        ++result.statistics.controllerCalls;
+                        logTick(trajectory, nextTick, state, held);
+                        if (tick == (std::numeric_limits<std::size_t>::max)())
+                            throw std::runtime_error("sampled controller tick count overflowed");
+                        nextTick = tickTime(options.initialTime, controller.sampleTime, ++tick);
+                        stepper->restart(context, current, state);
+                    }
+                }
+                store(trajectory, sample, state, held);
+                completed = sample + 1;
+                const double fraction = (trajectory * result.sampleCount + sample + 1.0)
+                    / (trajectoryCount * result.sampleCount);
+                const auto now = std::chrono::steady_clock::now();
+                const bool emit = fraction >= 1.0 || fraction - lastFraction >= 0.01
+                    || now - lastProgress >= std::chrono::milliseconds(250);
+                if (progress && emit)
+                    progress({fraction, trajectory, trajectoryCount,
+                              result.statistics.acceptedSteps, result.statistics.rejectedSteps});
+                if (execution && emit)
+                    execution->report({"integrate", "Integrating trajectory", fraction,
+                        trajectory * result.sampleCount + sample + 1,
+                        trajectoryCount * result.sampleCount});
+                if (emit) { lastProgress = now; lastFraction = fraction; }
+                if (options.checkpoint && sample + 1 < result.sampleCount
+                    && target - lastCheckpoint + 1.0e-12 * std::max(1.0, std::abs(target))
+                        >= options.checkpointInterval) {
+                    lastCheckpoint = target;
+                    const double* controls = controller ? result.controlValues.data()
+                        + trajectory * result.sampleCount * m : nullptr;
+                    if (!options.checkpoint({trajectory, sample, target, state.data(), n,
+                            result.time.data(), result.values.data() + trajectory * result.sampleCount * n,
+                            controls, m})) {
+                        result.paused = true;
+                        break;
+                    }
                 }
             }
-            std::copy(state.begin(), state.end(), result.values.begin()
-                + (trajectory*result.sampleCount + sample)*result.stateDimension);
-            completed = sample + 1;
-            if (controller) {
-                auto& stored = result.controlValues[trajectory * result.sampleCount + sample];
-                if (sampled) stored = heldInput;
-                else evaluateControl(controller.value, trajectory, result.time[sample],
-                                     state.data(), stored, result.statistics);
-            }
-            const double fraction = (trajectory*result.sampleCount + sample + 1.0)
-                / (trajectoryCount*result.sampleCount);
-            const auto now = std::chrono::steady_clock::now();
-            const bool emit = fraction >= 1.0 || fraction - lastFraction >= 0.01
-                || now - lastProgress >= std::chrono::milliseconds(250);
-            if (progress && emit)
-                progress({fraction, trajectory, trajectoryCount, result.statistics.acceptedSteps,
-                          result.statistics.rejectedSteps});
-            if (execution && emit)
-                execution->report({"integrate", "Integrating trajectory", fraction,
-                    trajectory * result.sampleCount + sample + 1,
-                    trajectoryCount * result.sampleCount});
-            if (emit) { lastProgress = now; lastFraction = fraction; }
-        }
-            } catch (const ExecutionCancelled&) { throw; }
-            catch (const std::exception& failure) {
-                if (!options.truncateOnFailure) throw;
-                const double nan = std::numeric_limits<double>::quiet_NaN();
-                for (std::size_t sample = completed; sample < result.sampleCount; ++sample) {
-                    std::fill_n(result.values.begin() + (trajectory * result.sampleCount + sample) * result.stateDimension, result.stateDimension, nan);
-                    if (controller) result.controlValues[trajectory * result.sampleCount + sample] = nan;
-                }
+            if (result.paused) {
                 result.completedSamples[trajectory] = completed;
-                result.terminationReasons[trajectory] = failure.what();
+                result.terminationReasons[trajectory] = "paused";
             }
+        } catch (const ExecutionCancelled&) { throw; }
+        catch (const std::exception& failure) {
+            if (options.controllerCallLog) options.controllerCallLog->resolvePending(ControllerCallLog::unknown);
+            if (!options.truncateOnFailure && !options.keepPartialHistoryOnFailure) throw;
+            result.completedSamples[trajectory] = completed;
+            result.terminationReasons[trajectory] = failure.what();
+            if (!options.truncateOnFailure) {
+                // Abort, keeping what was computed: this trajectory up to the failure.
+                const double nan = std::numeric_limits<double>::quiet_NaN();
+                std::fill(result.values.begin() + (trajectory * result.sampleCount + completed) * n,
+                          result.values.end(), nan);
+                if (controller)
+                    std::fill(result.controlValues.begin()
+                              + (trajectory * result.sampleCount + completed) * m,
+                              result.controlValues.end(), nan);
+                for (std::size_t later = trajectory + 1; later < trajectoryCount; ++later) {
+                    result.completedSamples[later] = 0;
+                    result.terminationReasons[later] = "not started: an earlier trajectory failed";
+                }
+                const std::string reason = failure.what();
+                throw IntegrationFailure(reason, std::move(result));
+            }
+        }
+        // Calls after the last step decision: a fixed-step method accepts every step.
+        if (options.controllerCallLog)
+            options.controllerCallLog->resolvePending(fixedStep ? ControllerCallLog::accepted
+                                                                : ControllerCallLog::unknown);
+        const std::size_t keep = result.completedSamples[trajectory];
+        if (keep < result.sampleCount) {
+            const double nan = std::numeric_limits<double>::quiet_NaN();
+            std::fill(result.values.begin() + (trajectory * result.sampleCount + keep) * n,
+                      result.values.begin() + (trajectory + 1) * result.sampleCount * n, nan);
+            if (controller)
+                std::fill(result.controlValues.begin() + (trajectory * result.sampleCount + keep) * m,
+                          result.controlValues.begin() + (trajectory + 1) * result.sampleCount * m, nan);
+        }
+        lastCheckpoint = options.initialTime;
     }
     return result;
 }

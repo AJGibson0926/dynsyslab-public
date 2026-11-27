@@ -111,7 +111,7 @@ are refused.
 
 - Give each pipeline two inputs: `training` (unforced, for every autonomous
   stage) and `forced_training` (for `input_map` / control regression), as
-  `examples/native/pipelines/rpe-echo-jet-klqr-rediscovery/20kpa.json` does.
+  `examples/native/experiments/rpe-echo-jet-klqr-rediscovery/20kpa.json` does.
 - To fit on part of a free record (for example the small-amplitude tail of a
   decay), use the method's `time_window`. Both `hdmd` and `sindy` accept
   `[start, stop]`. Do not splice forced data in.

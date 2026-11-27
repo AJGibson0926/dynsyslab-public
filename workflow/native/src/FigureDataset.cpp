@@ -9,13 +9,19 @@
 //                       "nan_after_end":false}, ...]}
 // "columns":[0,1] keeps a matrix. "onto" interpolates linearly onto another array's clock, with
 // the arithmetic of numpy.interp, and "nan_after_end" marks samples past a run's last time.
+// "operation" (FigureDatasetOperations.hpp) then derives the array: "column" (default), "norm",
+// "difference" (minus another spec), "diff" (successive differences) or "psi" (K-ROM eigenfunctions
+// evaluated along the source's rows).
 #include "PostprocessInternal.hpp"
+
+#include "FigureDatasetOperations.hpp"
 
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/Text.hpp>
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <map>
 #include <stdexcept>
@@ -77,43 +83,52 @@ std::filesystem::path runFigureDataset(const std::vector<std::filesystem::path>&
         return inputs.at(from);
     };
     c::NpzRecord out;
+    // The columns one spec selects, after scale_before, onto, scale, offset and keep_times.
+    const std::function<std::vector<std::vector<double>>(const json::Value&)> seriesOf =
+        [&](const json::Value& spec) {
+            const auto& source = record(spec).at(spec.at("array").string());
+            const bool matrix = !spec.at("columns").isNull();
+            std::vector<std::size_t> indices;
+            if (matrix) for (const auto& item : spec.at("columns").array()) indices.push_back(static_cast<std::size_t>(item.number()));
+            else indices.push_back(static_cast<std::size_t>(spec.at("column").number(0.0)));
+            const bool resample = !spec.at("onto").isNull();
+            std::vector<double> clock, sourceClock;
+            if (resample) {
+                clock = record(spec.at("onto")).at(spec.at("onto").at("array").string()).doubles();
+                sourceClock = record(spec).at(spec.at("clock").string("time")).doubles();
+            }
+            std::vector<std::vector<double>> series;
+            for (const auto index : indices) {
+                auto values = column(source, index);
+                if (!spec.at("scale_before").isNull()) for (auto& value : values) value *= spec.at("scale_before").number();
+                auto sampled = resample ? interpolate(clock, sourceClock, values, spec.at("nan_after_end").boolean(false))
+                                        : std::move(values);
+                if (!spec.at("scale").isNull()) for (auto& value : sampled) value *= spec.at("scale").number();
+                if (!spec.at("offset").isNull()) for (auto& value : sampled) value += spec.at("offset").number();
+                if (!spec.at("keep_times").isNull()) {  // NaN except at the samples nearest the listed times
+                    const auto times = resample ? clock : record(spec).at(spec.at("clock").string("time")).doubles();
+                    if (times.size() != sampled.size() || times.empty())
+                        throw std::invalid_argument("figure_dataset: keep_times needs a clock matching the array");
+                    std::vector<double> kept(sampled.size(), std::numeric_limits<double>::quiet_NaN());
+                    for (const auto& item : spec.at("keep_times").array()) {
+                        const double wanted = item.number();
+                        auto at = static_cast<std::size_t>(std::lower_bound(times.begin(), times.end(), wanted) - times.begin());
+                        if (at == times.size() || (at > 0 && wanted - times[at - 1] < times[at] - wanted)) --at;
+                        kept[at] = sampled[at];
+                    }
+                    sampled = std::move(kept);
+                }
+                series.push_back(std::move(sampled));
+            }
+            return series;
+        };
     for (const auto& spec : settings.at("arrays").array()) {
         const auto name = spec.at("name").string();
         if (name.empty()) throw std::invalid_argument("figure_dataset: every array needs a name");
-        const auto& source = record(spec).at(spec.at("array").string());
-        const bool matrix = !spec.at("columns").isNull();
-        std::vector<std::size_t> indices;
-        if (matrix) for (const auto& item : spec.at("columns").array()) indices.push_back(static_cast<std::size_t>(item.number()));
-        else indices.push_back(static_cast<std::size_t>(spec.at("column").number(0.0)));
-        const bool resample = !spec.at("onto").isNull();
-        std::vector<double> clock, sourceClock;
-        if (resample) {
-            clock = record(spec.at("onto")).at(spec.at("onto").at("array").string()).doubles();
-            sourceClock = record(spec).at(spec.at("clock").string("time")).doubles();
-        }
-        std::vector<std::vector<double>> series;
-        for (const auto index : indices) {
-            auto values = column(source, index);
-            if (!spec.at("scale_before").isNull()) for (auto& value : values) value *= spec.at("scale_before").number();
-            auto sampled = resample ? interpolate(clock, sourceClock, values, spec.at("nan_after_end").boolean(false))
-                                    : std::move(values);
-            if (!spec.at("scale").isNull()) for (auto& value : sampled) value *= spec.at("scale").number();
-            if (!spec.at("offset").isNull()) for (auto& value : sampled) value += spec.at("offset").number();
-            if (!spec.at("keep_times").isNull()) {  // NaN except at the samples nearest the listed times
-                const auto times = resample ? clock : record(spec).at(spec.at("clock").string("time")).doubles();
-                if (times.size() != sampled.size() || times.empty())
-                    throw std::invalid_argument("figure_dataset: keep_times needs a clock matching the array");
-                std::vector<double> kept(sampled.size(), std::numeric_limits<double>::quiet_NaN());
-                for (const auto& item : spec.at("keep_times").array()) {
-                    const double wanted = item.number();
-                    auto at = static_cast<std::size_t>(std::lower_bound(times.begin(), times.end(), wanted) - times.begin());
-                    if (at == times.size() || (at > 0 && wanted - times[at - 1] < times[at] - wanted)) --at;
-                    kept[at] = sampled[at];
-                }
-                sampled = std::move(kept);
-            }
-            series.push_back(std::move(sampled));
-        }
+        const auto operation = spec.at("operation").string("column");
+        auto series = operation == "psi" ? psiSeries(spec, record(spec)) : seriesOf(spec);
+        applyOperation(operation, spec, series, record(spec), seriesOf);
+        const bool matrix = series.size() > 1 || (!spec.at("columns").isNull() && operation != "norm");
         const auto rows = series.front().size();
         if (!matrix) { out.arrays[name] = c::NpyArray::fromDoubles({rows}, series.front()); continue; }
         std::vector<double> joined(rows * series.size());
@@ -123,11 +138,12 @@ std::filesystem::path runFigureDataset(const std::vector<std::filesystem::path>&
     }
     if (out.arrays.empty()) throw std::invalid_argument("figure_dataset lists no arrays");
     out.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(json::Value(json::Value::Object{
-        {"format", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("figure-dataset")},
+        {"schema", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("figure-dataset")},
         {"label", json::Value(label)}, {"dataset_settings", settings}})));
-    const auto directory = objectFolder(root, "figure-dataset");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::figure);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(label + "__" + timestamp()) + ".npz");
+    stampDataObject(out, dynsyslab::core::object_kind::figure, "figure-dataset", {});
     c::writeNpzAtomicNew(path, out);
     return path;
 }

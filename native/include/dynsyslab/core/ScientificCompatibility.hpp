@@ -19,10 +19,6 @@ void requireCompatibleSystems(const SystemConfiguration& expected,
 [[nodiscard]] std::string koopmanModelIdentity(const KoopmanModel& model);
 
 struct ModelBindingOptions {
-    // Legacy explicit-system API remains readable, but labels missing provenance.
-    // Workflow consumers disable this unless the user supplies an explicit reason.
-    bool allowUnverifiedLegacy{true};
-    std::string unverifiedLegacyReason;
     std::string systemTransferReason;
     // Scattered eigenfunction objects are interpolated on the one domain their method built them on.
     // Non-empty: that domain's name, checked (a mismatch is refused; the loader never re-domains).
@@ -30,8 +26,9 @@ struct ModelBindingOptions {
     std::string interpolationDomain;
     // Scattered K-ROMs: interpolant method object {"name", "neighbors", "power", "width"}; null keeps the archive's.
     json::Value interpolationMethod;
-    // Reconstructions objects (KoopmanArchive.hpp) to attach as readouts; each must be built on this archive.
-    std::vector<std::filesystem::path> reconstructions;
+    // The representation the model evaluates, by name ("polynomial", "interpolation", ...); empty
+    // keeps the krom's first.
+    std::string representation;
 };
 
 // No conversion of a sampled input response into continuous B-psi is implied.

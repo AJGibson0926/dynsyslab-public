@@ -89,7 +89,7 @@ std::filesystem::path runControlTarget(const std::vector<std::filesystem::path>&
 
     json::Value::Array names; for (const auto& n : model.coordinates().names) names.emplace_back(n);
     json::Value::Object meta{
-        {"format", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("control-target")},
+        {"schema", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("control-target")},
         {"label", json::Value(label)}, {"source_krom", json::Value(kromPath.generic_u8string())},
         {"target_space", json::Value("observable")}, {"coordinate_names", json::Value(std::move(names))},
         {"coordinate_kind", json::Value(history ? "causal-history" : "measured")},
@@ -105,9 +105,10 @@ std::filesystem::path runControlTarget(const std::vector<std::filesystem::path>&
     record.arrays["values"] = c::NpyArray::fromDoubles({count, width}, values);
     record.arrays["state_target_values"] = c::NpyArray::fromDoubles({count, stateDimension}, states);
     record.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(json::Value(std::move(meta))));
-    const auto directory = objectFolder(root, "control-target");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::timeSeries);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(kromPath.stem().u8string() + "__control-target__" + timestamp()) + ".npz");
+    stampDataObject(record, dynsyslab::core::object_kind::timeSeries, "control-target", {});
     c::writeNpzAtomic(path, record);
     return path;
 }

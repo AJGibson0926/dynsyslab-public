@@ -28,7 +28,7 @@ public:
 
     // Returns the input u. The dynamical system applies its own input map B(x).
     [[nodiscard]] std::vector<double> value(double time, const double* state) const;
-    [[nodiscard]] const ContinuousLQRSolution& lastSolution() const noexcept;
+    [[nodiscard]] const numerics::ContinuousLqrResult& lastSolution() const noexcept;
     [[nodiscard]] bool stateDependent() const noexcept;
 
 private:
@@ -37,17 +37,12 @@ private:
     std::size_t stateDimension_{},inputDimension_{};
     StateTargetFunction target_;
     bool stateDependent_{};
-    mutable ContinuousLQRSolution last_;
+    mutable numerics::ContinuousLqrResult last_;
 };
 
-struct FiniteHorizonLQRSolution {
-    std::vector<double> gain; // input x state, row major
-    std::vector<double> cost; // state x state, row major
-    std::size_t stateDimension{};
-    std::size_t inputDimension{};
-};
+// Finite-horizon LQR: the first-step gain (input x state) and the cost-to-go (state x state).
 
-[[nodiscard]] FiniteHorizonLQRSolution solveFiniteHorizonLQR(
+[[nodiscard]] numerics::FiniteHorizonLqrResult solveFiniteHorizonLQR(
     const std::vector<double>& generator, const std::vector<double>& input,
     const std::vector<double>& statePenalty, const std::vector<double>& inputPenalty,
     std::size_t stateDimension, std::size_t inputDimension,
@@ -63,7 +58,7 @@ public:
         double sampleTime = 1.0e-3, std::vector<double> controlLimits = {});
 
     [[nodiscard]] std::vector<double> value(double time, const double* state) const;
-    [[nodiscard]] const FiniteHorizonLQRSolution& lastSolution() const noexcept;
+    [[nodiscard]] const numerics::FiniteHorizonLqrResult& lastSolution() const noexcept;
 
 private:
     StateMatrixFunction generator_,input_;
@@ -71,7 +66,7 @@ private:
     std::size_t stateDimension_{},inputDimension_{},horizon_{};
     double sampleTime_{};
     StateTargetFunction target_;
-    mutable FiniteHorizonLQRSolution last_;
+    mutable numerics::FiniteHorizonLqrResult last_;
 };
 
 // State-feedback PID on e = x_target - x (the "pid" controller kind).

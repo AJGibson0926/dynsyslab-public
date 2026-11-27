@@ -9,8 +9,10 @@
 #include "PostprocessInternal.hpp"
 
 #include <dynsyslab/core/Archive.hpp>
+#include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/core/Text.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <cstdint>
@@ -34,18 +36,30 @@ Complex timesReal(const Complex& a, double w) {
     return {a.real() * w - a.imag() * 0.0, a.real() * 0.0 + a.imag() * w};
 }
 
-std::filesystem::path publish(c::NpzRecord record, const std::filesystem::path& source, const std::filesystem::path& root,
+// Writes an edited K-ROM (a child of `source` when `model` was loaded from it, else a whole krom),
+// stamped as made by this edit from `source`.
+std::filesystem::path publish(const c::KoopmanModel& model, const std::filesystem::path& source, const std::filesystem::path& root,
                               const char* folder, const char* suffix, json::Value provenance, const std::string& label) {
-    auto metadata = json::parse(record.metadataJson());
-    metadata.at("label") = json::Value(label);
-    metadata.at("source_krom") = json::Value(source.generic_u8string());
-    metadata.at("krom_edit") = std::move(provenance);
-    record.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(metadata));
-    const auto directory = objectFolder(root, folder);
+    auto metadata = json::parse(c::readNpz(source).metadataJson());
+    metadata.object().erase("data_object");  // a new object, made by this edit from `source`
+    metadata.object()["label"] = json::Value(label);
+    metadata.object()["source_krom"] = json::Value(source.generic_u8string());
+    metadata.object()["krom_edit"] = std::move(provenance);
+    auto record = c::makeKoopmanArchive(model, json::dump(metadata));
+    stampDataObject(record, c::object_kind::krom, folder, {source});
+    const auto directory = kindFolder(root, c::object_kind::krom);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(source.stem().u8string() + suffix + timestamp()) + ".npz");
     c::writeNpzAtomicNew(path, record);
     return path;
+}
+
+// Carries a K-ROM's readouts, input maps and dataset references over to `to` (same modes).
+void carryOver(const c::KoopmanModel& from, c::KoopmanModel& to) {
+    for (const auto& item : from.reconstructions()) to.setReconstruction(item.first, item.second);
+    for (const auto& item : from.controlMaps()) to.setControlMap(item.first, item.second);
+    for (const auto& item : from.discreteInputMaps()) to.setDiscreteInputMap(item.first, item.second);
+    for (const auto& ref : from.datasetReferences()) to.addDatasetReference(ref);
 }
 
 }  // namespace
@@ -53,22 +67,21 @@ std::filesystem::path publish(c::NpzRecord record, const std::filesystem::path& 
 std::filesystem::path runKromRecenter(const std::vector<std::filesystem::path>& sources, const json::Value& settings,
                                       const std::filesystem::path& root, const std::string& label) {
     if (sources.size() != 1) throw std::invalid_argument("krom_recenter takes one K-ROM source");
-    auto record = c::readNpz(sources.front());
+    const auto model = c::loadKoopmanModel(sources.front());
+    if (model.scatteredEigenfunctions() || !model.expansion().monomial())
+        throw std::invalid_argument("krom_recenter needs a polynomial K-ROM");
     std::vector<double> target;
     for (const auto& value : settings.at("target_state").array()) target.push_back(value.number());
-    const auto center = record.at("state_center").doubles();
-    const auto scale = record.at("state_scale").doubles();
+    const auto& polynomial = model.expansion();
+    const auto& table = polynomial.monomialTable();
+    const auto& center = table.center;
+    const auto& scale = table.scale;
     const auto dimension = center.size();
     if (target.size() != dimension) throw std::invalid_argument("krom_recenter: target_state dimension differs from the K-ROM");
-    const auto& exponentArray = record.at("polynomial_exponents");
-    const auto& coefficientArray = record.at("coefficients");
-    if (coefficientArray.shape.size() != 2 || exponentArray.shape.size() != 2 || exponentArray.shape[1] != dimension
-        || exponentArray.shape[0] != coefficientArray.shape[1])
-        throw std::invalid_argument("krom_recenter needs a polynomial K-ROM");
-    const auto modes = coefficientArray.shape[0], features = coefficientArray.shape[1];
-    const auto coefficients = coefficientArray.complexDoubles();
+    const auto modes = model.liftedDimension(), features = polynomial.dictionary().size();
+    const auto& coefficients = polynomial.coefficients();
     std::vector<std::int64_t> exponents;
-    for (const double value : exponentArray.doubles()) exponents.push_back(std::llround(value));
+    for (const auto value : table.exponents) exponents.push_back(std::int64_t(value));
     std::vector<double> shift(dimension);
     for (std::size_t k = 0; k < dimension; ++k) shift[k] = (target[k] - center[k]) / scale[k];
     std::map<std::vector<std::int64_t>, std::size_t> index;
@@ -104,32 +117,28 @@ std::filesystem::path runKromRecenter(const std::vector<std::filesystem::path>& 
             if (digit > dimension) break;
         }
     }
-    const auto shape = coefficientArray.shape;
-    record.arrays["coefficients"] = c::NpyArray::fromComplex(shape, updated);
-    record.arrays["state_center"] = c::NpyArray::fromDoubles({dimension}, target);
-    const std::string prefix = "reconstruction__", offsetPrefix = "reconstruction_offset__";
-    std::vector<std::string> names;
-    for (const auto& item : record.arrays)
-        if (item.first.rfind(prefix, 0) == 0) names.push_back(item.first.substr(prefix.size()));
-    for (const auto& name : names) {
-        if (!record.contains(offsetPrefix + name)) continue;
-        const auto& readout = record.at(prefix + name);
-        const auto rows = readout.shape.at(0), columns = readout.shape.at(1);
-        if (columns != modes) throw std::invalid_argument("krom_recenter: readout width differs from the mode count");
-        const auto matrix = readout.complexDoubles();
-        const auto offsetShape = record.at(offsetPrefix + name).shape;
-        auto offsets = record.at(offsetPrefix + name).doubles();
-        for (std::size_t r = 0; r < rows; ++r) {
+    // The re-expanded eigenfunctions (a new eigenfunctions object); readout intercepts absorb psi(x*).
+    c::PolynomialDictionary recentred{dimension, table.exponents, target, scale};
+    c::FunctionExpansion functions(std::move(recentred), std::move(updated), polynomial.coordinates());
+    c::KoopmanModel edited = model.hasPhysicalSystem()
+        ? c::KoopmanModel(c::EigenfunctionFitResult{std::move(functions), model.spectrum(), {}}, model.systemConfiguration())
+        : c::KoopmanModel(c::EigenfunctionFitResult{std::move(functions), model.spectrum(), {}});
+    carryOver(model, edited);
+    for (const auto& item : model.reconstructions()) {
+        auto readout = item.second;
+        if (readout.modes != modes) throw std::invalid_argument("krom_recenter: readout width differs from the mode count");
+        if (readout.offset.empty()) readout.offset.assign(readout.outputs, 0.0);
+        for (std::size_t r = 0; r < readout.outputs; ++r) {
             Complex sum{};
-            for (std::size_t k = 0; k < columns; ++k) sum += matrix[r * columns + k] * constant[k];
-            offsets[r] += sum.real();
+            for (std::size_t k = 0; k < modes; ++k) sum += readout.matrix[r * modes + k] * constant[k];
+            readout.offset[r] += sum.real();
         }
-        record.arrays[offsetPrefix + name] = c::NpyArray::fromDoubles(offsetShape, offsets);
+        edited.setReconstruction(item.first, std::move(readout));
     }
     json::Value::Array removed, star;
     for (const auto& value : constant) removed.push_back(json::Value(json::Value::Array{json::Value(value.real()), json::Value(value.imag())}));
     for (const double value : target) star.emplace_back(value);
-    return publish(std::move(record), sources.front(), root, "koopman-krom-edit", "__recentred__",
+    return publish(edited, sources.front(), root, "krom_recenter", "__recentred__",
                    json::Value(json::Value::Object{{"operation", json::Value("krom_recenter")},
                        {"target_state", json::Value(std::move(star))}, {"psi_at_target_removed", json::Value(std::move(removed))}}), label);
 }
@@ -139,14 +148,13 @@ std::filesystem::path runKromReadout(const std::vector<std::filesystem::path>& s
     if (sources.size() != 1) throw std::invalid_argument("krom_readout takes one K-ROM source");
     const auto& requested = settings.at("readouts").array();
     if (requested.empty()) throw std::invalid_argument("krom_readout lists no readouts");
-    auto record = c::readNpz(sources.front());
-    const auto eigenvalues = record.at("continuous_eigenvalues").complexDoubles();
+    auto model = c::loadKoopmanModel(sources.front());  // the same eigenfunctions; only readouts are added
+    const auto eigenvalues = model.spectrum().continuousRates();
     const auto m = eigenvalues.size();
-    auto names = record.contains("reconstruction_names") ? record.at("reconstruction_names").string() : std::string();
     for (const auto& readout : requested) {
         const auto name = readout.at("name").string();
         if (name.empty() || name.find('\n') != std::string::npos) throw std::invalid_argument("krom_readout needs a single-line name");
-        if (record.contains("reconstruction__" + name)) throw std::invalid_argument("krom_readout: readout already exists: " + name);
+        if (model.hasReconstruction(name)) throw std::invalid_argument("krom_readout: readout already exists: " + name);
         if (readout.at("kind").string() != "lifted_split")
             throw std::invalid_argument("krom_readout: unknown readout kind: " + readout.at("kind").string());
         const double relative = readout.at("pair_relative_tolerance").number(1e-5);
@@ -164,12 +172,11 @@ std::filesystem::path runKromReadout(const std::vector<std::filesystem::path>& s
                 re[conjugate] = 0.5; im[conjugate] = Complex(0.0, 0.5);
             } else re[k] = 1.0;  // a real mode: Re = psi, Im = 0
         }
-        record.arrays["reconstruction__" + name] = c::NpyArray::fromComplex({2 * m, m}, rows);
-        record.arrays["reconstruction_offset__" + name] = c::NpyArray::fromDoubles({2 * m}, std::vector<double>(2 * m, 0.0));
-        names = names.empty() ? name : names + "\n" + name;
+        c::ReconstructionResult lifted{std::move(rows), 2 * m, m, 0.0, 0.0, 0.0};
+        lifted.offset.assign(2 * m, 0.0);
+        model.setReconstruction(name, std::move(lifted));
     }
-    record.arrays["reconstruction_names"] = c::NpyArray::fromString(names);
-    return publish(std::move(record), sources.front(), root, "koopman-krom-edit", "__readout__",
+    return publish(model, sources.front(), root, "krom_readout", "__readout__",
                    json::Value(json::Value::Object{{"operation", json::Value("krom_readout")}, {"readouts", settings.at("readouts")}}), label);
 }
 

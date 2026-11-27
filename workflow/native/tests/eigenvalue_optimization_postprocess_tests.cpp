@@ -1,4 +1,5 @@
 #include <dynsyslab/core/Archive.hpp>
+#include <dynsyslab/core/DataObject.hpp>
 #include <dynsyslab/core/Json.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/workflow/Run.hpp>
@@ -28,7 +29,7 @@ void trajectory(const std::filesystem::path& path,double amplitude){
     archive.arrays["time"]=core::NpyArray::fromDoubles({samples},time);
     archive.arrays["values"]=core::NpyArray::fromDoubles({samples,2},values);
     archive.arrays["metadata_json"]=core::NpyArray::fromString(
-        R"({"format":"dynsyslab.trajectory/v1","system":"duffing","system_preset":"double_well_reference","resolved_system_parameters":{},"integration_form":"dimensionless"})");
+        R"({"schema":"dynsyslab.trajectory/v1","system":"duffing","system_preset":"double_well_reference","resolved_system_parameters":{},"integration_form":"dimensionless"})");
     core::writeNpzAtomic(path,archive);
 }
 
@@ -68,11 +69,14 @@ int main(){std::filesystem::path root;
         const auto spectrum=root/"seed.npz";core::NpzRecord seed;
         seed.arrays["discrete_eigenvalues"]=core::NpyArray::fromComplex({1},{{.65,0.}});
         seed.arrays["metadata_json"]=core::NpyArray::fromString(
-            R"({"format":"dynsyslab.derived/v1","method":"hankel-dmd","delta_t":0.1})");
+            R"({"schema":"dynsyslab.derived/v1","method":"hankel-dmd","delta_t":0.1})");
         core::writeNpzAtomic(spectrum,seed);
         const auto result=dynsyslab::workflow::executeJob(
             job(first,second,spectrum),root/"archives");
-        require(result.archives.size()==2,"ordered spectral pipeline did not publish two stages");
+        std::vector<std::filesystem::path> kroms;  // the stage publishes one krom
+        for(const auto& path:result.archives)
+            if(core::dataObjectKind(core::readNpz(path).metadataJson())==core::object_kind::krom)kroms.push_back(path);
+        require(result.archives.size()==2&&kroms.size()==1,"ordered spectral pipeline did not publish its stages");
         const auto archive=core::readNpz(result.archives.front());
         const auto optimized=archive.at("discrete_eigenvalues").complexDoubles();
         require(optimized.size()==1&&std::abs(optimized[0]-.82)<1.0e-6,
@@ -83,7 +87,7 @@ int main(){std::filesystem::path root;
         require(metadata.at("stage_kind").string()=="eigenvalue-extraction"
             &&!metadata.at("eigenfunctions_constructed").boolean(true),
             "spectrum-only stage boundary was not retained");
-        const auto krom=core::loadKoopmanModel(result.archives[1]);
+        const auto krom=core::loadKoopmanModel(kroms.front());
         require(krom.liftedDimension()==1
             &&krom.eigenfunctionRepresentation()=="scattered-interpolation",
             "optimized spectrum did not chain into boundary eigenfunctions");

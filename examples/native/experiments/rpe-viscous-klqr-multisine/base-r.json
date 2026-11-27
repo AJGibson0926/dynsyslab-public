@@ -1,0 +1,238 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "experiment",
+  "label": "rpe-viscous-klqr-multisine-r",
+  "description": "Standard viscous RPE Koopman control study, every part a parameter: training data ('training', a solve job or {kind: archive}) -> coordinate change ('coordinates', one step or a chain) -> post-processing methods ('methods', e.g. [hdmd, sindy], [hdmd] or [mpedmd], settings in 'method_settings') -> post-processing artefact ('artefact': K-ROM mode rule) -> control (KLQR to a ramped multi-sine radius target). Variants extend this file and change only parameters. Toggles: 'target_ramp' (default a 10 tau ramp from rest; null = no ramp) and 'control_limit' (default null = uncapped).",
+  "reuse_identical_stages": true,
+  "parameters": {
+    "system": {
+      "name": "rpe",
+      "preset": "air_water_20c",
+      "parameters": {
+        "ambient_pressure_pa": 100000,
+        "equilibrium_radius_m": 1e-05,
+        "kappa": 1.3333333333333333,
+        "mu_pa_s": 0.001,
+        "pressure_input_sign": -1,
+        "rho_kg_m3": 998,
+        "sigma_n_m": 0.0725,
+        "vapor_pressure_pa": 2330
+      }
+    },
+    "solver": {
+      "method": "BDF",
+      "rtol": 1e-09,
+      "atol": 1e-09
+    },
+    "training": {
+      "kind": "solve",
+      "system": "${params.system}",
+      "time": {
+        "start": 0,
+        "stop": 25,
+        "output_step": 0.001,
+        "coordinate_system": "dimensionless"
+      },
+      "initial_conditions": {
+        "mode": "explicit",
+        "count": 1,
+        "clusters": 1,
+        "seed": 0,
+        "values": [
+          [
+            2.333386598601735,
+            0
+          ]
+        ],
+        "ranges": []
+      },
+      "solver": "${params.solver}",
+      "archive": {
+        "enabled": true,
+        "data_role": "free_training"
+      }
+    },
+    "coordinates": {
+      "kind": "identity"
+    },
+    "methods": [
+      "hdmd",
+      "sindy"
+    ],
+    "method_settings": {
+      "hdmd": {
+        "observable": "${params.hdmd_observable}",
+        "matrix_size": 2000,
+        "sampling_window": 20000,
+        "sample_stride": 1,
+        "rank": 0,
+        "svd_tolerance": 1e-10,
+        "mode_sort": "terminal-amplitude-energy"
+      },
+      "sindy": {
+        "gamma_method": "${params.sindy_gamma}",
+        "polynomial_degree": 4,
+        "threshold": 0.05,
+        "max_iterations": 20,
+        "normalize": true,
+        "reuse_conjugate_fits": true,
+        "compute_training_values": false,
+        "archive_storage": "coefficient-first",
+        "reconstruction": "none"
+      },
+      "mpedmd": {
+        "observable": "${params.hdmd_observable}",
+        "window": {
+          "delays": 400,
+          "columns": 20000
+        },
+        "assume_measure_preserving": true
+      }
+    },
+    "hdmd_observable": 0,
+    "sindy_gamma": "system_rhs",
+    "artefact": {
+      "mode_selection": {
+        "rule": "oscillatory_pairs",
+        "count": 1
+      }
+    },
+    "control_krom": "${artefact.archive}",
+    "control_representation": "exact",
+    "target": {
+      "kind": "waveform",
+      "offset": [
+        1.5,
+        0.0
+      ],
+      "amplitudes": [
+        0.4,
+        0.25,
+        0.15
+      ],
+      "angular_frequencies": [
+        1.3,
+        2.9,
+        5.3
+      ],
+      "phases_rad": [
+        0.0,
+        0.9,
+        2.1
+      ],
+      "ramp": "${params.target_ramp}"
+    },
+    "target_ramp": {
+      "duration": 10.0,
+      "from": [
+        1.0,
+        0.0
+      ]
+    },
+    "control_limit": null
+  },
+  "stages": [
+    {
+      "id": "train",
+      "job": "${params.training}"
+    },
+    {
+      "id": "coords",
+      "job": {
+        "kind": "postprocess",
+        "sources": [
+          "${train.archive}"
+        ],
+        "methods": [
+          {
+            "name": "coordinate_transform",
+            "settings": "${params.coordinates}"
+          }
+        ],
+        "archive": {
+          "enabled": true
+        }
+      }
+    },
+    {
+      "id": "methods",
+      "sequence": "${params.methods}",
+      "sources": [
+        "${coords.archive}"
+      ],
+      "archive": {
+        "enabled": true
+      }
+    },
+    {
+      "id": "artefact",
+      "job": {
+        "kind": "postprocess",
+        "sources": [
+          "${methods.archive}"
+        ],
+        "methods": [
+          {
+            "name": "krom_extract",
+            "settings": "${params.artefact}"
+          }
+        ],
+        "archive": {
+          "enabled": true
+        }
+      }
+    },
+    {
+      "id": "control",
+      "job": {
+        "kind": "solve",
+        "system": "${params.system}",
+        "time": {
+          "start": 0,
+          "stop": 30,
+          "output_step": 0.001,
+          "coordinate_system": "dimensionless"
+        },
+        "initial_conditions": {
+          "mode": "explicit",
+          "count": 1,
+          "clusters": 1,
+          "seed": 0,
+          "values": [
+            [
+              1,
+              0
+            ]
+          ],
+          "ranges": []
+        },
+        "controller": {
+          "kind": "klqr",
+          "settings": {
+            "krom": "${params.control_krom}",
+            "control_representation": "${params.control_representation}",
+            "Q": 5000,
+            "R": 0.0001,
+            "control_limit": "${params.control_limit}"
+          },
+          "target": {
+            "space": "observable",
+            "kind": "from_state",
+            "state_target": "${params.target}"
+          }
+        },
+        "solver": {
+          "method": "BDF",
+          "rtol": 1e-09,
+          "atol": 1e-09,
+          "max_step": 0.001,
+          "control_evaluation": "continuous_rhs"
+        },
+        "archive": {
+          "enabled": true,
+          "data_role": "koopman_control_study"
+        }
+      }
+    }
+  ]
+}

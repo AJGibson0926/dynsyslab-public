@@ -693,7 +693,7 @@ auto model = dynamicModeDecompositionWithControl(
     X, Y, U, pairCount, snapshotDimension, inputDimension, dt, options);
 auto prediction = predictDmdControl(model, newSnapshots, newInputs, sampleCount);
 auto psi = evaluateDmdControlEigenfunctions(model, newSnapshots, sampleCount);
-auto polynomialPsi = model.polynomialEigenfunctions(); // shared degree-one representation
+auto polynomialPsi = model.eigenfunctionSet(); // shared degree-one representation
 ```
 
 #### Saved results and interpretation
@@ -782,11 +782,10 @@ decoded prediction, use the stored A/B/P or `predictDmdControl` on lifted data.
 This is a dense discrete-time least-squares fit, **not** the SINDy sparsity or
 generator-PDE fitting objective. It selects its spectrum from A; the default
 dictionary is shared, not the optimization method. The fitted coefficients
-export through `EdmdControlResult::eigenfunctionSet()` to the shared immutable
-`PolynomialEigenfunctionSet`, with explicit coordinates and a discrete spectrum.
-Zero multipliers are retained without inventing finite continuous rates.
-The legacy `polynomialEigenfunctions()` DTO adapter remains available for
-nonzero multipliers. Neither export invents SINDy residuals or training metrics.
+export through `EdmdControlResult::eigenfunctionSet()` as the shared
+`EigenfunctionFitResult` (an immutable expansion with explicit coordinates and a
+discrete spectrum). Zero multipliers are retained without inventing finite
+continuous rates. The export invents no SINDy residuals or training metrics.
 See [Eigenfunction and KROM API](architecture/EIGENFUNCTION_MODEL_API.md) for
 manual construction, naming migration, optional physical-system adapters and
 `dynsyslab-cli krom-info` inspection.
@@ -888,44 +887,47 @@ the supplied immutable KROM already contains the intended references.
 
 ### Manual eigenfunctions and discrete/continuous eigenvalues
 
-Fitted and manually supplied polynomials use the same `KoopmanSINDyResult`
-and `KoopmanModel`, evaluators, gradients, reconstruction/control-map setters,
-archive writer/reader and validation services. The historical SINDy name does
-not require the coefficients to have come from SINDy.
+Fitted and manually supplied polynomials are the same `EigenfunctionFitResult`
+(`core/EigenfunctionFit.hpp`) and `KoopmanModel`, with the same evaluators,
+gradients, reconstruction/control-map setters, archive writer/reader and
+validation services.
 
 ```cpp
 #include <dynsyslab/core/EdmdControl.hpp>
 #include <dynsyslab/core/KoopmanModel.hpp>
 using namespace dynsyslab::core;
 
-// psi(q1,q2) = 2 + q1 + i*q2; lambda = -0.2 + 3i.
-auto psi = KoopmanSINDyResult::fromCoefficients(
-    2, {0,0, 1,0, 0,1}, {{2,0},{1,0},{0,1}}, {{-0.2,3}});
-psi.sampleTime = 0.01;
-auto mu = psi.discreteEigenvalues();      // exp(lambda * saved dt)
-auto mu2 = psi.discreteEigenvalues(0.02);  // same lambda, different dt
+// psi(q1,q2) = 2 + q1 + i*q2; lambda = -0.2 + 3i, sampled at dt = 0.01.
+auto psi = polynomialEigenfunctions(
+    2, {0,0, 1,0, 0,1}, {{2,0},{1,0},{0,1}},
+    Spectrum::fromContinuousRates({{-0.2,3}}, 0.01));
+auto mu = psi.spectrum.discreteMultipliers();      // exp(lambda * saved dt)
+auto mu2 = psi.spectrum.discreteMultipliers(0.02);  // same lambda, different dt
 
 // Alternatively provide sampled multipliers, an explicit dt, and optionally
 // one integer logarithm branch per mode (default zero = principal branch).
-auto sampled = KoopmanSINDyResult::fromDiscreteCoefficients(
-    2, psi.exponents, psi.coefficients, mu, 0.01);
+auto sampled = polynomialEigenfunctions(
+    2, {0,0, 1,0, 0,1}, {{2,0},{1,0},{0,1}},
+    Spectrum::fromDiscreteMultipliers(mu, 0.01));
 
-// A data-driven fit exports the identical polynomial class:
+// A data-driven fit exports the same result:
 auto fit = extendedDynamicModeDecompositionWithControl(X,Y,U,pairs,n,m,dt);
-auto fittedPsi = fit.polynomialEigenfunctions();
+auto fitted = fit.eigenfunctionSet();
 
-// For history coordinates, preserve their identity before KROM construction:
-fittedPsi.coordinateProvider = "causal-history";
-fittedPsi.coordinateObservableNames = {"xi_1","xi_2"}; // must match n
-KoopmanModel model(fittedPsi, systemConfiguration);
+// History coordinates are a domain of supplied values, named and tagged with their provider:
+auto history = FunctionDomain::supplied(2);
+history.names = {"xi_1","xi_2"};
+history.providerIdentity = "causal-history";
+fitted.functions = fitted.functions.withCoordinates(history);
+KoopmanModel model(fitted, 1);  // one input; no physical state
 auto value = model.evaluateCoordinates(latentValues.data());
 ```
 
 For direct system-state variables, the convenience factory
 `KoopmanModel::fromPolynomialCoefficients(system,dimension,exponents,coefficients,
 continuousEigenvalues,center,scale)` constructs the same object in one call.
-For analytic observables, set the existing coordinate-observable metadata on
-the polynomial result before constructing `KoopmanModel`. No automatic physical
+For analytic observables, pass their domain (`FunctionDomain::fromStateMap`)
+to `polynomialEigenfunctions` before constructing `KoopmanModel`. No automatic physical
 state interpretation is applied to an explicitly declared history provider.
 
 The coefficient matrix is mode-major; the exponent table is feature-major.

@@ -129,7 +129,7 @@ RunResult executeSolveSet(const json::Value& job,
         }
     }
     json::Value::Object record;
-    record["format"] = "dynsyslab.solve-set/v1";
+    record["schema"] = "dynsyslab.solve-set/v1";
     record["label"] = label;
     record["created_utc"] = stamp;
     record["batch_count"] = static_cast<double>(job.at("batches").array().size());

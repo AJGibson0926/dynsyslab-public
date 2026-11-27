@@ -1,7 +1,7 @@
 # Colbrook/coauthor native adaptation provenance
 
 All 14 publicly accessible reference repositories in the
-[pinned manifest](../../tools/experiments/miscellaneous_computes/references/colbrook/repositories.json)
+pinned manifest ([repositories.json](colbrook/repositories.json))
 were downloaded on 2026-11-11 to ignored `build/reference_sources/colbrook`.
 External datasets and submodules were not downloaded. No upstream installers
 were executed. Selected mpEDMD and Rigged DMD routines were executed only on the
@@ -36,8 +36,10 @@ dictionary construction, archive/reference contracts and personalized PageRank
 are original implementations of the published mathematical constructions.
 No unlicensed TrustKoopman, adversarial-example or ENSO source was copied.
 No MATLAB source is embedded in the runtime, and MATLAB/Python is not required
-to execute the native methods. The MATLAB parity script is optional development
-evidence. These implementation statements do not claim all theorems or complete
+to execute the native methods. Parity with the pinned upstream mpEDMD and Rigged DMD
+routines is a native test, `dynsyslab_colbrook_reference_tests`, against a small frozen
+copy of their output (`workflow/native/tests/data/colbrook_rotation_reference_v1.json`,
+which records the upstream commits). These implementation statements do not claim all theorems or complete
 workflows from the cited repositories have been ported.
 
 The [architecture record](../architecture/SPECTRAL_KROM.md) lists implemented

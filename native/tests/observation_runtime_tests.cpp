@@ -11,7 +11,7 @@ void check(bool b,const char* why){if(!b)throw std::runtime_error(why);}
 template<class F> void rejects(F f){try{f();}catch(const std::logic_error&){return;}throw std::runtime_error("Invalid history contract accepted");}
 }
 int main(){std::filesystem::path path;try{
-    c::PooledHankelBasis basis;basis.delays=3;basis.rank=2;
+    c::HankelLeftBasis basis;basis.rows=3;basis.rank=2;
     basis.leftSingularVectors={1,0,0,1,0,0};basis.singularValues={2,4};basis.observationScale=7;
     c::FrozenHistoryTransform transform(basis,.1,{1,0},"echo");
     basis.leftSingularVectors[0]=999;

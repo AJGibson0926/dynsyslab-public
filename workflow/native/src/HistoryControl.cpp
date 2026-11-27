@@ -25,13 +25,13 @@ dynsyslab::core::ScalarControlLaw historyControlLaw(
 
 std::vector<double> newestSampleWeights(const c::FrozenHistoryTransform& transform) {
     const auto& basis = transform.basis();
-    if (!basis.delays || basis.leftSingularVectors.size() != basis.delays * basis.rank)
+    if (!basis.rows || basis.leftSingularVectors.size() != basis.rows * basis.rank)
         throw std::invalid_argument("History transform basis is malformed");
     std::vector<double> weights;
     for (const auto column : transform.retainedCoordinates()) {
         if (column >= basis.rank || !(basis.singularValues.at(column) > 0))
             throw std::invalid_argument("History transform retains an invalid coordinate");
-        weights.push_back(basis.leftSingularVectors[(basis.delays - 1) * basis.rank + column]
+        weights.push_back(basis.leftSingularVectors[(basis.rows - 1) * basis.rank + column]
                           / basis.singularValues[column]);
     }
     return weights;
@@ -80,8 +80,8 @@ dynsyslab::core::StateTargetFunction historyCoordinateTarget(
     const auto& fitted = transform.basis();
     const auto columns = transform.retainedCoordinates();
     auto weights = std::make_shared<std::vector<double>>();
-    weights->reserve(columns.size() * fitted.delays);
-    for (const auto column : columns) for (std::size_t j = 0; j < fitted.delays; ++j)
+    weights->reserve(columns.size() * fitted.rows);
+    for (const auto column : columns) for (std::size_t j = 0; j < fitted.rows; ++j)
         weights->push_back(fitted.leftSingularVectors[j * fitted.rank + column]);
     return [=](double time) {
         const auto k = std::llround(time / dt);
@@ -93,18 +93,18 @@ dynsyslab::core::StateTargetFunction historyCoordinateTarget(
             const auto x = stateTarget(std::max(0.0, double(i) * dt));
             cache->y.push_back(measurement.evaluateReal(x.data()).front());
         }
-        const auto delays = static_cast<long long>(basis.delays);
+        const auto delays = static_cast<long long>(basis.rows);
         const long long oldest = k - (delays - 1);
         const auto repeated = static_cast<std::size_t>(std::min(delays, std::max(-oldest, 0LL)));
-        const double* history = repeated < basis.delays
+        const double* history = repeated < basis.rows
             ? cache->y.data() + (oldest + static_cast<long long>(repeated)) : nullptr;
         std::vector<double> q;
         q.reserve(columns.size());
         for (std::size_t axis = 0; axis < columns.size(); ++axis) {
-            const double* weight = weights->data() + axis * basis.delays;
+            const double* weight = weights->data() + axis * basis.rows;
             double sum = 0.0;
             for (std::size_t j = 0; j < repeated; ++j) sum += weight[j] * cache->y[0];
-            for (std::size_t j = repeated; j < basis.delays; ++j) sum += weight[j] * history[j - repeated];
+            for (std::size_t j = repeated; j < basis.rows; ++j) sum += weight[j] * history[j - repeated];
             q.push_back(sum / basis.singularValues[columns[axis]]);
         }
         cache->hasLast = true; cache->lastK = k; cache->last = q;

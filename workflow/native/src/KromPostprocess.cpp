@@ -1,9 +1,9 @@
 #include "SampledDomain.hpp"
 #include "TimeSeriesSource.hpp"
-#include <dynsyslab/core/EigenfunctionArchive.hpp>
 #include "PostprocessInternal.hpp"
 #include <dynsyslab/core/LongPath.hpp>
 #include "KromEvidence.hpp"
+#include "KromModeRules.hpp"
 
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/core/System.hpp>
@@ -28,15 +28,14 @@ namespace {
 // (growing modes); absent or null keeps every mode.
 // so a job can say "the dominant oscillatory pair" without inspecting indices.
 std::vector<std::size_t> ruleIndices(const json::Value& rule,
-                                     const dynsyslab::core::NpzRecord& parent) {
+                                     const dynsyslab::core::KoopmanModel& parent) {
     const auto name = rule.at("rule").string();
     const double countValue = rule.at("count").number(1);
     if (!(countValue >= 1) || std::floor(countValue) != countValue)
         throw std::invalid_argument("mode_selection.count must be a positive integer");
     const auto wanted = static_cast<std::size_t>(countValue);
-    const char* key = parent.contains("continuous_eigenvalues") ? "continuous_eigenvalues" : "eigenvalues";
-    if (!parent.contains(key)) throw std::invalid_argument("mode_selection needs a stored spectrum");
-    const auto spectrum = parent.at(key).complexDoubles();
+    const bool continuous = parent.spectrum().hasContinuousRates();
+    const auto spectrum = continuous ? parent.spectrum().continuousRates() : parent.spectrum().values();
     const double tolerance = rule.at("imaginary_tolerance").number(1e-9);
     auto partner = [&](std::size_t mode) -> std::optional<std::size_t> {
         for (std::size_t other = 0; other < spectrum.size(); ++other)
@@ -45,7 +44,7 @@ std::vector<std::size_t> ruleIndices(const json::Value& rule,
         return std::nullopt;
     };
     const auto& maxRealSetting = rule.at("max_real_part");
-    if (!maxRealSetting.isNull() && std::string(key) != "continuous_eigenvalues")
+    if (!maxRealSetting.isNull() && !continuous)
         throw std::invalid_argument("mode_selection.max_real_part needs continuous eigenvalues");
     const double maxReal = maxRealSetting.isNull() ? INFINITY : maxRealSetting.number();
     std::vector<std::size_t> result; std::size_t taken = 0;
@@ -78,13 +77,12 @@ std::vector<std::size_t> ruleIndices(const json::Value& rule,
 // refit_reconstructions.intercept). Conjugates are completed. Mirrors the MATLAB
 // suite's extract(method="observable", threshold, caps).
 std::vector<std::size_t> observableEnergyIndices(const json::Value& rule,
-                                                 const dynsyslab::core::NpzRecord& parent) {
-    if (!parent.contains("continuous_eigenvalues") || !parent.contains("eigenfunction_values"))
+                                                 const dynsyslab::core::KoopmanModel& parent) {
+    if (!parent.spectrum().hasContinuousRates() || !parent.samples().samples())
         throw std::invalid_argument("observable_energy needs continuous eigenvalues and training eigenfunction values");
-    const auto rates = parent.at("continuous_eigenvalues").complexDoubles();
-    const auto& valuesArray = parent.at("eigenfunction_values");
-    const auto values = valuesArray.complexDoubles();
-    const std::size_t samples = valuesArray.shape.at(0), modes = valuesArray.shape.at(1);
+    const auto rates = parent.spectrum().continuousRates();
+    const auto& values = parent.samples().values;
+    const std::size_t samples = parent.samples().samples(), modes = parent.liftedDimension();
     if (rates.size() != modes) throw std::invalid_argument("observable_energy: spectrum and eigenfunction values differ");
     std::vector<double> rms(modes, 0.0);
     for (std::size_t i = 0; i < samples; ++i)
@@ -104,15 +102,14 @@ std::vector<std::size_t> observableEnergyIndices(const json::Value& rule,
     std::vector<std::size_t> result;
     auto has = [&](std::size_t j) { return std::find(result.begin(), result.end(), j) != result.end(); };
     for (std::size_t o = 0; o < names.size(); ++o) {
-        const auto key = "reconstruction__" + safeArrayKey(names[o].string());
-        if (!parent.contains(key)) throw std::invalid_argument("observable_energy: parent has no " + key);
-        const auto& C = parent.at(key);
-        if (C.shape.size() != 2 || C.shape[1] != modes) throw std::invalid_argument("observable_energy: bad " + key);
-        const auto c = C.complexDoubles();
+        const auto key = names[o].string();
+        if (!parent.hasReconstruction(key)) throw std::invalid_argument("observable_energy: the K-ROM has no readout " + key);
+        const auto& C = parent.reconstruction(key);
+        const auto& c = C.matrix;
         std::vector<double> weight(modes, 0.0);
         for (std::size_t j = 0; j < modes; ++j) {
             if (!allowed(j)) continue;
-            double w = 0; for (std::size_t r = 0; r < C.shape[0]; ++r) w += std::norm(c[r * modes + j]);
+            double w = 0; for (std::size_t r = 0; r < C.outputs; ++r) w += std::norm(c[r * modes + j]);
             weight[j] = w * rms[j] * rms[j];
         }
         std::vector<std::size_t> order(modes);
@@ -149,31 +146,30 @@ std::vector<std::size_t> observableEnergyIndices(const json::Value& rule,
 // Refit named reconstructions on the selected modes' training eigenfunction values, optionally
 // with a real intercept: h(x) ~= offset + C psi(x). Uses the parent's aligned training states.
 json::Value::Array refitReconstructions(dynsyslab::core::KoopmanModel& reduced, const json::Value& refit,
-                                        const dynsyslab::core::NpzRecord& parent,
+                                        const dynsyslab::core::KoopmanModel& parent,
+                                        const dynsyslab::core::NpzRecord& parentArchive,
                                         const std::vector<std::size_t>& indices) {
     namespace c = dynsyslab::core;
     using Complex = std::complex<double>;
     json::Value::Array report;
     if (refit.isNull()) return report;
-    const bool objects = dynsyslab::core::hasEigenfunctionObjects(parent);
-    if (!parent.contains("eigenfunction_values") || (!parent.contains("training_states") && !objects))
+    if (!parent.samples().samples())
         throw std::invalid_argument("refit_reconstructions needs training eigenfunction values and states");
-    const auto& valuesArray = parent.at("eigenfunction_values");
-    const auto all = valuesArray.complexDoubles();
-    const std::size_t samples = valuesArray.shape.at(0), parentModes = valuesArray.shape.at(1), k = indices.size();
-    // States at the training samples: stored (legacy) or found through the eigenfunctions' origin.
+    const auto& all = parent.samples().values;
+    const std::size_t samples = parent.samples().samples(), parentModes = parent.liftedDimension(), k = indices.size();
+    // States at the training samples: stored by the producing method (DMDc/EDMDc export) or found
+    // through the eigenfunctions' origin.
     std::vector<double> states;
     std::size_t stateWidth = 0, stateRows = 0;
-    if (parent.contains("training_states")) {
-        states = parent.at("training_states").doubles();
-        stateWidth = parent.at("training_states").shape.at(1);
-        stateRows = parent.at("training_states").shape.at(0);
+    if (parentArchive.contains("training_states")) {
+        states = parentArchive.at("training_states").doubles();
+        stateWidth = parentArchive.at("training_states").shape.at(1);
+        stateRows = parentArchive.at("training_states").shape.at(0);
     } else {
-        const auto set = dynsyslab::core::readEigenfunctionSet(parent, {"interpolation"});
-        auto found = trainingStates(set);  // through the input series' origin, not a stored copy
+        auto found = trainingStates(parent);  // through the input series' origin, not a stored copy
         states = std::move(found.values);
         stateWidth = found.dimension;
-        stateRows = set.samples().samples();
+        stateRows = samples;
     }
     if (stateRows != samples)
         throw std::invalid_argument("refit_reconstructions: training states and eigenfunction values are not aligned");
@@ -267,11 +263,9 @@ json::Value::Array refitReconstructions(dynsyslab::core::KoopmanModel& reduced, 
 // Products and harmonics of chosen eigenfunctions (eigenvalues k*lambda) have zero gradient at the
 // target and are never chosen; at an unstable target they would be unstable lifted modes that a constant
 // input map cannot reach, which makes the lifted (A, B) unstabilizable for KLQR. Conjugates are completed.
-std::vector<std::size_t> principalIndices(const json::Value& rule, const std::filesystem::path& source,
-                                          const dynsyslab::core::NpzRecord& parent,
-                                          const dynsyslab::core::ModelBindingOptions& binding) {
+std::vector<std::size_t> principalIndices(const json::Value& rule, const dynsyslab::core::KoopmanModel& model,
+                                          const dynsyslab::core::NpzRecord& parent) {
     using Complex = std::complex<double>;
-    const auto model = dynsyslab::core::loadKoopmanModel(source,binding);
     const auto dimension = model.physicalStateDimension();
     if (!dimension) throw std::invalid_argument("mode_selection principal needs a physical-state KROM");
     const auto& targetValue = rule.at("target_state");
@@ -280,10 +274,9 @@ std::vector<std::size_t> principalIndices(const json::Value& rule, const std::fi
     std::vector<double> target; for (const auto& v : targetValue.array()) target.push_back(v.number());
     const std::size_t n = *dimension, modes = model.liftedDimension();
     std::vector<double> rms(modes, 1.0);
-    if (parent.contains("eigenfunction_values") && parent.at("eigenfunction_values").shape.size() == 2
-        && parent.at("eigenfunction_values").shape[1] == modes) {
-        const auto values = parent.at("eigenfunction_values").complexDoubles();
-        const std::size_t samples = parent.at("eigenfunction_values").shape[0];
+    if (model.samples().samples()) {
+        const auto& values = model.samples().values;
+        const std::size_t samples = model.samples().samples();
         for (std::size_t j = 0; j < modes; ++j) {
             double sum = 0; for (std::size_t i = 0; i < samples; ++i) sum += std::norm(values[i * modes + j]);
             rms[j] = samples ? std::sqrt(sum / double(samples)) : 1.0; if (!(rms[j] > 0)) rms[j] = 1.0;
@@ -353,7 +346,7 @@ std::vector<std::size_t> principalIndices(const json::Value& rule, const std::fi
 }
 
 std::vector<std::size_t> modeIndices(const json::Value& settings,
-                                     const dynsyslab::core::NpzRecord& parent) {
+                                     const dynsyslab::core::KoopmanModel& parent) {
     if (!settings.at("mode_selection").isNull()) {
         if (!settings.at("selected_modes").isNull())
             throw std::invalid_argument("give selected_modes or mode_selection, not both");
@@ -388,7 +381,7 @@ json::Value extractionMetadata(const std::filesystem::path& source,
     backend["name"]="native-cpp"; backend["compiled"]=true;
     backend["python_required"]=false;
     json::Value::Object metadata;
-    metadata["format"]="dynsyslab.derived/v1";
+    metadata["schema"]="dynsyslab.derived/v1";
     metadata["label"]=label;
     metadata["method"]="krom-extract";
     metadata["source_archive"]=source.generic_u8string();
@@ -409,12 +402,10 @@ json::Value extractionMetadata(const std::filesystem::path& source,
 
 // Report-only eigenvalue-lattice candidates for the extracted modes (Mezic 2005; Budisic, Mohr & Mezic 2012).
 // Never changes the mode selection, and failure of the diagnostic never fails an extraction.
-json::Value latticeCandidates(const dynsyslab::core::NpzRecord& parent,const std::vector<std::size_t>& indices) {
-    const bool continuous=parent.contains("continuous_eigenvalues");
-    const char* key=continuous?"continuous_eigenvalues":"eigenvalues";
-    if(!parent.contains(key))return json::Value{};
+json::Value latticeCandidates(const dynsyslab::core::KoopmanModel& parent,const std::vector<std::size_t>& indices) {
+    const bool continuous=parent.spectrum().hasContinuousRates();
     try {
-        const auto spectrum=parent.at(key).complexDoubles();
+        const auto spectrum=continuous?parent.spectrum().continuousRates():parent.spectrum().values();
         json::Value::Array values;
         for(const auto index:indices)if(index<spectrum.size())
             values.emplace_back(json::Value::Array{spectrum[index].real(),spectrum[index].imag()});
@@ -431,25 +422,25 @@ std::filesystem::path runKromExtraction(
     const std::filesystem::path& root,const std::string& label) {
     if (!std::filesystem::is_regular_file(dynsyslab::core::extendedLengthPath(source)))
         throw std::invalid_argument("KROM extraction source does not exist");
-    // A Koopman model is assembled from data objects: the eigenfunctions (source) and, optionally,
-    // reconstructions objects written over them ("reconstructions": path or list), as readouts.
+    // The parent krom (with the binding's representation and interpolation choices); the reduced
+    // K-ROM is its child: the selected modes and anything refitted here.
     auto binding = composedBinding(settings);
-    auto parentArchive=dynsyslab::core::readNpz(source);
-    for (const auto& path : binding.reconstructions)
-        dynsyslab::core::mergeReconstructions(parentArchive, source, dynsyslab::core::readNpz(path));
-    const auto& selection=settings.at("mode_selection");
-    const auto indices=!selection.isNull()&&selection.at("rule").string()=="principal"
-        ? principalIndices(selection,source,parentArchive,binding) : modeIndices(settings,parentArchive);
+    const auto parentArchive=dynsyslab::core::readNpz(source);
     const auto parentMetadata=parentArchive.metadataJson().empty()
         ? json::Value{}:json::parse(parentArchive.metadataJson());
     const auto domain=settings.at("interpolation_domain").string();
-    const auto& method=settings.at("interpolation_method");
     binding.interpolationDomain=domain;
-    binding.interpolationMethod=method;
+    binding.interpolationMethod=settings.at("interpolation_method");
     const auto parent=dynsyslab::core::loadKoopmanModel(source,binding);
+    const auto& selection=settings.at("mode_selection");
+    json::Value selectionReport;
+    const auto indices=!selection.isNull()&&selection.at("rule").string()=="principal"
+        ? principalIndices(selection,parent,parentArchive)
+        : !selection.isNull()&&isExtendedModeRule(selection.at("rule").string())
+        ? extendedModeRule(selection,parent,parentArchive,selectionReport) : modeIndices(settings,parent);
     auto reduced=parent.extract(indices);
-    const auto refitReport=refitReconstructions(reduced,settings.at("refit_reconstructions"),parentArchive,indices);
-    const auto directory=objectFolder(root, "koopman-krom-extract");
+    const auto refitReport=refitReconstructions(reduced,settings.at("refit_reconstructions"),parent,parentArchive,indices);
+    const auto directory=kindFolder(root, dynsyslab::core::object_kind::krom);
     std::filesystem::create_directories(directory);
     const auto path=directory/dynsyslab::core::wide(safeName(
         source.stem().u8string()+"__krom-extract__"+timestamp())+".npz");
@@ -459,18 +450,19 @@ std::filesystem::path runKromExtraction(
     std::map<std::string,dynsyslab::core::NpyArray> extra;
     extra["source_mode_indices"]=dynsyslab::core::NpyArray::fromDoubles(
         {sourceIndices.size()},sourceIndices);
-    inheritKromEvidence(parentArchive,indices,extra);
     auto meta=extractionMetadata(source,label,indices,reduced,parentMetadata);
     const auto origin=parentMetadata.at("extraction_algorithm").string(parentMetadata.at("method").string());
     meta.object()["extraction_algorithm"]=origin;
-    meta.object()["eigenvalue_lattice"]=latticeCandidates(parentArchive,indices);
+    meta.object()["eigenvalue_lattice"]=latticeCandidates(parent,indices);
+    meta.object()["eigenfunction_representation_name"]=reduced.representation().name;  // the one the K-ROM evaluates
     if(!refitReport.empty())meta.object()["refit_reconstructions"]=json::Value(refitReport);
+    if(!selectionReport.isNull())meta.object()["mode_selection_report"]=selectionReport;
     if(origin=="edmdc") {
         const auto plan=planAutonomousKoopmanValidation(reduced,path,root);
         for(const auto& ref:dynsyslab::core::koopmanDatasetReferencesFromMetadata(plan))reduced.addDatasetReference(ref);
         meta.object()["autonomous_validation_plan"]=plan;
     }
-    dynsyslab::core::saveKoopmanModel(path,reduced,json::dump(meta),std::move(extra));
+    dynsyslab::core::saveKoopmanModel(path,reduced,withDataObject(json::dump(meta),dynsyslab::core::object_kind::krom,{source}),std::move(extra));
     return path;
 }
 

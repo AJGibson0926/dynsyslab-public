@@ -1,6 +1,8 @@
+#include <dynsyslab/core/DataObject.hpp>
 #include "ObservablePhasePayload.hpp"
 #include "ArchiveCatalog.hpp"
 #include "HierarchyCatalog.hpp"
+#include "SystemViewDefaults.hpp"
 #include "ModeWeightPayload.hpp"
 
 #include <dynsyslab/core/Archive.hpp>
@@ -93,21 +95,12 @@ std::string reverseKind(const std::string& kind) {
 }
 
 bool decomposition(const std::string& method) {
-    static const std::set<std::string> methods{"svd","pca","pod","bagged-pca",
-        "bagged_pca","robust-pca","robust_pca","hankel-pod","hankel_pod","hankel-svd","hankel_svd",
-        "havok"};
-    return methods.count(method)!=0;
-}
-
-bool kromMethod(const std::string& method) {
-    static const std::set<std::string> methods{"koopman-with-sindy","sindy","koopman-control-regression",
-        "control_regression","krom-extract","krom_extract","koopman-krom-extract"};
+    static const std::set<std::string> methods{"svd","pca","pod","bagged_pca","robust_pca","hankel_pod","hankel_svd","havok"};
     return methods.count(method)!=0;
 }
 
 bool spectrumMethod(const std::string& method) {
-    static const std::set<std::string> methods{"dmd","dmdc","edmdc","hankel-dmd","hankel-dmd-reconstructions","hdmd","edmd",
-        "trajectory-eigenvalue-optimization","eigenvalue_optimization"};
+    static const std::set<std::string> methods{"dmd","dmdc","edmdc","hdmd","hankel_dmd","edmd","eigenvalue_optimization"};
     return methods.count(method)!=0;
 }
 
@@ -130,8 +123,10 @@ void enrichArchiveCatalogItem(CatalogItem& item,
         if (!label.empty()) item.label=label;
         const auto system=systemLabel(metadata);
         if (!system.empty()) item.system=system;
-        const auto method=metadata.at("method").string(metadata.at("analysis").string());
-        const auto format=metadata.at("format").string();
+        // What the archive is (its declared data-object kind) and the step that made it.
+        const auto objectKind=dynsyslab::core::dataObjectKind(metadataText);
+        const auto method=metadata.at("method").string();
+        const auto format=metadata.at("schema").string();
         if (!method.empty()) {
             item.properties["method"]=method;
             appendUnique(item.tags,method);
@@ -194,22 +189,20 @@ void enrichArchiveCatalogItem(CatalogItem& item,
             appendUnique(item.tags,"independent");
         }
 
-        const bool analyticKrom=archive.contains("coefficients")
-            && archive.contains("polynomial_exponents");
-        const bool legacyKrom=archive.contains("coefficients") && archive.contains("eigenvalues")
-            && !metadata.at("analysis_metadata").at("krom").isNull();
-        const bool scatteredKrom=archive.contains("training_states")
-            && archive.contains("eigenfunction_values")
-            && archive.contains("continuous_eigenvalues")
-            && metadata.at("eigenfunction_representation").string()
-                =="scattered-interpolation";
-        const bool dashboardReady=archive.contains("training_states")
-            && ((analyticKrom && archive.contains("continuous_eigenvalues")
-                 && archive.contains("state_center") && archive.contains("state_scale"))
-                || legacyKrom || scatteredKrom)
-            && (archive.contains("discrete_eigenvalues") || archive.contains("eigenvalues")
-                || metadata.at("delta_t").number()>0.0);
-        if(method=="linear-systems"
+        // A K-ROM (krom, dynsyslab.krom/v1) the dashboard can drive: one whose evaluated representation
+        // is a function of the state (a time-delay window map needs a history of samples).
+        const bool dashboardReady=objectKind=="krom" && metadata.at("eigenfunction_representation").string()!="time-delay";
+        if(method=="bifurcation-points"){  // workflow/native/src/BifurcationPoints.cpp
+            if(item.parentId.empty())item.category="Post-processing";
+            item.kind="figure";item.subtitle="Peak-amplitude bifurcation diagram";
+            item.views.clear();appendUnique(item.views,"bifurcation");
+        }
+        if(method=="observable-spectrum-comparison"){  // workflow/native/src/ObservableSpectrumComparison.cpp
+            if(item.parentId.empty())item.category="Post-processing";
+            item.kind="figure";item.subtitle="H-DMD spectra by scalar observable";
+            item.views.clear();appendUnique(item.views,"observable_spectrum_comparison");
+        }
+        if(method=="linear_systems"
             || metadata.at("schema").string()=="dynsyslab.linear-systems/v1") {
             if(item.parentId.empty())item.category="Linear systems";
             item.kind="linear_systems";
@@ -223,11 +216,11 @@ void enrichArchiveCatalogItem(CatalogItem& item,
             item.properties["time domain"]=metadata.at("time_domain").string();
             item.properties["reduced order"]=std::to_string(static_cast<std::size_t>(
                 metadata.at("reduction").at("order").number()));
-        } else if(method=="sindy-dynamics") {
+        } else if(method=="sindy_dynamics" && objectKind=="dynamical_model") {
             if(item.parentId.empty())item.category="Post-processing";
             item.kind="sindy_dynamics";item.subtitle="Identified autonomous vector field";
             item.views.clear();appendUnique(item.views,"sindy_dynamics");appendUnique(item.views,"sindy_dynamics_transient");
-        } else if (method=="koopman-validation" || method=="koopman_validation") {
+        } else if (method=="koopman_validation" && objectKind=="report") {
             if (item.parentId.empty()) item.category="Validation";
             item.kind="koopman_validation";
             item.subtitle="Free-trajectory Koopman semigroup validation";
@@ -241,8 +234,8 @@ void enrichArchiveCatalogItem(CatalogItem& item,
             item.subtitle="Frozen dictionary operator and spectral diagnostics";
             item.views.clear();appendUnique(item.views,"koopman_spectrum");
             item.properties["control-ready"]="no inferred physical provider or input maps";
-        } else if (kromMethod(method) || analyticKrom || legacyKrom
-                   || scatteredKrom) {
+            if (dashboardReady) prependUnique(item.views,"krom_dashboard");
+        } else if (objectKind=="krom") {
             if (item.parentId.empty()) item.category="KROMs";
             item.kind="krom"; item.subtitle="Native Koopman reduced-order model";
             item.views.erase(std::remove(item.views.begin(), item.views.end(),
@@ -251,7 +244,7 @@ void enrichArchiveCatalogItem(CatalogItem& item,
             appendUnique(item.views,"koopman_spectrum");
             if (hasModeWeights(archive)) appendUnique(item.views,"mode_weights");
         } else if (spectrumMethod(method) || archive.contains("continuous_eigenvalues")
-                   || archive.contains("eigenvalues")) {
+                   || archive.contains("discrete_eigenvalues")) {
             if (item.parentId.empty()) item.category="Koopman spectra";
             item.kind="koopman_spectrum";
             item.subtitle="Koopman spectral result (not a control-ready KROM)";
@@ -264,8 +257,7 @@ void enrichArchiveCatalogItem(CatalogItem& item,
                 item.properties["eigenfunction coordinates"]=method=="edmdc"
                     ?"Polynomials of supplied snapshots (saved normalization)":"Linear functions of supplied snapshots";
             }
-            if(method=="trajectory-eigenvalue-optimization"
-                ||method=="eigenvalue_optimization"){
+            if(method=="eigenvalue_optimization"){
                 item.subtitle="Optimized Koopman spectrum (eigenvalues only)";
                 prependUnique(item.views,"eigenvalue_optimization");
                 item.properties["eigenfunctions constructed"]="no";
@@ -278,7 +270,7 @@ void enrichArchiveCatalogItem(CatalogItem& item,
                 "Native observability analysis";
             appendUnique(item.views,"observability");
             if (method=="klqe") { appendUnique(item.views,"time"); appendUnique(item.views,"phase"); }
-        } else if (decomposition(method) || archive.contains("singular_values")
+        } else if (objectKind=="coordinate_map" || decomposition(method) || archive.contains("singular_values")
                    || archive.contains("low_rank")) {
             if (item.parentId.empty()) item.category="Post-processing";
             item.kind="decomposition"; item.subtitle="Native matrix decomposition";
@@ -323,6 +315,7 @@ void enrichArchiveCatalogItem(CatalogItem& item,
             appendUnique(item.views, "time_frequency");
             appendUnique(item.views, "observable_time");
             if (observableDimension == 2) appendUnique(item.views, "observable_heatmap");
+            orderViewsForSystem(metadata.at("system").string(), item.views);
         }
         if (archive.contains("measurement_values") && archive.contains("measurement_estimate")
             && archive.contains("estimator_time"))
@@ -330,7 +323,7 @@ void enrichArchiveCatalogItem(CatalogItem& item,
         if (archive.contains("lattice_initial") && archive.contains("lattice_final"))
             appendUnique(item.views, "lattice");
         relation(item,metadata.at("source_archive").string(),
-            method=="krom-extract"?"extracted from":"derived from");
+            method=="krom_extract"?"extracted from":"derived from");
         for(const auto& sourceArchive:metadata.at("source_archives").array())
             if(sourceArchive.string()!=metadata.at("source_archive").string())
                 relation(item,sourceArchive.string(),"fit from trajectory");
@@ -338,7 +331,7 @@ void enrichArchiveCatalogItem(CatalogItem& item,
         const auto sourceKrom=metadata.at("source_krom").string();
         if (sourceKrom!=metadata.at("source_archive").string())
             relation(item,sourceKrom,
-                method=="koopman-validation"?"evaluates KROM":"uses KROM");
+                method=="koopman_validation"?"evaluates KROM":"uses KROM");
         relation(item,metadata.at("controller_configuration").at("settings")
             .at("krom").string(),"controlled by KROM");
         relation(item,controllerMetadata.at("rom").at("source_archive").string(),

@@ -2,9 +2,11 @@
 #include <dynsyslab/workflow/Hierarchy.hpp>
 #include "WorkflowSupport.hpp"
 #include "AnalyticArchive.hpp"
+#include "SolveArchive.hpp"
 
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/Delay.hpp>
+#include <dynsyslab/core/LongPath.hpp>
 #include <dynsyslab/core/Text.hpp>
 
 #include <algorithm>
@@ -90,7 +92,7 @@ std::string metadata(const json::Value& job,
     const double delay = resolved.parameters.at("delay");
     const double effectiveDelay = std::llround(delay / step) * step;
     std::ostringstream out;
-    out << "{\"format\":\"dynsyslab.solution/v1\",\"label\":\""
+    out << "{\"schema\":\"dynsyslab.solution/v1\",\"label\":\""
         << detail::jsonEscape(job.at("label").string("delay-solve"))
         << "\",\"system\":\"mackey_glass\",\"system_label\":\"Mackey-Glass delay system\""
         << ",\"system_family\":\"dde\",\"system_preset\":\""
@@ -161,17 +163,38 @@ SolveResult executeDelaySolve(
     const std::string created = detail::timestamp();
     const auto hierarchy = prepareHierarchy(job, resolved, histories.size(), archiveRoot,
                                             created);
+    const auto directory = archiveRoot / L"solutions" / L"mackey_glass";
+    const std::string runLabel = job.at("label").string("delay-solve");
+    const auto archivePath = [&](std::size_t trajectory) {
+        const std::string label = runLabel + (histories.size() == 1 ? ""
+            : "-trajectory-" + std::to_string(trajectory));
+        return directory / dynsyslab::core::wide(
+            detail::safeName(label, "delay-solve") + "__" + created + ".npz");
+    };
+    // history.checkpoint_interval (model time): the running trajectory's samples so far go to
+    // <archive>.partial.npz, removed once the solve is archived.
+    std::vector<std::filesystem::path> partials;
+    if (const double interval = detail::checkpointInterval(job); interval > 0.0) {
+        options.checkpointSteps = std::max<std::size_t>(1, static_cast<std::size_t>(std::llround(interval / options.step)));
+        options.checkpoint = [&](std::size_t trajectory, std::size_t samples, const double* times, const double* values) {
+            const auto partial = detail::partialArchivePath(archivePath(trajectory));
+            detail::writePartialSeries(partial, times, samples, values, 1, json::dump(json::Value(json::Value::Object{
+                {"schema", std::string("dynsyslab.solution-checkpoint/v1")}, {"source_job_label", runLabel},
+                {"trajectory_index", static_cast<double>(trajectory)}, {"time", times[samples - 1]},
+                {"completed_samples", static_cast<double>(samples)}})));
+            if (std::find(partials.begin(), partials.end(), partial) == partials.end()) partials.push_back(partial);
+        };
+    }
     detail::atomicProgress(progressPath, 0.0, 0, histories.size(),
                            "Starting delay integration");
     const auto solution = dynsyslab::core::integrateMackeyGlass(
         resolved, histories, options, execution);
     SolveResult result;
-    result.label = job.at("label").string("delay-solve");
+    result.label = runLabel;
     result.system = "mackey_glass";
     result.trajectories = solution.trajectoryCount;
     result.samplesPerTrajectory = solution.sampleCount;
     result.acceptedSteps = solution.acceptedSteps;
-    const auto directory = archiveRoot / L"solutions" / L"mackey_glass";
     for (std::size_t trajectory = 0; trajectory < solution.trajectoryCount; ++trajectory) {
         dynsyslab::core::NpzRecord archive;
         archive.arrays["time"] = dynsyslab::core::NpyArray::fromDoubles(
@@ -189,10 +212,7 @@ SolveResult executeDelaySolve(
             dynsyslab::core::mackeyGlassAnalyticSolutions(resolved), solution.time,
             std::vector<double>(begin, begin+static_cast<std::ptrdiff_t>(solution.sampleCount)),
             {histories[trajectory]}, options.initialTime, job);
-        const std::string label = result.label + (solution.trajectoryCount == 1 ? ""
-            : "-trajectory-" + std::to_string(trajectory));
-        const auto path = directory / dynsyslab::core::wide(
-            detail::safeName(label, "delay-solve") + "__" + created + ".npz");
+        const auto path = archivePath(trajectory);
         dynsyslab::core::writeNpzAtomicNew(path, archive);
         result.archives.push_back(path);
         detail::atomicProgress(progressPath,
@@ -202,6 +222,10 @@ SolveResult executeDelaySolve(
     publishHierarchy(hierarchy, job, requested,
         dynsyslab::core::mackeyGlassDescriptor(), resolved, histories,
         result.archives, false, false, created);
+    for (const auto& partial : partials) {
+        std::error_code ignored;
+        std::filesystem::remove(dynsyslab::core::extendedLengthPath(partial), ignored);
+    }
     result.hierarchyManifest = hierarchy.manifestPath;
     return result;
 }

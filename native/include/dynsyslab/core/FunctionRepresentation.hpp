@@ -35,4 +35,9 @@ public:
     [[nodiscard]] std::size_t coordinateDimension() const noexcept { return coordinates().dimension; }
 };
 
+// What jobs, archives and the Viewer call a representation: "interpolation"; "time-delay" for a
+// function of series windows (an H-DMD window map); an expansion is named after its dictionary,
+// "polynomial" for monomials, else its one term kind, else "expansion".
+[[nodiscard]] std::string representationName(const FunctionRepresentation& representation);
+
 }  // namespace dynsyslab::core

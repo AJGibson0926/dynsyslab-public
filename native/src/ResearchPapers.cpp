@@ -2,6 +2,8 @@
 
 namespace dynsyslab::core::detail {
 std::vector<ResearchPaper> builtInResearchPapers(const std::string &identifier) {
+    // The dimensional baseline is the RPE model in SI units: the same literature.
+    if (identifier == "rayleigh-plesset-dimensional-baseline") return builtInResearchPapers("rpe");
     if(identifier=="toda_lattice") {
         ResearchPaper p;p.id="henrici-kappeler-toda-2008";
         p.title="Global Birkhoff coordinates for the periodic Toda lattice";

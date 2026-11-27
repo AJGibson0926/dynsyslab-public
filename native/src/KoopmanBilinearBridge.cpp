@@ -47,7 +47,7 @@ std::vector<double> vanLoanIntegral(const std::vector<double>& G, const std::vec
 
 }  // namespace
 
-ContinuousBilinearSplit continuousBilinearSplit(const KoopmanModel& model, const std::string& representation) {
+BilinearKrom continuousBilinearSplit(const KoopmanModel& model, const std::string& representation) {
     if (!model.spectrum().hasContinuousRates())
         throw std::invalid_argument("Bilinear bridge needs finite continuous rates");
     if (representation == "exact" || !model.controlMaps().count(representation))
@@ -55,23 +55,23 @@ ContinuousBilinearSplit continuousBilinearSplit(const KoopmanModel& model, const
     if (!std::holds_alternative<BilinearControlMap>(model.storedControlMap(representation)))
         throw std::invalid_argument("Control map " + representation + " is not bilinear");
     const auto n = model.splitDimension(), m = model.inputDimension();
-    ContinuousBilinearSplit out;
+    BilinearKrom out;
     out.stateDimension = n; out.inputDimension = m;
-    out.generator = model.generatorSplit();
+    out.A = model.generatorSplit();
     const auto mapAt = [&](const std::vector<double>& w) {
         return model.realControlMap(model.controlMapFromLifted(model.valuesFromSplit(w), representation));
     };
     // The map is real-affine in the split coordinates, so basis evaluations are exact.
     std::vector<double> basis(n, 0.0);
-    out.offsets = mapAt(basis);
-    out.operators.assign(m, std::vector<double>(n * n, 0.0));
+    out.B0 = mapAt(basis);
+    out.B.assign(m, std::vector<double>(n * n, 0.0));
     for (std::size_t column = 0; column < n; ++column) {
         basis[column] = 1.0;
         const auto map = mapAt(basis);
         basis[column] = 0.0;
         for (std::size_t input = 0; input < m; ++input)
             for (std::size_t row = 0; row < n; ++row)
-                out.operators[input][row * n + column] = map[row * m + input] - out.offsets[row * m + input];
+                out.B[input][row * n + column] = map[row * m + input] - out.B0[row * m + input];
     }
     return out;
 }
@@ -91,10 +91,10 @@ KoopmanBilinearBridge bridgeKoopmanBilinear(const KoopmanModel& model, const Koo
     for (double v : out.targetLifted) if (!std::isfinite(v)) throw std::invalid_argument("Target lifted value must be finite");
     for (double v : out.targetInput) if (!std::isfinite(v)) throw std::invalid_argument("Target input must be finite");
 
-    out.frozenTransition = numerics::matrixExponential(out.continuous.generator, n, o.sampleTime);
-    out.discreteOffsets = numerics::zeroOrderHold(out.continuous.generator, out.continuous.offsets, n, m, o.sampleTime).response;
-    for (const auto& N : out.continuous.operators)
-        out.discreteOperators.push_back(vanLoanIntegral(out.continuous.generator, N, n, o.sampleTime));
+    out.frozenTransition = numerics::matrixExponential(out.continuous.A, n, o.sampleTime);
+    out.discreteOffsets = numerics::zeroOrderHold(out.continuous.A, out.continuous.B0, n, m, o.sampleTime).response;
+    for (const auto& N : out.continuous.B)
+        out.discreteOperators.push_back(vanLoanIntegral(out.continuous.A, N, n, o.sampleTime));
 
     out.heldTargetInput = std::any_of(out.targetInput.begin(), out.targetInput.end(), [](double v) { return v != 0.0; });
     auto effective = out.frozenTransition;  // bit-for-bit A when u* = 0
@@ -148,14 +148,14 @@ BilinearConversionDefect conversionDefect(const KoopmanBilinearBridge& bridge, c
         std::vector<double> theta(m);
         for (std::size_t i = 0; i < m; ++i)
             theta[i] = bridge.targetInput[i] + (((mask >> i) & 1U) ? bounds[i] : -bounds[i]);
-        auto generator = bridge.continuous.generator;
+        auto generator = bridge.continuous.A;
         auto approximate = bridge.frozenTransition;
         for (std::size_t i = 0; i < m; ++i)
             for (std::size_t k = 0; k < n * n; ++k) {
-                generator[k] += theta[i] * bridge.continuous.operators[i][k];
+                generator[k] += theta[i] * bridge.continuous.B[i][k];
                 approximate[k] += theta[i] * bridge.discreteOperators[i][k];
             }
-        const auto held = numerics::zeroOrderHold(generator, bridge.continuous.offsets, n, m, dt);
+        const auto held = numerics::zeroOrderHold(generator, bridge.continuous.B0, n, m, dt);
         double transition = 0.0;
         for (std::size_t k = 0; k < n * n; ++k) {
             const double d = held.transition[k] - approximate[k];

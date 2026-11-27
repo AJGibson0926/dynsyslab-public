@@ -89,7 +89,7 @@ void testSampledControlClock(dynsyslab::core::IntegrationMethod method) {
     options.initialStep = 0.01;
     options.method = method;
     std::size_t calls = 0;
-    dynsyslab::core::ScalarControlPolicy control;
+    dynsyslab::core::ControlPolicy control;
     control.evaluation = dynsyslab::core::ControlEvaluationMode::sampled;
     control.sampleTime = 0.1;
     control.value = [&calls](std::size_t, double, const double*) {
@@ -115,7 +115,7 @@ void testTruncateOnFailure(dynsyslab::core::IntegrationMethod method) {
     options.finalTime = 0.5; options.outputStep = 0.05; options.initialStep = 0.01;
     options.method = method;
     const auto policy = [] {
-        dynsyslab::core::ScalarControlPolicy control;
+        dynsyslab::core::ControlPolicy control;
         control.evaluation = dynsyslab::core::ControlEvaluationMode::sampled;
         control.sampleTime = 0.05;
         // Trajectory 0 fails at t = 0.2 (a controller blowing up); trajectory 1 runs through.
@@ -146,7 +146,7 @@ void testInvalidSampledControlClock() {
     configuration.identifier = "van_der_pol";
     auto system = dynsyslab::core::createSystem(configuration);
     dynsyslab::core::IntegrationOptions options;
-    dynsyslab::core::ScalarControlPolicy control;
+    dynsyslab::core::ControlPolicy control;
     control.value = [](std::size_t, double, const double*) { return 0.0; };
     control.evaluation = dynsyslab::core::ControlEvaluationMode::sampled;
     bool rejected = false;

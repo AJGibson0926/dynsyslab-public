@@ -6,19 +6,20 @@
 #include <stdexcept>
 
 namespace echo_experiment {
-Frozen frozen(const core::NpzRecord& a,const core::KoopmanSINDyResult& p) {
-    Frozen out; out.polynomial=p;
-    out.basis.delays=static_cast<std::size_t>(a.at("history_delay_samples").doubles()[0]);
+Frozen frozen(const core::NpzRecord& a,const core::EigenfunctionFitResult& p) {
+    Frozen out{core::HankelLeftBasis{},p};
+    out.basis.rows=static_cast<std::size_t>(a.at("history_delay_samples").doubles()[0]);
     out.basis.rank=a.at("singular_values").elementCount();
     out.basis.leftSingularVectors=a.at("left_singular_vectors").doubles();
     out.basis.singularValues=a.at("singular_values").doubles();
     out.basis.observationScale=a.at("observation_scale").doubles()[0];
     out.sensorStep=a.at("history_sample_time").doubles()[0];
     out.stride=static_cast<std::size_t>(std::llround(out.controlStep/out.sensorStep));
-    if ((p.stateDimension!=2 && p.stateDimension!=4) || p.continuousEigenvalues.size()!=1
+    const auto dimension=p.functions.coordinates().dimension;
+    if ((dimension!=2 && dimension!=4) || p.spectrum.size()!=1
         || std::abs(out.stride*out.sensorStep-out.controlStep)>1e-12)
         throw std::invalid_argument("experiment requires one complex mode in two history coordinates");
-    out.multiplier=std::exp(p.continuousEigenvalues[0]*out.controlStep);
+    out.multiplier=std::exp(p.spectrum.continuousRates()[0]*out.controlStep);
     return out;
 }
 Measurements readMeasurements(const std::filesystem::path& path) {
@@ -36,13 +37,13 @@ Lifted lift(const Measurements& m,const Frozen& f) {
             throw std::invalid_argument("sensor sampling changed");
     const auto projected=core::projectHistory(m.echo,f.basis);
     Lifted out;
-    const auto first=((f.basis.delays-1+f.stride-1)/f.stride)*f.stride;
+    const auto first=((f.basis.rows-1+f.stride-1)/f.stride)*f.stride;
     for(std::size_t k=first;k<m.time.size();k+=f.stride) {
-        const auto row=k-(f.basis.delays-1);
+        const auto row=k-(f.basis.rows-1);
         std::array<double,2> xi{projected.coordinates[row*f.basis.rank],
             projected.coordinates[row*f.basis.rank+1]};
         out.xi.push_back(xi); out.time.push_back(m.time[k]);
-        out.psi.push_back(core::evaluatePolynomialEigenfunction(f.polynomial,0,
+        out.psi.push_back(f.polynomial.functions.evaluate(0,
             projected.coordinates.data()+row*f.basis.rank));
     }
     for(std::size_t k=0;k+1<out.psi.size();++k)
@@ -66,7 +67,7 @@ void simulate(const core::SystemConfiguration& config,const std::filesystem::pat
     options.outputStep=f.sensorStep;
     options.maximumStep=f.sensorStep; options.relativeTolerance=1e-9;
     options.absoluteTolerance=1e-11;
-    core::ScalarControlPolicy policy;
+    core::ControlPolicy policy;
     policy.evaluation=core::ControlEvaluationMode::sampled;
     policy.sampleTime=f.sensorStep;
     policy.value=[&](std::size_t,double t,const double* x) {
@@ -116,7 +117,7 @@ Json controlTrial(const core::SystemConfiguration& config,const std::filesystem:
     core::CausalHistoryProjector projector(f.basis);
     double z2=0; for(const auto& z:reference.psi) z2+=std::norm(z);
     const double zScale=std::sqrt(z2/reference.psi.size());
-    const auto lambda=f.polynomial.continuousEigenvalues[0];
+    const auto lambda=f.polynomial.spectrum.continuousRates()[0];
     const auto integral=(f.multiplier-1.0)/lambda;
     const std::vector<double> generator{lambda.real(),-lambda.imag(),lambda.imag(),lambda.real()};
     const double penalty=std::max(1e-16,penaltyMultiplier*zScale*zScale/(0.1*0.1));
@@ -133,7 +134,7 @@ Json controlTrial(const core::SystemConfiguration& config,const std::filesystem:
         if(!xi) return 0.0;
         const auto index=static_cast<std::size_t>(std::llround((t-reference.time.front())/f.controlStep));
         if(index+1>=reference.psi.size()) return held;
-        const auto z=core::evaluatePolynomialEigenfunction(f.polynomial,0,xi->data());
+        const auto z=f.polynomial.functions.evaluate(0,xi->data());
         const auto b=map.evaluate(z)/integral;
         const auto gain=map.degree==0 ? fixedGain : core::solveContinuousLQR(generator,
             {b.real(),b.imag()},{1,0,0,1},{penalty},2,1).gain;

@@ -4,9 +4,13 @@
 #include "CoordinateInverse.hpp"
 #include <dynsyslab/core/TimeSeriesOperations.hpp>
 #include <dynsyslab/core/CoordinateTransform.hpp>
+#include <dynsyslab/core/ForecastScore.hpp>
 #include <dynsyslab/core/SindyDynamics.hpp>
 #include <dynsyslab/core/DynamicsLibrary.hpp>
+#include <dynsyslab/core/ModelLibraries.hpp>
 #include <dynsyslab/core/PathSimplification.hpp>
+#include <dynsyslab/core/NumericalDifferentiation.hpp>
+#include <dynsyslab/core/AnalyticExpression.hpp>
 #include <utility>
 #include <algorithm>
 #include <iterator>
@@ -30,25 +34,58 @@ c::TimeSeries sampled(const c::TimeSeries& s,std::size_t stride) {
     }
     return {time,values,s.componentCount()};
 }
+// 8th-order central differences per component (Fornberg 1988 weights, one-sided at the ends;
+// core highOrderCentralDifference), on the samples of `series`.
+// Library of monomials prod_j q_j^{p_j} with integer (possibly negative, i.e. Laurent) exponents,
+// one row of exponents per term ("monomials": [[p_0, ..., p_{d-1}], ...]).
+c::Observable monomialLibrary(const json::Value& terms,std::size_t dimension) {
+    std::vector<c::AnalyticExpression> features;std::vector<std::string> names;
+    for(const auto& term:terms.array()) {
+        const auto& powers=term.array();
+        if(powers.size()!=dimension)throw std::invalid_argument("monomials need one exponent per coordinate");
+        auto expression=c::AnalyticExpression::constant(1,dimension);std::string name;
+        for(std::size_t j=0;j<dimension;++j) {
+            const double p=powers[j].number();
+            if(!std::isfinite(p)||p!=std::floor(p))throw std::invalid_argument("monomial exponents must be integers");
+            if(p!=0)expression=expression*c::AnalyticExpression::state(dimension,j).power(p);
+            name+=(j?" ":"")+std::string("q")+std::to_string(j)+"^"+std::to_string(int(p));
+        }
+        names.push_back(name);features.push_back(std::move(expression));
+    }
+    if(features.empty())throw std::invalid_argument("monomials need at least one term");
+    return c::Observable::fromExpressions({"monomial_library","Monomial library","","model",names,false},std::move(features));
+}
+c::TimeSeries highOrderRates(const c::TimeSeries& series) {
+    const auto n=series.sampleCount(),d=series.componentCount();
+    std::vector<double> rates(n*d),y(n);
+    for(std::size_t j=0;j<d;++j) {
+        for(std::size_t k=0;k<n;++k)y[k]=series.value(k,j);
+        const auto dy=c::highOrderCentralDifference(y,series.deltaTime(),9);
+        for(std::size_t k=0;k<n;++k)rates[k*d+j]=dy[k];
+    }
+    return {{series.timeData(),series.timeData()+n},std::move(rates),d};
+}
 // q: predictor coordinates. numeric/reference: rates of the response
-// coordinates (by default the predictors themselves) on the same clock.
+// coordinates (by default the predictors themselves) on the same clock;
+// numeric is 4th-order central, high is 8th order (central_high_order).
 struct Dataset {
-    SourceData source;c::TimeSeries q,numeric;
+    SourceData source;c::TimeSeries q,numeric,high;
     std::optional<c::TimeSeries> reference;
     bool cross{};
 };
 Dataset dataset(const SourceData& s) {
     if(datasetDynamics(s)!="unforced")
         throw std::invalid_argument("Autonomous dynamics SINDy requires confirmed unforced records");
-    const auto series=c::TimeSeries::view(s.time,s.values.data(),s.samples,s.dimension);
+    const auto series=c::TimeSeries::view(s.time(),s.values().data(),s.samples(),s.dimension());
     const auto rates=c::differentiateTimeSeries(series);
-    Dataset d{s,c::cropSamples(series,2,s.samples-4),rates,{}};
+    Dataset d{s,c::cropSamples(series,2,s.samples()-4),rates,
+        c::cropSamples(highOrderRates(series),2,s.samples()-4),{}};
     const auto a=c::readNpz(s.path);
     if(a.contains("coordinate_derivatives")) {
         const auto& v=a.at("coordinate_derivatives");
-        if(v.shape!=std::vector<std::size_t>{s.samples,s.dimension})
+        if(v.shape!=std::vector<std::size_t>{s.samples(),s.dimension()})
             throw std::invalid_argument("Stored derivatives must align with coordinate samples");
-        d.reference=c::cropSamples(c::TimeSeries(s.time,v.doubles(),s.dimension),2,s.samples-4);
+        d.reference=c::cropSamples(c::TimeSeries(s.time(),v.doubles(),s.dimension()),2,s.samples()-4);
     }
     return d;
 }
@@ -70,7 +107,7 @@ Dataset paired(const SourceData& predictors,const SourceData& response) {
     std::set_intersection(x.q.timeData(),x.q.timeData()+x.q.sampleCount(),
         y.q.timeData(),y.q.timeData()+y.q.sampleCount(),std::back_inserter(common));
     if(common.size()<16)throw std::invalid_argument("Predictor and response coordinates share too few sample times");
-    Dataset d{predictors,rowsAt(x.q,common),rowsAt(y.numeric,common),{},true};
+    Dataset d{predictors,rowsAt(x.q,common),rowsAt(y.numeric,common),rowsAt(y.high,common),{},true};
     if(y.reference)d.reference=rowsAt(*y.reference,common);
     return d;
 }
@@ -128,6 +165,10 @@ json::Value evaluate(const c::SindyDynamicsModel& model,const Dataset& d,
                 c::cropSamples(prediction,first,last-first)).toJson()}});
     }
     result["regions"]=regions;
+    // Kinematic chain-rule check: {"value": i, "rate": j} coordinates (core/ForecastScore.hpp).
+    if(const auto& kin=settings.at("kinematics");!kin.isNull()&&model.isVectorField()&&!d.cross)
+        result["kinematics"]=json::Value::Object{{"value",kin.at("value")},{"rate",kin.at("rate")},
+            {"relative_mismatch",c::kinematicMismatch(model,d.q,std::size_t(kin.at("value").number()),std::size_t(kin.at("rate").number()))}};
     json::Value::Array rollouts;std::size_t index=0;
     if(d.cross||!model.isVectorField()){result["rollouts"]="not applicable: the response coordinates differ from the predictors";return result;}
     for(const auto& start:settings.at("rollout_starts").array()) {
@@ -145,7 +186,7 @@ json::Value evaluate(const c::SindyDynamicsModel& model,const Dataset& d,
             // Integrate in segments (rollout_segment, default 0.5 tau), each continuing
             // from the previous end state, so a law that diverges keeps the valid
             // part of its trajectory instead of losing all of it.
-            const std::size_t width=d.source.dimension;
+            const std::size_t width=d.source.dimension();
             const auto full=c::cropSamples(d.q,k,count);
             const auto segment=std::max<std::size_t>(2,std::size_t(std::llround(
                 settings.at("rollout_segment").number(0.5)/d.q.deltaTime())));
@@ -180,6 +221,14 @@ json::Value evaluate(const c::SindyDynamicsModel& model,const Dataset& d,
             const auto actual=c::cropSamples(d.q,k,valid);
             const auto predicted=c::TimeSeries({actual.timeData(),actual.timeData()+valid},std::move(values),width);
             record["error"]=c::dynamicsError(actual,predicted).toJson();
+            // Forecast scoring on the reference clock, optionally time-weighted, with peak matching
+            // ("peak_prominence", on "peak_channel") (core/ForecastScore.hpp).
+            if(!settings.at("peak_prominence").isNull()||settings.at("time_weighted").boolean(false)) {
+                c::ForecastScoreOptions scoring;scoring.timeWeighted=settings.at("time_weighted").boolean(false);
+                if(!settings.at("peak_prominence").isNull())scoring.prominence=settings.at("peak_prominence").number();
+                scoring.channel=std::size_t(settings.at("peak_channel").number(0));
+                record["forecast"]=c::forecastScore(c::cropSamples(d.q,k,count),predicted,scoring);
+            }
             record["status"]=valid==count?"complete":"diverged";
             if(valid<count){record["valid_until"]=actual.time(valid-1);record["reason"]=reason;}
             const auto name=prefix+"rollout_"+std::to_string(index)+"_";
@@ -220,7 +269,7 @@ std::filesystem::path runDynamicsValidation(const SourceData& source,const json:
     const auto path=std::filesystem::u8path(settings.at("model_archive").string());
     const auto saved=c::readNpz(path);
     const auto model=c::SindyDynamicsModel::fromDefinition(json::parse(saved.at("dynamics_model_json").string()));
-    const SourceData provenance{path,{},{},0,model.dimension(),{},0,saved.metadataJson()};
+    const SourceData provenance{path,saved.metadataJson(),{c::TimeSeries({},{},model.dimension())}};
     requireSameObservationSystem(source,provenance);
     const auto sourceMeta=json::parse(source.metadataJson),modelMeta=json::parse(saved.metadataJson());
     for(const char* key:{"coordinate_transform_kind","coordinate_transform_identity","coordinate_definition"})
@@ -230,13 +279,13 @@ std::filesystem::path runDynamicsValidation(const SourceData& source,const json:
     c::NpzRecord archive;
     auto meta=json::parse(metadata(source,"dynamics-validation",label,""));
     meta.object()["model_archive"]=std::filesystem::absolute(path).generic_u8string();
-    meta.object()["coordinate_dimension"]=double(source.dimension);
+    meta.object()["coordinate_dimension"]=double(source.dimension());
     meta.object()["validation"]=evaluate(model,data,archive,"validation_",settings);
     if(!settings.at("compare_model_archive").isNull()) {
         const auto comparison=c::readNpz(std::filesystem::u8path(settings.at("compare_model_archive").string()));
         const auto other=c::SindyDynamicsModel::fromDefinition(json::parse(comparison.at("dynamics_model_json").string()));
         const auto otherMeta=json::parse(comparison.metadataJson());
-        const SourceData otherProvenance{{},{},{},0,other.dimension(),{},0,comparison.metadataJson()};
+        const SourceData otherProvenance{{},comparison.metadataJson(),{c::TimeSeries({},{},other.dimension())}};
         requireSameObservationSystem(source,otherProvenance);
         for(const char* key:{"coordinate_transform_kind","coordinate_transform_identity","coordinate_definition"})
             if(json::dump(sourceMeta.at(key))!=json::dump(otherMeta.at(key)))
@@ -245,7 +294,7 @@ std::filesystem::path runDynamicsValidation(const SourceData& source,const json:
         meta.object()["comparison_model_archive"]=settings.at("compare_model_archive");
     }
     archive.arrays["metadata_json"]=c::NpyArray::fromString(json::dump(meta));
-    return publish(root,source,"dynamics-validation",label,std::move(archive));
+    return publishObject(root, source, dynsyslab::core::object_kind::report, "dynamics-validation",std::move(archive));
 }
 std::filesystem::path runSindyDynamics(const SourceData& source,const json::Value& settings,
     const std::filesystem::path& root,const std::string& label) {
@@ -256,17 +305,26 @@ std::filesystem::path runSindyDynamics(const SourceData& source,const json::Valu
         auto r=loadSource(std::filesystem::u8path(responsePath));requireSameObservationSystem(source,r);return r;}());
     const auto dimension=data.numeric.componentCount();
     const auto derivative=settings.at("derivatives").string("finite_difference");
-    if(derivative!="finite_difference"&&derivative!="stored")
-        throw std::invalid_argument("SINDy dynamics derivatives must be finite_difference or stored");
+    if(derivative!="finite_difference"&&derivative!="central_high_order"&&derivative!="stored")
+        throw std::invalid_argument("SINDy dynamics derivatives must be finite_difference, central_high_order or stored");
     if(derivative=="stored"&&!data.reference)throw std::invalid_argument("Missing stored derivative reference");
-    const auto& rates=derivative=="stored"?*data.reference:data.numeric;
+    const auto& rates=derivative=="stored"?*data.reference:derivative=="central_high_order"?data.high:data.numeric;
     const auto stride=positive(settings,"fit_stride",1);
     auto q=sampled(data.q,stride),dq=sampled(rates,stride);
     const auto family=settings.at("library_family").string("broad");
     std::vector<std::string> exclusions;
     const auto library=[&] {
         if(!settings.at("library").isNull())return c::Observable::fromExpressionDefinition(settings.at("library"));
-        if(family!="broad"&&family!="polynomial")throw std::invalid_argument("library_family must be broad or polynomial (or supply library expressions)");
+        if(!settings.at("monomials").isNull())return monomialLibrary(settings.at("monomials"),data.q.componentCount());
+        if(family!="broad"&&family!="polynomial") {  // the side-car families (core/ModelLibraries.hpp)
+            const auto known=c::modelLibraryFamilies();
+            if(std::find(known.begin(),known.end(),family)==known.end())
+                throw std::invalid_argument("library_family must be broad, polynomial, bounded, rational, localized, gated, paired_gated or harmonic (or supply library expressions)");
+            c::ModelLibraryOptions m;m.degree=positive(settings,"polynomial_degree",2);
+            m.centers=positive(settings,"library_centers",24);m.harmonics=positive(settings,"library_harmonics",5);
+            if(!settings.at("rational_widths").isNull()){m.rationalWidths.clear();for(const auto& w:settings.at("rational_widths").array())m.rationalWidths.push_back(w.number());}
+            return c::modelLibrary(family,data.q,m);
+        }
         c::DynamicsLibraryOptions o;o.polynomialDegree=positive(settings,"polynomial_degree",4);
         o.normalize=settings.at("normalize").boolean(true);const auto& f=settings.at("library_families");
         o.trigonometric=f.at("trigonometric").boolean(true);o.reciprocal=f.at("reciprocal").boolean(true);
@@ -279,6 +337,22 @@ std::filesystem::path runSindyDynamics(const SourceData& source,const json::Valu
     c::SindyDynamicsOptions options;options.threshold=settings.at("threshold").number(.001);
     options.maximumIterations=positive(settings,"max_iterations",20);
     options.singularValueTolerance=settings.at("svd_tolerance").number(1e-10);
+    // Ridge, sample weights ("trapezoid": each sample's share of time; or one weight per fit sample),
+    // speed down-weighting w / (1 + |qdot| / speed_scale), and weak-form windows (core/SindyDynamics.hpp).
+    options.ridge=settings.at("ridge").number(0.0);
+    const auto& weights=settings.at("sample_weights");
+    if(std::holds_alternative<std::string>(weights.storage())) {
+        if(weights.string()=="trapezoid")options.sampleWeights=c::trapezoidWeights(q);
+        else if(weights.string()!="uniform")throw std::invalid_argument("sample_weights must be uniform, trapezoid or a list");
+    } else if(!weights.isNull())for(const auto& w:weights.array())options.sampleWeights.push_back(w.number());
+    if(const double speed=settings.at("speed_scale").number(0.0);speed>0) {
+        if(options.sampleWeights.empty())options.sampleWeights.assign(q.sampleCount(),1.0);
+        for(std::size_t k=0;k<q.sampleCount();++k){double norm=0;
+            for(std::size_t j=0;j<dq.componentCount();++j)norm+=dq.value(k,j)*dq.value(k,j);
+            options.sampleWeights[k]/=1.0+std::sqrt(norm)/speed;}
+    }
+    for(const auto& duration:settings.at("weak_durations").array())options.weakDurations.push_back(duration.number());
+    options.weakStride=positive(settings,"weak_stride",1);
     c::SindyDynamicsFitDiagnostics fitDiagnostics;
     const auto model=c::fitSindyDynamics(q,dq,library,options,&fitDiagnostics);
     c::NpzRecord archive;
@@ -289,7 +363,7 @@ std::filesystem::path runSindyDynamics(const SourceData& source,const json::Valu
     for(const char* key:{"coordinate_names","coordinate_labels","coordinate_transform_kind","coordinate_transform_identity",
         "coordinate_transform_archive","coordinate_definition","derivative_evidence"})
         if(!sourceMeta.at(key).isNull())meta.object()[key]=sourceMeta.at(key);
-    meta.object()["settings"]=settings;meta.object()["coordinate_dimension"]=double(source.dimension);
+    meta.object()["settings"]=settings;meta.object()["coordinate_dimension"]=double(source.dimension());
     meta.object()["response_dimension"]=double(dimension);
     if(!responsePath.empty()) {
         const auto r=json::parse(c::readNpz(std::filesystem::u8path(responsePath)).metadataJson());
@@ -323,7 +397,7 @@ std::filesystem::path runSindyDynamics(const SourceData& source,const json::Valu
         for(const char* key:{"coordinate_transform_kind","coordinate_transform_identity","coordinate_definition"})
             if(json::dump(first.at(key))!=json::dump(next.at(key)))
                 throw std::invalid_argument("Validation coordinates must use the frozen training transform");
-        if(s.dimension!=source.dimension)throw std::invalid_argument("Validation coordinate dimension mismatch");
+        if(s.dimension()!=source.dimension())throw std::invalid_argument("Validation coordinate dimension mismatch");
         const auto validation=responsePath.empty()?dataset(s)
             :paired(s,loadSource(std::filesystem::u8path(responses[index].string())));
         validations.push_back(evaluate(model,validation,archive,"validation_"+std::to_string(index++)+"_",settings));
@@ -332,6 +406,6 @@ std::filesystem::path runSindyDynamics(const SourceData& source,const json::Valu
     meta.object()["model_type"]=model.isVectorField()&&responsePath.empty()?"autonomous-vector-field":"cross-coordinate-rate-law";
     meta.object()["derivative_method"]=derivative;
     archive.arrays["metadata_json"]=c::NpyArray::fromString(json::dump(meta));
-    return publish(root,source,"sindy-dynamics",label,std::move(archive));
+    return publishObject(root, source, dynsyslab::core::object_kind::dynamicalModel, "sindy-dynamics",std::move(archive));
 }
 }

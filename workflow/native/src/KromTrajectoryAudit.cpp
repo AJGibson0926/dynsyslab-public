@@ -31,25 +31,25 @@ core::json::Value auditKromTrajectory(const core::KoopmanModel &model,
       model.systemConfiguration(),
       postprocess_detail::systemConfiguration(source));
   const double dt = postprocess_detail::uniformDeltaTime(source);
-  if (source.dimension != model.stateDimension() || source.samples < 2)
+  if (source.dimension() != model.stateDimension() || source.samples() < 2)
     throw std::invalid_argument(
         "Trajectory must contain physical states on a uniform clock");
   const double strideValue = q.at("stride").number(1);
-  if (strideValue < 1 || strideValue > source.samples ||
+  if (strideValue < 1 || strideValue > source.samples() ||
       std::floor(strideValue) != strideValue)
     throw std::invalid_argument("Invalid output stride");
   const auto stride = std::size_t(strideValue), n = model.splitDimension(),
-             d = source.dimension;
+             d = source.dimension();
   const auto map = q.at("input_map").string("constant");
   if (map != "constant" && map != "none")
     throw std::invalid_argument(
         "Replay requires a constant map, or none for unforced data");
   if (map == "none")
-    for (auto u : source.inputs)
+    for (auto u : source.inputs())
       if (u != 0)
         throw std::invalid_argument(
             "Cannot ignore nonzero input in autonomous replay");
-  if (!source.inputs.empty() && source.inputDimension != 1)
+  if (!source.inputs().empty() && source.inputDimension() != 1)
     throw std::invalid_argument("Replay currently requires scalar input");
   std::optional<core::CausalHistoryProjector> history;
   std::optional<core::Observable> measurement;
@@ -69,23 +69,23 @@ core::json::Value auditKromTrajectory(const core::KoopmanModel &model,
   }
   std::vector<double> time, states, lifted, input;
   std::vector<std::complex<double>> complexLifted;
-  for (std::size_t s = 0; s < source.samples; ++s) {
-    const auto *x = source.values.data() + s * d;
+  for (std::size_t s = 0; s < source.samples(); ++s) {
+    const auto *x = source.values().data() + s * d;
     std::vector<std::complex<double>> z;
     if (history) {
       const auto c =
-          history->push(source.time[s], measurement->evaluateReal(x).front());
+          history->push(source.time()[s], measurement->evaluateReal(x).front());
       if (!c)
         continue;
       z = model.evaluateCoordinates(c->data());
     } else
       z = model.evaluate(x);
     const auto real = model.splitValues(z);
-    time.push_back(source.time[s]);
+    time.push_back(source.time()[s]);
     states.insert(states.end(), x, x + d);
     lifted.insert(lifted.end(), real.begin(), real.end());
     complexLifted.insert(complexLifted.end(), z.begin(), z.end());
-    input.push_back(source.inputs.empty() ? 0 : source.inputs[s]);
+    input.push_back(source.inputs().empty() ? 0 : source.inputs()[s]);
   }
   if (time.size() < 2)
     throw std::invalid_argument("Insufficient complete causal history windows");

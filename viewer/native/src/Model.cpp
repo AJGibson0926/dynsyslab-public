@@ -52,6 +52,7 @@ Trace traceFrom(const json::Value& value) {
     result.z = numbers(value.at("z"));
     result.colorValues = numbers(value.at("color_values"));
     result.magnitudes = numbers(value.at("magnitudes"));
+    result.magnitudeScale = value.at("magnitude_scale").number(0.);
     result.zShape = integers(value.at("z_shape"));
     return result;
 }
@@ -86,6 +87,8 @@ Figure figureFrom(const json::Value& value) {
     result.coordinates = value.at("coordinates").string();
     result.colorLabel = value.at("color_label").string();
     result.boxAxes3D = value.at("box_axes").boolean(false);
+    if (const auto& focus = value.at("focus_x").array(); focus.size() == 2)
+        result.focusX = std::make_pair(focus[0].number(), focus[1].number());
     if (const auto& camera = value.at("camera"); !camera.isNull()) {
         result.cameraAzimuthDegrees = camera.at("azimuth_degrees").number(42.0);
         result.cameraElevationDegrees = camera.at("elevation_degrees").number(24.0);

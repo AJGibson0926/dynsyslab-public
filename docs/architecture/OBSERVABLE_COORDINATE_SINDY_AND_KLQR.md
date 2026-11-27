@@ -1,8 +1,7 @@
 # Observable-coordinate SINDy and KLQR
 
-For the shipped C++ engine, CLI, echo pipeline and direct observable targets, see
+For the C++ engine, CLI, echo pipeline and direct observable targets, see
 [NATIVE_OBSERVABLE_EXPRESSIONS_AND_TARGETS.md](NATIVE_OBSERVABLE_EXPRESSIONS_AND_TARGETS.md).
-The Python API examples below describe the historical reference implementation.
 
 DynSysLab distinguishes the dynamical state `x` from the coordinates in which
 an eigenfunction is represented. An eigenfunction may be fitted as
@@ -30,33 +29,16 @@ is exactly the same implementation rather than a separate special algorithm.
 The constant and bilinear learned control maps remain alternative KROM control
 representations and do not use this exact chain-rule evaluation.
 
-## API
+## Job settings
 
-Systems expose scalar observables through `observable(name)` and ordered maps
-through `observable_coordinates(selection)`. SINDy accepts an `Observable`, a
-named system coordinate preset, or an ordered sequence of observable names.
+Systems own named scalar observables and ordered coordinate presets. The native
+`sindy` stage selects the coordinate map with `coordinate_observable` (a named
+observable or coordinate preset), `coordinate_observables` (an ordered list of
+names), or an explicit `coordinate_expression`:
 
-```python
-system = load_system("reddy_szeri", preset="matlab_cleanup_reference")
-
-radial = system.observable_coordinates("radial_state")
-c_k2 = system.observable_coordinates("c_k2")
-c_k5 = system.observable_coordinates("c_k5")
-
-result = koopman_with_sindy(
-    spectrum=eigenvalue_spectrum,
-    trajectories=training_trajectories,
-    system=system,
-    coordinate_observable="c_k5",
-    coordinate_system="dimensionless",
-)
-```
-
-The standard H-DMD to SINDy CLI exposes the same boundary:
-
-```text
-dynsyslab-postprocess run TRAINING_ARCHIVE --execute \
-  --sindy-coordinates c k5 --coordinate-system dimensionless
+```json
+{"name": "sindy",
+ "settings": {"coordinate_observable": "c_k5", "polynomial_degree": 4}}
 ```
 
 The Reddy--Szeri presets are:
@@ -66,19 +48,19 @@ The Reddy--Szeri presets are:
 - `c_k2`: `(c, k2)`;
 - `c_k5`: `(c, k5)`.
 
-`KoopmanLQRController` needs no coordinate-specific branch. Its state target is
-lifted through `KROM.psi`, while `KROM.B_psi` evaluates the composed Jacobian.
-This permits the same controller API in radial or transformed coordinates.
+KLQR needs no coordinate-specific branch. Its state target is lifted through
+the KROM's eigenfunctions, and `B_psi` evaluates the composed Jacobian. This
+permits the same controller in radial or transformed coordinates.
 
 ## Analytic observable expressions
 
-`AnalyticExpression` is a small serializable expression tree. It supports state
-variables, constants, arithmetic, constant real powers, and common elementary
-functions. `Observable.from_expressions` differentiates the expression exactly
-with respect to every dynamical-state component and stashes each scalar partial
-as an `Observable`. The main observable's Jacobian evaluates those exact
-partials. Finite differences remain an explicit validation/fallback backend,
-not the default for analytic observables.
+`AnalyticExpression` (`native/include/dynsyslab/core/AnalyticExpression.hpp`)
+is a small serializable expression tree. It supports state variables,
+constants, arithmetic, constant real powers, and common elementary functions.
+An expression observable is differentiated exactly with respect to every
+dynamical-state component, and its Jacobian evaluates those exact partials.
+Finite differences remain an explicit validation backend, not the default for
+analytic observables.
 
 The retained Reddy `c`, `k2`, `k3`, `k4`, `k5`, radial acceleration,
 compressibility loss, and `g1` definitions use this representation. The `c`,
@@ -88,14 +70,9 @@ are available in the system observable catalog.
 ## Eigenfunction and archive ownership
 
 Each SINDy eigenfunction retains its coordinate observable, and a KROM verifies
-that all of its eigenfunctions use the same map. Both objects expose the map in
-metadata. The executable methods are:
-
-- `eigenfunction.psi_from_state(x)`;
-- `eigenfunction.nabla_psi_from_state(x)`;
-- `krom.psi(x)`;
-- `krom.nabla_psi(x)`;
-- `krom.B_psi(x)`.
+that all of its eigenfunctions use the same map. Both expose the map in
+metadata, and evaluate `psi(x)`, its state gradient, and `B_psi(x)` from the
+dynamical state.
 
 SINDy results and archives retain two separate arrays:
 

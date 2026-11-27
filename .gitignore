@@ -46,7 +46,7 @@ native/*.egg-info/
 
 
 # Numerical data, live coordination state, and campaign outputs are managed by
-# Archiver and are intentionally not source-controlled.
+# the native archive layer and are intentionally not source-controlled.
 /archives/campaigns/
 /archives/derived/
 /archives/experiments/

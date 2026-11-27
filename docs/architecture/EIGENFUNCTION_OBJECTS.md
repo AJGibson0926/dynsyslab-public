@@ -1,7 +1,10 @@
-# Spectrum and eigenfunction objects
+# Spectrum and eigenfunctions of a K-ROM
 
-`native/include/dynsyslab/core/EigenfunctionObjects.hpp` defines method-independent objects for
-Koopman spectra and eigenfunctions. H-DMD is the first method that produces them.
+A Koopman reduced-order model is a spectrum and a set of eigenfunctions
+(`native/include/dynsyslab/core/KoopmanModel.hpp`, the one class `core::KoopmanModel`), independent
+of the method that found them; input maps B and readouts C are optional parts
+([DATA_OBJECTS.md](DATA_OBJECTS.md)). This page describes the eigenfunctions as data. H-DMD is the
+first method that produces them.
 
 ## Input: time-series records
 
@@ -62,23 +65,72 @@ single-channel, uncentered H-SVD archive is itself a measurement map. Coordinate
 coordinates records that archive as its provider, so a controller projects live windows through the
 same basis.
 
-## Output: spectrum and eigenfunction set
+## Output: spectrum and eigenfunctions
 
 - **`Spectrum`** (`core/Spectrum.hpp`). The one spectrum class, used by every producer and by
   `KoopmanModel`. Each mode is stored in the time domain it was produced in: a continuous rate
   λ, or a sampled multiplier μ = e^{λΔt} with its logarithm branch. Conversions are explicit and
   lossless, and a zero multiplier is allowed. `eigenvalue(j)` (or `spectrum[j]`) and
   `eigenvalues()` give `Eigenvalue` objects with conjugate partners paired. The spectrum also
-  carries the origin that produced it.
-- **`EigenfunctionSet`.** For each training sample: the eigenfunction values, the label time and
-  the input-record row the sample belongs to. It also carries the origin (method `hdmd`, its
-  runtime settings and its input records) and an ordered list of representations. The first
-  representation is the default everywhere.
+  carries the origin that produced it, each eigenpair's residual, its continuous part and an
+  optional pseudospectrum ([below](#eigenpairs-spectrum-and-pseudospectrum)).
+- **`KoopmanModel`** (`core/KoopmanModel.hpp`): the eigenfunctions of one spectrum, stored
+  together because they share their samples and each representation's dictionary, window layout or
+  base points. For each training sample it holds the eigenfunction values (`samples()`,
+  `EigenfunctionSamples`), the label time and the input-record row the sample belongs to. It also
+  carries the origin (method, runtime settings, input records) and an ordered list of named
+  representations, each one multi-output `FunctionRepresentation`; the first is the one the model
+  evaluates (`useRepresentation` chooses another).
+- **`Eigenfunction`** (`core/Eigenfunction.hpp`): one eigenfunction, an `Observable` with an
+  eigenvalue. `KoopmanModel::eigenfunction(j)` gives mode j with every representation;
+  `psi.as("interpolation")` makes another the default, and `psi.representationNames()` lists them.
+  Any `Observable` can hold several named representations the same way
+  (`Observable::withRepresentation`).
+
+### Eigenpairs, spectrum and pseudospectrum
+
+| Class | Header | What it is |
+|---|---|---|
+| `Eigenvalue` | `core/Eigenvalue.hpp` | One eigenvalue: λ, μ, Δt, the logarithm branch through the spectrum. |
+| `Eigenfunction` | `core/Eigenfunction.hpp` | One function with its named representations, sharing dictionaries and interpolation data with its siblings. |
+| `Eigenpair` | `core/Eigenpair.hpp` | An `Eigenvalue`, its `Eigenfunction` (absent on a bare spectrum) and an optional `EigenpairResidual {value, definition, scope}`. |
+| `Spectrum` | `core/Spectrum.hpp` | The point part (the eigenvalues and their pairs' residuals), the continuous part (`SpectralMeasure` components, `core/SpectralMeasure.hpp`; they have no eigenfunctions) and an optional `Pseudospectrum`. |
+| `Pseudospectrum` | `core/Pseudospectrum.hpp` | Grid points z with the minimum residual at each (and the minimizers); `levelSet(ε)` is the sampled ε-pseudospectrum. |
+| `KoopmanModel` | `core/KoopmanModel.hpp` | The K-ROM: a spectrum whose point part are its eigenpairs (`eigenpair(j)` joins eigenvalue, eigenfunction and residual; `for (const auto& pair : krom.pairs())` visits them all in mode order, assembling each on access, so nothing is copied or stored twice), optional B and C, and a spectral fit's `spectralDiagnostics()`. |
+
+The residual is a property of the pair: it measures how well this function and this value satisfy
+the eigen-equation together, so it sits on neither the eigenvalue nor the eigenfunction. Each
+method stores its own definition; definitions are never mixed or converted.
+
+| Definition | Producer | Value |
+|---|---|---|
+| `one-step` | the `koopman_spectral` family (ResDMD; Colbrook & Townsend, *Comm. Pure Appl. Math.* 77, 2024, in the EDMD dictionary of Williams, Kevrekidis & Rowley, *J. Nonlinear Sci.* 25, 2015) | ‖ψ(y) − μψ(x)‖ / ‖ψ(x)‖ as a weighted quadrature over the training snapshot pairs (scope `empirical-training`) |
+| `generator` | `sindy` (Kaiser, Kutz & Brunton, *Mach. Learn.: Sci. Technol.* 2, 2021) | RMS over the training rows of ∇ψ·f − λψ for the published (calibrated) eigenfunction, in the units of ψ |
+| `one-step-successor-mean` | history EDMD (`echo_history_koopman`) | the one-step residual over ‖ψ(y)‖, averaged over the training runs (its mode score) |
+
+H-DMD (Arbabi & Mezić, *SIAM J. Appl. Dyn. Syst.* 16, 2017), DMD, EDMD, DMDc/EDMDc, boundary
+eigenfunctions, `eigenfunction_expansion` and polynomial fits compute none: their pairs' residuals
+are empty. H-DMD's per-representation value error and Koopman residual stay its method properties.
+
+The pseudospectrum is computed evidence about the spectrum, not part of it: σ ⊂ σ_ε for every ε and
+σ = ∩_ε σ_ε (Trefethen & Embree, *Spectra and Pseudospectra*, Princeton 2005). ResDMD evaluates it
+on the `residual_grid` you give, in the plane of μ, with the definition and scope of its eigenpair
+residuals. Spectral measures of measure-preserving systems (mpEDMD, Colbrook, *SIAM J. Numer.
+Anal.* 61, 2023; Rigged DMD and ResDMD smoothed measures, Colbrook, Drysdale & Horning,
+arXiv:2405.00782) are the continuous components; the trial space's invariance, wave packets,
+stochastic residuals and RKHS adjoints are the krom's spectral diagnostics.
+
+Selecting modes (`extract`, `krom_extract`) keeps the selected pairs' residuals and the operator's
+continuous part and pseudospectrum; it clears the diagnostics of the original trial space. The
+Viewer's K-ROM spectrum shows each eigenvalue with its residual and, when the grid is a rectangular
+lattice, the pseudospectrum as a heat map of log₁₀ of the minimum residual under the eigenvalues.
 
 ### Representations: two kinds
 
-Every representation evaluates all eigenfunctions at a point of its domain. There are two kinds,
-and they are the same two that any `Observable` uses.
+Every representation is a `FunctionRepresentation` that evaluates all eigenfunctions at a point of
+its own domain. There are two kinds, and they are the same two that any `Observable` uses. Each has
+a name, unique within the object (`representationName`): `interpolation`; `time-delay` for an
+expansion on series windows; `polynomial` for monomials; else the dictionary's one term kind.
 
 **Expansion: ψ_j(q) = Σ_k c_jk φ_k(q).** The dictionary (`core/ExpansionDictionary.hpp`) is one
 ordered collection of basis functions, and it may mix any term kinds:
@@ -97,7 +149,8 @@ coefficients:
 - EDMD may also use Gaussian radial-basis terms;
 - DMD and DMDc use degree-one monomials;
 - spectral fits convert their dictionary term for term, so the values are identical;
-- H-DMD's window map is the linear terms of the window;
+- H-DMD's window map, `time-delay`, is one coordinate term per window entry on the window domain
+  (`windowMapFromModes`, `core/HankelRepresentations.hpp`), stored as the matrix T;
 - `eigenfunction_expansion` takes the terms and coefficients from the job.
 
 The method is recorded in the origin, not in the type. Gradients are exact for monomials, Gaussian,
@@ -123,9 +176,9 @@ from samples, eigenfunctions included, and no method owns its own:
     observable, otherwise the sampled values themselves.
 
   Without a producing system, only `"input"` exists.
-- `Observable::fromRepresentation` and `Eigenfunction::fromRepresentation` wrap the result. An
-  eigenfunction set holds it as a `SharedRepresentation`, one domain for every mode, named `state`
-  or after its coordinates.
+- `Observable::fromRepresentation` and `Eigenfunction::fromRepresentation` wrap the result. The
+  eigenfunctions hold it directly, one domain for every mode, named `state` or after its
+  coordinates.
 
 The framework is shared, but each observable chooses its own interpolant. The method and its
 neighbour count belong to the interpolation object, so two observables of the same samples may
@@ -147,10 +200,11 @@ neighbour distance. To sweep, call `setInterpolationMethod(set, method, neighbor
 of Koopman residual per method. The method is set by H-DMD's `interpolation_method`, stored in the
 archive, and can be overridden with `krom_extract`'s `interpolation_method`.
 
-`KoopmanModel` has exactly these two backends. A spectral K-ROM archive loads as its dictionary
-expansion, and as its interpolation only when a caller asks for `state`. DMD, EDMD
-and DMDc archives store their expansion, so `loadKoopmanModel` evaluates them in their own
-dictionaries.
+`KoopmanModel` has exactly these two backends. A spectral K-ROM step publishes a krom with both
+representations of its eigenfunctions: the frozen-dictionary expansion and an interpolation over
+the training states. DMD, EDMD and DMDc kroms store their expansion, so `loadKoopmanModel`
+evaluates them in their own dictionaries. A step that adds to a K-ROM publishes a child krom that
+references it and its modes ([DATA_OBJECTS.md](DATA_OBJECTS.md)).
 
 **Eigenfunctions given by hand.** `eigenfunction_expansion` is a delivery method, not a kind of
 eigenfunction. You choose dictionary terms and coefficients:
@@ -176,25 +230,28 @@ parameter m = k² (`ellipk(m)`, `ellipe(m)`, `ellipf(phi, m)`, `ellipe(phi, m)`;
 - **One domain, chosen where the eigenfunctions are made.** H-DMD's `interpolation_domain` sets it
   (the former `interpolation_domains` list is read as its first entry). The K-ROM loader uses
   the domain it finds and refuses a request for a different one; it never re-domains.
-- **Domain recognition.** `EigenfunctionSet::recognizeDomain(observables)` picks the domain whose
-  observables match the data handed in. For example, echo windows select `window`.
+- **Domain recognition.** `KoopmanModel::recognizeDomain(observables, representation)` names the
+  representation's domain and checks it against the observables of the data handed in. For
+  example, echo windows are the `time-delay` representation's `window` domain.
 - **No copies of the input.** H-DMD stores neither its input channels nor the states. The
   interpolation stores its base points, the one copy the framework allows, because they define the
   function. Stages that need the training states, such as refit reconstructions, find them
-  through the set's origin.
+  through the K-ROM's origin.
 
 ### Errors
 
-`EigenfunctionSet::errors(representation, domain, input)` evaluates one representation at the
-training samples. With no arguments it uses the first representation and its first domain. Per
+`KoopmanModel::errors(representation, input)` evaluates one representation at the training
+samples. With no arguments it uses the first representation on its domain. Per
 mode, it reports:
 
 - the value error ‖R(p_k) − ψ_k‖ / ‖ψ_k‖;
 - the Koopman residual ‖R(p_{k+1}) − μ^Δt R(p_k)‖ / ‖R(p_k)‖.
 
 The interpolation reproduces its own samples, so its value error is zero by construction; for
-interpolation, the Koopman residual is the meaningful number. H-DMD writes the default errors as
-`eigenfunction_value_error` and `eigenfunction_koopman_residual`.
+interpolation, the Koopman residual is the meaningful number. H-DMD writes the default value error as
+`eigenfunction_value_error` and attaches the Koopman residual to each eigenpair as its `one-step`,
+`empirical-training` residual (`core/Eigenpair.hpp`): a residual belongs to an eigenvalue together
+with the eigenfunction approximation it was measured on, not to the eigenvalue alone.
 
 ## Observables and eigenfunctions
 
@@ -225,13 +282,12 @@ How the pieces connect:
   builds one eigenfunction the same way.
 - Producers (SINDy, EDMD, DMD, DMDc, EDMDc, spectral fits, H-DMD, the library, jobs) return
   `EigenfunctionFitResult {functions, spectrum, diagnostics}`. That is the shared `FunctionExpansion`
-  and, separately, its `Spectrum`.
-- `KoopmanModel(functions, spectrum, …)` or `KoopmanModel(InterpolationData, spectrum, …)` holds
-  the two. `model.eigenfunction(j)` hands out an `Eigenfunction`.
-- `EigenfunctionSet::eigenfunction(j, domain, representation)` does the same for H-DMD objects.
-  Each set-level representation gives its `FunctionRepresentation` on one domain through
-  `function(domain)`: an interpolation, or the window map written as a degree-one
-  `FunctionExpansion`.
+  and, separately, its `Spectrum`, with the pairs' residuals when the fit computed them.
+- `KoopmanModel(functions, spectrum, …)`, `KoopmanModel(InterpolationData, spectrum, …)` or
+  `KoopmanModel(spectrum, samples, origin, representations)` holds them. `model.eigenfunction(j)`
+  hands out an `Eigenfunction` with every representation attached (the evaluated one first). Each
+  representation is a `FunctionRepresentation` on its own domain: an interpolation, a dictionary
+  expansion, or the window map as a `FunctionExpansion` in coordinate terms of the window.
 
 **Expansion tools** (`FunctionExpansion`, `core/ExpansionProjection.hpp`).
 
@@ -334,28 +390,96 @@ so an H-DMD fitted on H-SVD coordinates still interpolates on the original solve
 ### Window settings
 
 Use the `window` object, `{"delays", "columns", "sample_stride", "delay_stride",
-"snapshot_stride"}`, together with `window_alignment`, for both methods. The legacy keys disagree:
+"snapshot_stride"}`, together with `window_alignment` (default `"end"`: a window is labelled by its
+newest sample, so values use only history), for both methods. The legacy keys disagree:
 `matrix_size` means the number of delays in H-SVD but the number of columns in H-DMD. They remain
 readable only for old jobs.
 
-## Archive: `dynsyslab.eigenfunction-objects/v1`
+## Adding representations with SINDy
+
+Representations have names, unique within an object: `interpolation`, `time-delay` (H-DMD's window
+map) and `polynomial` (a monomial dictionary expansion; other dictionaries are named after their
+term kind). Jobs, the Viewer and K-ROMs choose a representation by name. A kind such as `expansion`
+still works when only one representation has it.
+
+The `sindy` method publishes a krom. What it is given decides what it does:
+
+| Given | SINDy does | Publishes |
+|---|---|---|
+| `"eigenvalues": [[re, im], …]` | fits each eigenvalue's eigenfunction and normalizes it | a new krom |
+| a spectrum (any archive with eigenvalues that is not a krom) | the same, for all modes or `modes` | a new krom |
+| a krom (`krom`, `eigenfunctions`, `spectrum_archive`, or the preceding method's object) | fits the selected modes, calibrates them to the eigenfunctions' own values, and adds the polynomial | the krom's child |
+| nothing, or `"eigenvalues": "from_data"` | also finds the eigenvalues from the training data | a new krom |
+
+In H-DMD → SINDy, SINDy receives H-DMD's krom. It keeps its eigenvalues and publishes a child with
+three representations. The polynomial is evaluated; `make_default: false` keeps H-DMD's.
+
+**Fit.** The default `fit: "nullspace"` solves the generator equation alone, as published (Kaiser,
+Kutz & Brunton, *Mach. Learn.: Sci. Technol.* 2, 035023, 2021). Given eigenfunctions, it then takes
+the least-squares complex scale c_j = p_jᴴψ_j / p_jᴴp_j, where ψ are the eigenfunctions' values at
+their samples. Eigenfunctions are defined up to such a factor. `fit: "anchored"` (opt-in) solves, for
+each mode, min ‖Θ(X_a)ξ − ψ‖² + w‖(Γ − λΘ)ξ‖². Here X_a are the states at the samples (through the
+origin), Θ the polynomial library and Γ its rate along the dynamics. The weight w is `anchor_weight`
+(default 1) times tr(Θ_aᵀΘ_a)/tr(G(λ)). The anchored fit trades generator residual for agreement, so
+when the library cannot represent the references it no longer returns an eigenfunction. H-DMD's
+values, for example, cover only its last window (near rest for a decaying trajectory).
+
+**Normalization.** Without reference values, or for a mode whose polynomial disagrees with its
+references beyond `agreement_tolerance`, each eigenfunction has unit RMS over the training rows and
+is real and positive at the first row. A disagreeing reference fixes no meaningful factor.
+`metadata.agreement.calibration` records `reference` or `normalized` for each mode.
+
+**Agreement.** `agreement_mismatch` records ‖c_j p_j − ψ_j‖/‖ψ_j‖ for each mode, at the samples.
+Modes above `agreement_tolerance` (default 0.1) are listed in `metadata.agreement.flagged_modes`, and
+SINDy warns.
+
+**Eigenvalues from data** follow Kaiser, Kutz & Brunton (2021), Algorithm 1:
+1. The initial guesses are the eigenvalues of the library generator K = Θ⁺Γ, the generator EDMD
+   matrix (Klus et al., *Physica D* 406, 132416, 2020).
+2. For each guess, SINDy takes the sparse null vector of (Γ − λΘ). It uses sequential thresholding,
+   not their alternating-directions search.
+3. It updates λ ← ξᴴKξ/ξᴴξ until λ settles.
+4. It validates each eigenpair along the training series by the error of φ(x(t)) against c e^{λt}
+   (their Eq. 47), with c fitted by least squares. The trivial λ = 0 and eigenvalues above
+   `validation_tolerance` are dropped; `metadata.eigenvalue_estimate` records the candidates.
+
+A finite library may not be closed under the dynamics, so this can miss eigenvalues. Use one
+trajectory.
+
+**Children.** Archives are immutable, so SINDy publishes a new krom: a child of the one it was
+given, `krom.parent = {path, sha256, modes}`. It holds its own coefficients, its readouts, the
+calibration and the agreement. Readers rebuild the parent's representations, samples, readouts and
+maps from the parent archive, refusing it if it is missing or changed. Nothing large is copied:
+H-DMD's window map and samples stay in H-DMD's krom.
+
+**Representation choice.** `krom_extract` (and `control_regression`) take
+`eigenfunction_representation`; the default is the krom's first. The child krom lists it first in
+its `order` (also written as `eigenfunction_representation_name`). A K-ROM's input map needs ∇ψ
+with respect to the state, so a `time-delay` K-ROM (a function of past windows) refuses a state and
+its exact map. To compare representations in control, change this setting in the K-ROM stage and
+rerun the experiment.
+
+## Archive: the krom (`dynsyslab.krom/v1`)
 
 The arrays are:
 
-- `continuous_eigenvalues`, `discrete_eigenvalues`;
+- `continuous_eigenvalues`, `discrete_eigenvalues`, and the spectrum's evidence (`eigenpair_residual`,
+  `pseudospectrum_*`, `continuous_spectrum_json`; `core/SpectrumArchive.hpp`);
 - `eigenfunction_values`, `training_time`, `training_sample_indices`;
 - `interpolation_points`, the interpolation's base points q_k (samples × domain dimension);
 - `window_map` (modes × rows): row j is eigenfunction j's own linear map from a raw window, so each
   eigenfunction stands alone.
 
-`readEigenfunction(archive, j, representation)` gives one eigenfunction on its own. Its window map
-reads raw windows built by `HankelWindowLayout::window_at` from the channels and layout its
-description names, so new windows of the right length evaluate without the producing method. The
-archive is the `eigenfunctions` data object ([DATA_OBJECTS.md](DATA_OBJECTS.md)). Reconstructions
-live in their own object, written over it.
+`loadKoopmanModel(path).eigenfunction(j).as(representation)` gives one eigenfunction on its own,
+with every representation it has and `representation` as its default. Its window map reads raw
+windows built by `HankelWindowLayout::window_at` from the channels and layout its description
+names, so new windows of the right length evaluate without the producing method. The archive is
+the `krom` data object ([DATA_OBJECTS.md](DATA_OBJECTS.md)), which also holds the readouts and
+input maps.
 
-`metadata_json.eigenfunction_objects` holds the origin (the input series, by path and SHA-256), the
-input channels, the representations in order and the default errors. The interpolation's
+`metadata_json.krom` holds the origin (the input series, by path and SHA-256), the
+input channels, the representations in order and any parent; H-DMD's default errors are in
+`metadata_json.eigenfunction_errors`. The interpolation's
 description holds its domain, with its state map, and its interpolant. The window map's
 description holds the window layout: the record columns, lags, scales, delays and strides. Together
 with `training_sample_indices`, this says exactly which input values each eigenfunction value came

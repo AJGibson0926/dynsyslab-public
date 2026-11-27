@@ -11,7 +11,6 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from infrastructure import source_events
 from quality.architecture import audit_project, compare_baseline, render_markdown
 
 
@@ -58,7 +57,7 @@ class ArchitectureQualityTests(unittest.TestCase):
     def test_audit_is_versioned_and_covers_python_native_and_docs(self):
         result = audit_project(PROJECT_ROOT)
         self.assertEqual(result["schema"], "dynsyslab.architecture-audit/v1")
-        self.assertGreater(result["python"]["files"], 100)
+        self.assertGreater(result["python"]["files"], 30)  # the thin Python layer
         self.assertGreater(result["native"]["files"], 20)
         self.assertEqual(result["documentation"]["broken_links"], [])
         self.assertEqual(result["python"]["package_cycles"], [])
@@ -86,46 +85,6 @@ class ArchitectureQualityTests(unittest.TestCase):
         self.assertTrue(result["passes_strict"])
         self.assertEqual(comparison["regressions"]["hard_size_paths"], [])
         self.assertEqual(comparison["regressions"]["boundary_violations"], [])
-
-    def test_refactored_modules_remain_below_preferred_ceiling(self):
-        paths = [PROJECT_ROOT / "viewer" / "core.py",
-                 PROJECT_ROOT / "viewer" / "contracts.py",
-                 PROJECT_ROOT / "viewer" / "records.py",
-                 PROJECT_ROOT / "job_manager" / "manager.py",
-                 PROJECT_ROOT / "job_manager" / "_runtime.py",
-                 PROJECT_ROOT / "scripts" / "search_duffing_bilinear_krom.py",
-                 PROJECT_ROOT / "rom" / "koopman.py",
-                 PROJECT_ROOT / "rom" / "control_campaign.py",
-                 PROJECT_ROOT / "rom" / "control_candidate_screening.py",
-                 PROJECT_ROOT / "rom" / "candidates" /
-                 "control_identification.py",
-                 PROJECT_ROOT / "rom" / "candidates" /
-                 "control_identification_contracts.py",
-                 PROJECT_ROOT / "postprocessing" / "koopman" /
-                 "koopman_sindy.py",
-                 PROJECT_ROOT / "postprocessing" / "koopman" /
-                 "sindy_nullspace.py",
-                 PROJECT_ROOT / "postprocessing" / "koopman" /
-                 "workflows.py",
-                 PROJECT_ROOT / "postprocessing" / "koopman" /
-                 "duffing_pipeline.py",
-                 PROJECT_ROOT / "estimation" / "koopman.py",
-                 PROJECT_ROOT / "estimation" / "klqe_storage.py",
-                 PROJECT_ROOT / "infrastructure" / "controlled_data.py",
-                 PROJECT_ROOT / "infrastructure" / "persistence.py",
-                 PROJECT_ROOT / "operations" / "rpe_krom_screening.py"]
-        paths.extend((PROJECT_ROOT / "viewer" / "rendering").glob("*.py"))
-        paths.extend((PROJECT_ROOT / "job_manager").glob("*_services.py"))
-        paths.extend((PROJECT_ROOT / "operations" /
-                      "duffing_bilinear").glob("*.py"))
-        paths.extend((PROJECT_ROOT / "rom").glob("krom_*.py"))
-        oversized = {
-            path.relative_to(PROJECT_ROOT).as_posix():
-            len(path.read_text(encoding="utf-8").splitlines())
-            for path in paths
-            if len(path.read_text(encoding="utf-8").splitlines()) > 500
-        }
-        self.assertEqual(oversized, {})
 
     def test_quality_workflow_covers_supported_python_wheel_and_native_apps(self):
         workflow = (PROJECT_ROOT / ".github" / "workflows" /
@@ -235,8 +194,7 @@ class ArchitectureQualityTests(unittest.TestCase):
         self.assertIn('packages = ["dynsyslab_client"]', project)
         self.assertIn("include-package-data = false", project)
         self.assertIn("dependencies = []", project)
-        for package in ("archiver*", "compute_workbench*", "estimation*",
-                        "job_manager*", "postprocessing*", "scripts*"):
+        for package in ("compute_workbench*", "operations*", "scripts*", "tools*"):
             self.assertNotIn(f'"{package}"', project)
 
     def test_optional_python_client_does_not_import_scientific_runtimes(self):
@@ -257,24 +215,6 @@ class ArchitectureQualityTests(unittest.TestCase):
         self.assertEqual(result["schema"],
                          "dynsyslab.python-client-diagnostics/v1")
         self.assertFalse(result["python_required_by_native"])
-
-    def test_source_events_are_viewer_independent_and_passive(self):
-        source = (PROJECT_ROOT / "infrastructure" /
-                  "source_events.py").read_text(encoding="utf-8")
-        self.assertNotIn("from viewer", source)
-        self.assertNotIn("import viewer", source)
-        with TemporaryDirectory() as directory, patch.object(
-                source_events, "ROOT", Path(directory)):
-            observed = Path(directory) / "solution.npz"
-            source_events.register_sources("session", [{
-                "name": "test", "path": str(observed.resolve()),
-            }])
-            self.assertEqual(source_events.notify_source_update(
-                observed, source_type="solution", reason="test"), 1)
-            events, cursor = source_events.poll_events("session")
-            self.assertEqual(cursor, 1)
-            self.assertEqual(events[0]["reason"], "test")
-
 
 if __name__ == "__main__":
     unittest.main()

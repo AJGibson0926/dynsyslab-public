@@ -12,9 +12,9 @@ KoopmanModel KoopmanModel::fromPolynomialCoefficients(
     SystemConfiguration system, std::size_t dimension, std::vector<std::size_t> exponents,
     std::vector<std::complex<double>> coefficients, std::vector<std::complex<double>> eigenvalues,
     std::vector<double> center, std::vector<double> scale) {
-    return KoopmanModel(KoopmanSINDyResult::fromCoefficients(
-                            dimension, std::move(exponents), std::move(coefficients),
-                            std::move(eigenvalues), std::move(center), std::move(scale)),
+    return KoopmanModel(polynomialEigenfunctions(dimension, std::move(exponents), std::move(coefficients),
+                                                 Spectrum::fromContinuousRates(std::move(eigenvalues)),
+                                                 std::move(center), std::move(scale)),
                         std::move(system));
 }
 namespace {
@@ -39,13 +39,11 @@ KoopmanModel::KoopmanModel(FunctionExpansion p, Spectrum s, std::size_t inputs,
       suppliedInputDimension_(inputs) {
     requireEigenfunctions(*polynomial_, *spectrum_);
     const auto modes = eigenfunctionCount();
-    if ((!fitDiagnostics_.residualRms.empty() && fitDiagnostics_.residualRms.size() != modes) ||
-        (!fitDiagnostics_.residualMaximum.empty() &&
-         fitDiagnostics_.residualMaximum.size() != modes))
+    if (!fitDiagnostics_.residualMaximum.empty() && fitDiagnostics_.residualMaximum.size() != modes)
         throw std::invalid_argument("Fit diagnostics must be mode aligned");
-    if (spectrum().hasContinuousRates())
-        eigenfunctions_ = legacyPolynomialEigenfunctions(*polynomial_, *spectrum_, fitDiagnostics_);
     coordinates().validate();  // the state map (if any) matches the coordinate dimension
+    samples_.modes = modes;
+    representations_.push_back({representationName(*polynomial_), std::make_shared<const FunctionExpansion>(*polynomial_)});
 }
 KoopmanModel::KoopmanModel(FunctionExpansion p, Spectrum s, SystemConfiguration system,
                            EigenfunctionFitDiagnostics diagnostics)
@@ -64,17 +62,7 @@ void KoopmanModel::attachPhysicalSystem(SystemConfiguration configuration) {
         throw std::invalid_argument("KROM observable and polynomial dimensions differ");
     if (!q.stateMap) q.physicalStateDimension = physical;
     polynomial_ = polynomial_->withCoordinates(std::move(q));
-    if (spectrum().hasContinuousRates())
-        eigenfunctions_ = legacyPolynomialEigenfunctions(*polynomial_, *spectrum_, fitDiagnostics_);
-}
-Eigenfunction KoopmanModel::eigenfunction(std::size_t mode) const {
-    if (mode >= eigenfunctionCount()) throw std::out_of_range("K-ROM eigenfunction index");
-    std::shared_ptr<const FunctionRepresentation> representation = scattered_;
-    if (!representation) representation = std::make_shared<const FunctionExpansion>(*polynomial_);
-    const auto name = "psi_" + std::to_string(mode);
-    const auto catalog = system_ ? std::optional<ObservableCatalog>(system_->observableCatalog()) : std::nullopt;
-    return Eigenfunction::fromRepresentation({name, name}, std::move(representation), mode, spectrum().eigenvalue(mode),
-                                             catalog ? &*catalog : nullptr);
+    if (!representations_.empty()) representations_.front().function = std::make_shared<const FunctionExpansion>(*polynomial_);
 }
 const FunctionExpansion &KoopmanModel::expansion() const {
     if (!polynomial_)
@@ -115,6 +103,7 @@ void KoopmanModel::setDiscreteInputMap(std::string name, DiscreteInputMap map) {
     if(!map.modelIdentity.empty()&&map.modelIdentity!=identity)
         throw std::invalid_argument("Discrete input map belongs to a different KROM");
     map.modelIdentity=identity;
+    inherited_.discreteMaps.erase(name);
     discreteInputMaps_[std::move(name)] = std::move(map);
 }
 } // namespace dynsyslab::core

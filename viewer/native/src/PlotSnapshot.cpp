@@ -34,6 +34,7 @@ Value figureValue(const Figure& figure, bool samples) {
         {"title_color",figure.titleColor},
         {"dashboard_page",static_cast<double>(figure.dashboardPage)},
         {"grid_span",static_cast<double>(figure.gridSpan)},{"row_span",static_cast<double>(figure.rowSpan)}};
+    if (figure.focusX) result["focus_x"] = numbers({figure.focusX->first, figure.focusX->second});
     const auto scale = resolveValueScale(figure);
     if (figure.cameraAzimuthDegrees || figure.cameraElevationDegrees)
         result["camera"] = Value::Object{
@@ -68,6 +69,7 @@ Value figureValue(const Figure& figure, bool samples) {
         if (samples) {
             entry["x"] = numbers(trace.x); entry["y"] = numbers(trace.y); entry["z"] = numbers(trace.z);
             entry["color_values"] = numbers(trace.colorValues); entry["magnitudes"] = numbers(trace.magnitudes);
+            entry["magnitude_scale"] = trace.magnitudeScale;
             Value::Array shape; for (int n : trace.zShape) shape.emplace_back(static_cast<double>(n));
             entry["z_shape"] = std::move(shape);
         }

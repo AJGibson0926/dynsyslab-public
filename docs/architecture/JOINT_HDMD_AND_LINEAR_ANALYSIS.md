@@ -38,10 +38,14 @@ values contain the X columns plus the last Y column. Their training times are
 explicit; when snapshot_stride differs from one the final interval is shorter.
 They must not be assumed to be uniformly spaced at the DMD pair dt.
 
-The forward-window legacy default is `window_alignment: "start"`. End alignment
-selects the last delay block and marks the coordinates with its actual endpoint
-time. This is causal once a complete history is available; no zero-padding or
-future measurements are supplied to an observer. Recorded training window
+The default is `window_alignment: "end"` for every window setting, the legacy
+keys included (before 0.9.1 the legacy keys defaulted to `"start"`). End
+alignment labels each window by its newest sample, so the value at time t uses
+only the history up to t. This is causal once a complete history is available,
+and the first window length of a record has no value; no zero-padding or future
+measurements are supplied to an observer. `"start"` labels a window by its
+oldest sample, so the value at t uses samples up to t + T and the last window
+length of a record has no value. Recorded training window
 coordinates are reference projections, not guaranteed exact eigenfunctions.
 
 Positive channel scales divide inputs before fitting; the corresponding C rows

@@ -26,6 +26,27 @@ RMatrix product(const RMatrix& left,const RMatrix& right) {
         right.values,right.columns),left.rows,right.columns};
 }
 
+// What a regression reads from a record: states (sample x state) and inputs (sample x input, or
+// interval x input when the record holds inputs on intervals).
+struct Controlled {
+    const std::vector<double> &time, &states, &inputs;
+    std::size_t samples{}, stateDimension{}, inputDimension{};
+    bool onIntervals{};
+};
+
+Controlled controlled(const TimeSeriesRecord& r) {
+    static const std::vector<double> none;
+    return {r.series.timeVector(), r.series.valueVector(), r.inputs ? r.inputs->valueVector() : none,
+            r.series.sampleCount(), r.series.componentCount(), r.inputs ? r.inputs->componentCount() : 0,
+            r.inputsOnIntervals};
+}
+
+std::vector<Controlled> controlled(const std::vector<TimeSeriesRecord>& records) {
+    std::vector<Controlled> result;
+    for (const auto& record : records) result.push_back(controlled(record));
+    return result;
+}
+
 void validateStates(const KoopmanModel& model, const std::vector<double>& states,
                     std::size_t samples) {
     if (samples < 3 || states.size() != samples * model.stateDimension())
@@ -132,10 +153,12 @@ BilinearControlFit bilinearFit(const KoopmanModel& model, const CMatrix& lift,
     return {std::move(map), diagnostics(method, design, target, predicted)};
 }
 
-void validateControlled(const KoopmanModel& model, const ControlledData& data) {
+void validateControlled(const KoopmanModel& model, const Controlled& data) {
     validateStates(model, data.states, data.samples);
     if (data.stateDimension != model.stateDimension() || data.inputDimension != model.inputDimension()
         || data.time.size() != data.samples
+        // Inputs are held per sample or per interval; either count is accepted, as before the
+        // record carried the alignment flag (the regressions index both the same way).
         || (data.inputs.size() != data.samples * data.inputDimension
             && data.inputs.size() != (data.samples - 1) * data.inputDimension))
         throw std::invalid_argument("controlled dataset dimensions do not match KROM");
@@ -146,7 +169,7 @@ void validateControlled(const KoopmanModel& model, const ControlledData& data) {
 
 struct ResidualData { CMatrix lift; CMatrix input; CMatrix residual; };
 
-ResidualData residualData(const KoopmanModel& model, const ControlledData& data) {
+ResidualData residualData(const KoopmanModel& model, const Controlled& data) {
     validateControlled(model, data); const CMatrix all = lifts(model, data.states, data.samples);
     const std::size_t rows = data.samples - 2, modes = model.liftedDimension();
     CMatrix active(rows, modes), input(rows, data.inputDimension), residual(rows, modes);
@@ -167,7 +190,7 @@ ResidualData residualData(const KoopmanModel& model, const ControlledData& data)
 }
 
 ResidualData residualData(const KoopmanModel& model,
-                          const std::vector<ControlledData>& datasets) {
+                          const std::vector<Controlled>& datasets) {
     if(datasets.empty())throw std::invalid_argument("control regression ensemble is empty");
     std::size_t rows=0;for(const auto& data:datasets)rows+=data.samples-2;
     ResidualData result{CMatrix(rows,model.liftedDimension()),
@@ -186,7 +209,7 @@ ResidualData residualData(const KoopmanModel& model,
     return result;
 }
 
-double uniformStep(const ControlledData& data) {
+double uniformStep(const Controlled& data) {
     const double step=data.time[1]-data.time[0];
     if (!(step>0.0) || !std::isfinite(step))
         throw std::invalid_argument("multistep control regression requires positive sample time");
@@ -250,7 +273,7 @@ RMatrix splitReconstruction(const KoopmanModel& model,
     return result;
 }
 
-double intervalInput(const ControlledData& data,std::size_t interval,
+double intervalInput(const Controlled& data,std::size_t interval,
                      std::size_t input) {
     return data.inputs[interval*data.inputDimension+input];
 }
@@ -279,13 +302,13 @@ BilinearControlFit fitBilinearExactControlMap(const KoopmanModel& model,
 }
 
 ConstantControlFit fitConstantControlResidual(const KoopmanModel& model,
-                                               const ControlledData& data, double ridge) {
-    return fitConstantControlResidual(model,std::vector<ControlledData>{data},ridge);
+                                               const TimeSeriesRecord& data, double ridge) {
+    return fitConstantControlResidual(model,std::vector<TimeSeriesRecord>{data},ridge);
 }
 
 ConstantControlFit fitConstantControlResidual(const KoopmanModel& model,
-    const std::vector<ControlledData>& data,double ridge) {
-    const auto source = residualData(model, data);
+    const std::vector<TimeSeriesRecord>& data,double ridge) {
+    const auto source = residualData(model, controlled(data));
     const CMatrix coefficient = ridgeSolve(source.input, source.residual, ridge);
     ConstantControlMap map{{}, model.liftedDimension(), model.inputDimension(), "continuous controlled residual"};
     map.matrix.resize(model.liftedDimension() * model.inputDimension());
@@ -298,17 +321,18 @@ ConstantControlFit fitConstantControlResidual(const KoopmanModel& model,
 }
 
 ConstantControlFit fitConstantControlMultistepOutput(
-    const KoopmanModel& model,const ControlledData& data,
+    const KoopmanModel& model,const TimeSeriesRecord& data,
     const Observable& observable,const ReconstructionResult& reconstruction,
     double ridge) {
     return fitConstantControlMultistepOutput(model,
-        std::vector<ControlledData>{data},observable,reconstruction,ridge);
+        std::vector<TimeSeriesRecord>{data},observable,reconstruction,ridge);
 }
 
 ConstantControlFit fitConstantControlMultistepOutput(
-    const KoopmanModel& model,const std::vector<ControlledData>& datasets,
+    const KoopmanModel& model,const std::vector<TimeSeriesRecord>& records,
     const Observable& observable,const ReconstructionResult& reconstruction,
     double ridge) {
+    const auto datasets = controlled(records);
     if(datasets.empty())throw std::invalid_argument("multistep regression ensemble is empty");
     for(const auto& data:datasets)validateControlled(model,data);
     if(observable.stateDimension()!=model.stateDimension()
@@ -384,15 +408,15 @@ ConstantControlFit fitConstantControlMultistepOutput(
 }
 
 BilinearControlFit fitBilinearControlResidual(const KoopmanModel& model,
-                                               const ControlledData& data, double ridge,
+                                               const TimeSeriesRecord& data, double ridge,
                                                bool conjugateComplete) {
-    return fitBilinearControlResidual(model,std::vector<ControlledData>{data},
+    return fitBilinearControlResidual(model,std::vector<TimeSeriesRecord>{data},
                                       ridge,conjugateComplete);
 }
 
 BilinearControlFit fitBilinearControlResidual(const KoopmanModel& model,
-    const std::vector<ControlledData>& data,double ridge,bool conjugateComplete) {
-    const auto source = residualData(model, data); const std::size_t modes = model.liftedDimension();
+    const std::vector<TimeSeriesRecord>& data,double ridge,bool conjugateComplete) {
+    const auto source = residualData(model, controlled(data)); const std::size_t modes = model.liftedDimension();
     const std::size_t inputs=model.inputDimension();
     CMatrix features(source.lift.rows,
         inputs*(modes*(conjugateComplete?2:1)+1));
@@ -440,7 +464,7 @@ BilinearControlFit fitBilinearControlResidual(const KoopmanModel& model,
 ControlMapErrorGrid evaluateControlMapError2D(
     const KoopmanModel& model, const std::string& approximation,
     double axis0Minimum, double axis0Maximum, double axis1Minimum, double axis1Maximum,
-    std::size_t columns, std::size_t rows, const std::vector<double>& fixedState) {
+    std::size_t columns, std::size_t rows, const std::vector<double>& fixedState, double relativeFloor) {
     if (model.stateDimension() < 2 || columns < 2 || rows < 2
         || !(axis0Minimum < axis0Maximum) || !(axis1Minimum < axis1Maximum))
         throw std::invalid_argument("invalid two-dimensional control-map error grid");
@@ -464,14 +488,25 @@ ControlMapErrorGrid evaluateControlMapError2D(
             exactNorm += std::norm(exact[index]); errorNorm += std::norm(fitted[index] - exact[index]);
         }
         const double absolute = std::sqrt(errorNorm);
-        const double relative = absolute / std::max(std::sqrt(exactNorm), std::numeric_limits<double>::min());
+        const double relative = absolute / std::max({std::sqrt(exactNorm), relativeFloor,
+                                                     std::numeric_limits<double>::min()});
         const auto at = row * columns + column; result.absoluteError[at] = absolute;
         result.relativeError[at] = relative; absoluteSum += absolute; relativeSum += relative;
         result.absoluteMaximum = std::max(result.absoluteMaximum, absolute);
         result.relativeMaximum = std::max(result.relativeMaximum, relative);
     }
     result.absoluteMean = absoluteSum / (rows * columns);
-    result.relativeMean = relativeSum / (rows * columns); return result;
+    result.relativeMean = relativeSum / (rows * columns);
+    const auto percentile = [](std::vector<double> values, double q) {
+        std::sort(values.begin(), values.end());
+        const auto rank = static_cast<std::size_t>(std::ceil(q * double(values.size())));
+        return values[std::min(values.size() - 1, rank ? rank - 1 : 0)];
+    };
+    result.absoluteMedian = percentile(result.absoluteError, 0.5);
+    result.absoluteP95 = percentile(result.absoluteError, 0.95);
+    result.relativeMedian = percentile(result.relativeError, 0.5);
+    result.relativeP95 = percentile(result.relativeError, 0.95);
+    return result;
 }
 
 }  // namespace dynsyslab::core

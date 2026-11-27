@@ -179,11 +179,11 @@ std::vector<double> placeObserverPoles(const StateSpaceModel& model, const std::
     return flat(placeGain(r.A.transpose(), r.C.transpose(), poles).transpose());
 }
 
-RegulatorDesign designLQR(const StateSpaceModel& model, const std::vector<double>& q, const std::vector<double>& rw) {
+numerics::ContinuousLqrResult designLQR(const StateSpaceModel& model, const std::vector<double>& q, const std::vector<double>& rw) {
     const auto r = realization(model);
     const Matrix Q = mapped(q, model.states, model.states, "LQR state penalty");
     const Matrix R = mapped(rw, model.inputs, model.inputs, "LQR input penalty");
-    RegulatorDesign out;
+    numerics::ContinuousLqrResult out;
     if (isDiscrete(model)) {
         const auto s = discreteRiccati(r.A, r.B, Q, R);
         out.riccati = flat(s.P); out.gain = flat(s.K); out.relativeResidual = s.residual;

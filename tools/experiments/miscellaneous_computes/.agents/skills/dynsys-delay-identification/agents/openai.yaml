@@ -1,3 +1,0 @@
-interface:
-  display_name: "Delay-coordinate identification"
-  short_description: "Fit and replay modal dynamics on independent records"

@@ -115,6 +115,29 @@ int main() {
                 std::string(badSetting)=="dictionary"?json::Value("rbf"):json::Value(0.0);
             rejects([&]{(void)dynsyslab::workflow::executeJob(request,root/"archives",{});});
         }
+        {   // time_window from each record's own metadata: a bank fitted on its active intervals
+            auto record=sourceRecord(false);
+            record.arrays["metadata_json"]=core::NpyArray::fromString(R"({"measurement":"echo-history latents","drive_start":0.195,"drive_stop":0.605})");
+            const auto path=root/"windowed.npz"; core::writeNpzAtomicNew(path,record);
+            auto request=job(path);
+            request.at("methods").array()[0].at("settings").at("time_window")=
+                json::Value::Object{{"from_metadata",json::Value::Array{"drive_start","drive_stop"}}};
+            const auto meta=json::parse(core::readNpz(dynsyslab::workflow::executeJob(request,root/"archives",{}).archives.at(0)).metadataJson());
+            require(meta.at("pairs").number()==40,"time_window from metadata selects the active interval");
+        }
+        {   // pool_sources fit records together; validation_sources score frozen one-step predictions
+            const auto a=root/"pool-a.npz",b=root/"pool-b.npz",v=root/"pool-v.npz";
+            for(const auto& path:{a,b,v}) core::writeNpzAtomicNew(path,sourceRecord(false));
+            for(const std::string method:{"dmdc","edmdc"}) {
+                auto request=job(a,method);
+                auto& s=request.at("methods").array()[0].at("settings");
+                s.at("pool_sources")=json::Value::Array{b.generic_u8string()};
+                s.at("validation_sources")=json::Value::Array{v.generic_u8string()};
+                const auto meta=json::parse(core::readNpz(dynsyslab::workflow::executeJob(request,root/"archives",{}).archives.at(0)).metadataJson());
+                require(meta.at("pairs").number()==2*119,"pooled records add their pairs");
+                require(meta.at("validation").at("one_step_relative_l2").number()<1e-8,"held-out one-step score of an exact model");
+            }
+        }
         for(int mode=0;mode<5;++mode) {
             auto record=sourceRecord(false);
             if(mode==0) record.arrays.erase("control_values");

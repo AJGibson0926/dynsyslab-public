@@ -6,9 +6,9 @@ DynSysLab is a local, modular native C++ laboratory for defining dynamical
 systems, solving them numerically, preserving results, processing trajectory
 data, and displaying results. It installs as compiled desktop software and does
 not require Python. The distributed Python wheel contains only the optional
-dependency-free `dynsyslab_client`; historical Python packages are source-only
-reference implementations during migration, not an application runtime or an
-alternate owner of canonical algorithms. This document is a
+dependency-free `dynsyslab_client`. The former Python application packages have
+been retired; every capability is in the native core (see the
+[native port ledgers](architecture/native-port/README.md)). This document is a
 compact orientation packet for a new developer or AI assistant.
 
 ## Spectral Koopman analysis
@@ -38,47 +38,47 @@ counterexample**, `koopman-arctangent-infinite-gradient` (private record
 autonomous eigenfunction closure, closure under original-state partial derivatives,
 and finite bilinear input models. Do not treat these properties as interchangeable.
 
-1. `dynsyslib` defines equations, presets, Jacobians, state dimensions, and
-   drivers. It does not solve, schedule, archive, or visualize.
-2. `solver` executes one solve request at a time. It supports ODE, PDE, DDE,
-   and lattice pathways; it writes completed/checkpoint data through Archiver.
-3. `archives` is the low-level storage implementation. Application packages
-   must use `archiver.ArchiveGateway`, not direct `archives` I/O.
-4. `archiver` is the archive policy boundary. `VIEWER_ARCHIVE` is read-only;
-   `SOLVER_ARCHIVE` and `POSTPROCESSING_ARCHIVE` may write; `MANAGER_ARCHIVE`
-   may perform management operations.
-5. `campaigner` designs only manifests. It never integrates or analyzes.
-6. `job_manager` executes lightweight Job manifests and never owns numerical
-   solution arrays. Its coordination state is SQLite; jobs/manifests remain
-   JSON files and numerical arrays remain archive files.
-7. `viewer` is display-only relative to the primary archive. Its private
-   `viewer/_compute` service may create disposable display artifacts only in
+1. **Systems** (`native/src/Systems*.cpp`) define equations, presets,
+   Jacobians, observables, state dimensions, and drivers. They do not solve,
+   schedule, archive, or visualize.
+2. **Solvers** execute one solve request at a time. They support ODE, PDE, DDE,
+   and lattice pathways and write completed/checkpoint data only through the
+   archive contract.
+3. **Archives** own storage, audit, deduplication, and the canonical archive
+   index. Applications reach them through the native workflow and
+   `dynsyslab-cli archive|storage`, never by editing archive files directly.
+   Viewer opens archives read-only.
+4. **Campaign design** (in the workflow service) produces only job manifests.
+   It never integrates or analyzes.
+5. The **queue** executes lightweight job manifests and never owns numerical
+   solution arrays. Its coordination state is SQLite; jobs remain JSON files
+   and numerical arrays remain archive files.
+6. **Viewer** (`viewer/native/`) is display-only relative to the primary
+   archive. It may create disposable display artifacts only in
    `viewer_compute_archive`, never in `archives`.
-8. `postprocessing` analyzes archived or supplied solution data. Its Koopman,
-   POD/PCA, LCS, and SSM layers remain independent extensions.
-9. `compute_workbench` and the native Viewer are clients of versioned public
-   C++/C/JSON boundaries. They do not own scientific algorithms or data.
-10. `infrastructure` holds only neutral, lightweight mechanisms needed across
-    layers. Producers must not import Viewer to announce source changes.
+7. **Post-processing** analyzes archived solution data. Its Koopman and
+   POD/PCA methods are independent stages; LCS (`ftle`) and SSM (`ssm`) are native
+   post-processing methods ([LCS and SSM](architecture/LCS_AND_SSM.md)).
+8. The native Solver/Post-processor (`compute_workbench/native/`) and Viewer are
+   clients of versioned public C++/C/JSON boundaries. They do not own
+   scientific algorithms or data.
 
 ## Package map
 
-| Package | Responsibility | Must not do |
+| Module | Responsibility | Must not do |
 |---|---|---|
-| `dynsyslib` | System definitions, presets, drivers, Jacobians | I/O, scheduling |
-| `solver` | One numerical solve plus optional controller/estimator | Campaign design |
-| `archives` | Store arrays and low-level indexes | Be imported by new application code |
-| `archiver` | Archive capabilities, audit, search, storage locations | Integrate equations |
-| `campaigner` | Build reproducible campaign/job manifests | Solve or plot |
-| `job_manager` | Claims, scheduling, backends, retries, pause/recovery | Store arrays |
-| `postprocessing` | DMD/Koopman/POD etc. | Modify source trajectories |
-| `rom` | KROM and POD-Galerkin models | Own archive files |
-| `control`, `estimation` | Optional live solver plug-ins | Alter an uncontrolled solve |
-| `viewer` | Read-only rendering | Solve, schedule, change primary archive |
-| `compute_workbench` | Versioned Solver/Post-processor UI jobs | Implement scientific algorithms |
-| `infrastructure` | Neutral events and cross-cutting mechanics | Own scientific state |
-| `quality` | Static architecture/documentation audit | Import or execute numerical engines |
-| `tester` | Test selection, execution, reports | Production archive mutation |
+| systems (`native/`) | System definitions, presets, drivers, Jacobians | I/O, scheduling |
+| solvers (`native/`) | One numerical solve plus optional controller/estimator | Campaign design |
+| archives (`native/`, `workflow/native/`) | Store arrays, index, audit, storage locations | Integrate equations |
+| workflow (`workflow/native/`) | Plan and run jobs, campaigns, experiments, post-processing | Mutate source trajectories |
+| queue (`dynsyslab-cli queue`) | Claims, scheduling, retries, pause/recovery | Store arrays |
+| Koopman, control, estimation | KROMs, feedback laws, estimators | Alter an uncontrolled solve |
+| Viewer (`viewer/native/`) | Read-only rendering | Solve, schedule, change primary archive |
+| Solver/Post-processor (`compute_workbench/native/`) | Versioned job editing | Implement scientific algorithms |
+| `dynsyslab_client` (Python) | Optional thin client over the C ABI and CLI | Own algorithms or data |
+| `operations/` (Python) | `python -m dynsyslab` front door | Own algorithms or data |
+| `quality` (Python) | Static architecture/documentation audit | Import or execute numerical engines |
+| `tester` (Python) | Test selection, execution, reports | Production archive mutation |
 
 ## Data model
 
@@ -112,8 +112,8 @@ record and invokes its Fourier sidecar only for a frequency-domain view.
   `archives/hierarchies/`.
 - Derived postprocessing results are under `archives/derived/` and retain
   source pointers/provenance rather than copying source solution arrays.
-- JobManager coordination state is `archives/job_manager/state.sqlite`, using
-  a transactional SQLite store. Legacy `state.json` is only imported once.
+- Queue coordination state is a transactional SQLite store under
+  `archives/job_manager/` ([job queue](architecture/JOB_QUEUE.md)).
 - Archive publication and manifest writes are atomic. Do not overwrite a
   completed solution to extend it; use the archive extension pathway.
 - Never modify the original, protected RPE chaos-campaign archive without the
@@ -121,15 +121,16 @@ record and invokes its Fourier sidecar only for a frequency-domain view.
 
 ## System-library contract
 
-ODE system modules live in `dynsyslib/lib/`. A typical system exposes:
+Built-in ODE systems live in `native/src/Systems*.cpp`; third-party systems are
+compiled extensions over `native/include/dynsyslab/extension_api.h`. A typical
+system exposes:
 
-- `rhs(t, x)`;
-- `jacobian(t, x)` where available;
-- `initial_state`, `state_dimension`, and `period` metadata;
-- `invalid(t, x)` for model-domain/collapse checks;
-- `rhs_with_input(t, x, u)` and `input_matrix(x)` for affine/state-dependent
-  control when meaningful;
-- named presets registered in the common preset loader.
+- its right-hand side and, where available, its Jacobian;
+- initial state, state dimension, and period metadata;
+- an invalid-state check for model-domain/collapse guards;
+- an input-aware right-hand side and `input_matrix(x)` for
+  affine/state-dependent control when meaningful;
+- named presets and observables, listed by `dynsyslab-cli systems`.
 
 RPE has both dimensional and nondimensional forms. RPE defaults to its
 nondimensional form; archive metadata records which form was used.
@@ -138,7 +139,7 @@ The native catalog also carries an explicit system-family field. Mackey--Glass
 is the first native `dde` model and lives in `dynsyslab_delay.dll`; it uses a
 constant-history method-of-steps workflow and the same immutable hierarchy as
 ODE solves. Do not pass it through the ODE factory. Parameter/time/IC campaigns
-are native; DDE control remains an explicit error rather than a Python fallback.
+are native; DDE control remains an explicit error.
 
 Native 2-D/3-D Ising and 2-D Potts systems live in
 `dynsyslab_lattice.dll`. They archive scalar thermodynamic histories plus exact
@@ -158,11 +159,13 @@ control is not defined. Legacy `solver.parallel` jobs remain readable.
 
 ## Solve lifecycle
 
-Use `app.RunConfiguration` for a stable frontend configuration or construct a
-`solver.SolveRequest` directly. The request chooses a system, time span,
-initial state, solver options, history policy, interpolation policy, optional
-controller/estimator, and an archive destination. The solver returns a result
-with status and archive path.
+A solve is a versioned `dynsyslab.compute-job/v1` document with
+`"kind": "solve"` (`dynsyslab-cli template solve` writes one). It chooses a
+system, time span, initial conditions, solver options, history policy,
+interpolation policy, optional controller/estimator, and an archive
+destination. `dynsyslab-cli validate|plan|run` and the queue accept the same
+document; a run returns versioned JSON with status and archive paths. See
+[SOLVER.md](../SOLVER.md).
 
 History defaults to lightweight completed-solution storage. Checkpoints and
 high-frequency history are opt-in through Job/Campaign metadata. A pause is
@@ -178,43 +181,50 @@ fixed state-space LQR or silently switch its default to sampled evaluation.
 
 ## Job and campaign workflow
 
-`JobManifest` is a lightweight plan: systems, solver metadata, postprocessors,
-dependencies, schedule, resources, and tags. It contains no arrays.
+A job document is a lightweight plan: systems, solver settings,
+post-processing stages, dependencies, resources, and tags. It contains no
+arrays. Experiments chain stages over one pipeline
+([experiments](architecture/EXPERIMENTS.md)).
 
-`JobManager` supports series or dependency-safe parallel backends, duplicate
-claims, resumable pauses, recovery manifests, schedule/deadline metadata, and
-archive reuse/extension lookup. It checks compatibility before reuse, including
-time span, dimensional/nondimensional form, solver settings, and forcing
-metadata for forced trajectories.
+The native queue (`dynsyslab-cli queue ...`) supports dependency conditions,
+duplicate-claim protection, resumable pauses, recovery, retries, resource
+admission, and archive reuse/extension lookup. It checks compatibility before
+reuse, including time span, dimensional/nondimensional form, solver settings,
+and forcing metadata for forced trajectories
+([job queue](architecture/JOB_QUEUE.md)).
 
-`Campaigner` generates coherent collections of jobs and campaign metadata for
-bifurcation sweeps, Lyapunov sweeps, trajectory ensembles, and parameter
-sweeps. A campaign is not analysis; it is a reproducible data-generation plan.
+Campaign axes in a solve job generate coherent collections of trajectories and
+campaign metadata for bifurcation sweeps, Lyapunov sweeps, trajectory
+ensembles, and parameter sweeps; `dynsyslab-cli campaign ...` inspects and
+repairs them. A campaign is not analysis; it is a reproducible data-generation
+plan.
 
 ## Postprocessing and reduced-order models
 
-- Koopman layer: DMD, EDMD, Hankel DMD/HDMD, HAVOK, Koopman-with-SINDy,
-  validation, dictionaries, spectra, and resampling.
-- `KoopmanSpectrum` stores eigenvalues/eigenfunctions and source-system
+- Koopman methods: DMD, EDMD, Hankel DMD/HDMD, HAVOK, Koopman-with-SINDy,
+  validation, dictionaries, spectra, and resampling, as post-processing
+  stages of a job ([KROM tools](architecture/KROM_TOOLS.md)).
+- A Koopman spectrum stores eigenvalues/eigenfunctions and source-system
   metadata. Eigenvalues maintain discrete and continuous representations with
   the `delta_t` conversion provenance.
-- `KROM` is built from a spectrum. Complex output is the mathematical default;
+- A KROM is built from a spectrum. Complex output is the mathematical default;
   controllers and estimators request split real/imaginary state coordinates.
-- POD/PCA layer produces `PODMode` objects and `PROM` collections.
+- POD/PCA stages produce POD modes and POD-Galerkin models.
 - Uniform-time requirements must be checked before methods that assume them.
   Offer resampling for postprocessing only; never silently alter archive data.
 
 ## Viewer rules
 
-Initialize `Viewer`, attach one or more sources, add `PlotRequest` objects,
-then call `render()`. Source routing is automatic only when exactly one source
-of the required type is attached; otherwise specify `source_name`.
+The native Viewer browses the archive catalog and renders bounded plot
+payloads from the compiled archive/payload services
+([Viewer architecture](architecture/VIEWER_CPP_WORKBENCH.md),
+[Viewer CLI](architecture/VIEWER_CLI.md)).
 
 Viewer may display trajectories, spectra, Koopman/POD modes, FFTs, phase
 portraits, 3-D data, and already-computed campaign data. It must never request
 a solve, schedule a job, mutate the primary archive, or infer missing data by
-running a new calculation. It may ask its private compute service to create
-the minimum required temporary display artifact.
+running a new calculation. It may create the minimum required temporary
+display artifact in `viewer_compute_archive`.
 
 ## Development rules
 
@@ -223,8 +233,9 @@ the minimum required temporary display artifact.
   for convenience.
 - Use structured warnings/events with preserved error context instead of broad
   `except: pass` blocks.
-- New archive I/O goes through `archiver`.
-- New tests go in `tester/tests/`, not a top-level testing package.
+- New archive I/O goes through the native archive and workflow APIs.
+- Native tests go in the module's `tests/` folder (CTest); Python tests go in
+  `tester/tests/`, not a top-level testing package.
 - Generated `build/`, `dist/`, egg-info, caches, viewer artifacts, and test
   reports are not source. `project_paths.source_files()` excludes them.
 - Keep every source file below 1,000 lines and treat 500 as the normal ceiling.
@@ -241,7 +252,7 @@ Run the installed native gates first:
 & "$env:LOCALAPPDATA\Programs\DynSysLab\bin\dynsyslab-cli.exe" capabilities
 ```
 
-When changing the optional Python adapter or retained parity references, also
+When changing the optional Python client, the front door, or the audit, also
 run from the project root:
 
 ```powershell

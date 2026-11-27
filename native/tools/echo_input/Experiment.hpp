@@ -13,8 +13,8 @@ namespace core = dynsyslab::core;
 using Complex = std::complex<double>;
 using Json = core::json::Value;
 struct Frozen {
-    core::PooledHankelBasis basis;
-    core::KoopmanSINDyResult polynomial;
+    core::HankelLeftBasis basis;
+    core::EigenfunctionFitResult polynomial;
     double sensorStep{}, controlStep{0.01};
     std::size_t stride{20};
     Complex multiplier;
@@ -26,7 +26,7 @@ struct Lifted {
     std::vector<Complex> psi;
     std::vector<core::HistoryInputSample> pairs;
 };
-Frozen frozen(const core::NpzRecord&, const core::KoopmanSINDyResult&);
+Frozen frozen(const core::NpzRecord&, const core::EigenfunctionFitResult&);
 Measurements readMeasurements(const std::filesystem::path&);
 Lifted lift(const Measurements&, const Frozen&);
 using EchoController = std::function<double(double,double)>;

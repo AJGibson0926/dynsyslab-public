@@ -145,7 +145,7 @@ void createChildren(DialogState& state) {
     state.snapshotStride=edit(state,integer(geometry.at("snapshot_stride"),1),470,61,100);
     label(state,L"Fit additional outputs",375,98,195);
     state.hdReconstructions=edit(state,joined(hd.at("reconstruction_observables"),""),375,117,195);
-    state.alignment=check(state,L"Causal endpoint",hd.at("window_alignment").string(win.isNull()?"start":"end")=="end",430,155,145);
+    state.alignment=check(state,L"Causal endpoint",hd.at("window_alignment").string("end")=="end",430,155,145);
     label(state,L"Sample stride",18,98,100);label(state,L"SVD tolerance",127,98,102);label(state,L"Rank cap (0 = full)",238,98,128);
     state.sampleStride=edit(state,integer(geometry.at("sample_stride"),1),18,117,100);
     state.svdTolerance=edit(state,number(hd.at("svd_tolerance"),1e-10),127,117,102);

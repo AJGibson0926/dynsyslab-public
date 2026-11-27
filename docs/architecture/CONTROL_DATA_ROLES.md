@@ -51,7 +51,7 @@ The ξ spectrum no longer needs the radius. Running the pipeline with `methods=[
 
 ξ's tags then become: eigenvalues **OFF-e**, eigenfunctions **OFF-e**, B_ψ **OFF-e**, online **ON-e**. The target is still TGT-offline (OFF-r + OFF-RPE), which is allowed. The training and forced echoes themselves come from the simulated sensor; see the caveats below.
 
-Two fixes made this route work inside pipelines:
+Two fixes made this route work inside experiments:
 
 - **Observable channels on coordinate archives.** H-DMD's `observables` list now works when its input is a coordinate archive such as the identity `coords` stage. The channels are evaluated on the archive's stored `source_states` (`CoordinateChangeKinds.cpp`).
 - **Singular stage references.** `${stage.archive}` names the method's result when the only other archive is that automatic coordinate change (`Pipeline.cpp`).

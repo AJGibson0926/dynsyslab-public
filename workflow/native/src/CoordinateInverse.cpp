@@ -1,4 +1,5 @@
 #include "CoordinateInverse.hpp"
+#include "ObjectPublishing.hpp"
 #include "CoordinateChannels.hpp"
 #include <algorithm>
 #include <cmath>
@@ -148,22 +149,22 @@ void recordCoordinateInverse(const SourceData& source, const std::string& kind, 
         targetNames.emplace_back(names[k]);
         targetLabels.emplace_back(labels.size() == names.size() ? labels[k].string() : names[k]);
     }
-    J::Object info{{"kind", kind}, {"inputs", double(z.componentCount())}, {"outputs", double(source.dimension)},
+    J::Object info{{"kind", kind}, {"inputs", double(z.componentCount())}, {"outputs", double(source.dimension())},
                    {"target_names", targetNames}, {"target_labels", targetLabels},
                    {"target_archive", std::filesystem::absolute(source.path).generic_u8string()}};
     if (kind == "none") { info["reason"] = reason; info.erase("outputs"); meta.object()["coordinate_inverse"] = J(std::move(info)); return; }
     if (kind == "exact") { info["method"] = reason; meta.object()["coordinate_inverse"] = J(std::move(info)); return; }
     // readout: pairs (z(t), source(t)) at the coordinates' sample times, thinned evenly.
-    const std::size_t n = z.sampleCount(), d = z.componentCount(), w = source.dimension;
+    const std::size_t n = z.sampleCount(), d = z.componentCount(), w = source.dimension();
     const std::size_t stride = std::max<std::size_t>(1, n / kMaximumPairs);
     std::vector<double> inputs, targets, mean(d, 0.0), scale(d, 0.0);
     std::size_t row = 0, pairs = 0;
     for (std::size_t k = 0; k < n; k += stride) {
         const double t = z.timeData()[k];
-        while (row < source.samples && source.time[row] < t) ++row;
-        if (row == source.samples || source.time[row] != t) continue;
+        while (row < source.samples() && source.time()[row] < t) ++row;
+        if (row == source.samples() || source.time()[row] != t) continue;
         for (std::size_t a = 0; a < d; ++a) inputs.push_back(z.valuesData()[k * d + a]);
-        for (std::size_t j = 0; j < w; ++j) targets.push_back(source.values[row * w + j]);
+        for (std::size_t j = 0; j < w; ++j) targets.push_back(source.values()[row * w + j]);
         ++pairs;
     }
     if (pairs < kNeighbours) { recordCoordinateInverse(source, "none", "too few aligned training pairs for a readout", z, meta, archive); return; }
@@ -196,6 +197,7 @@ void writeCoordinateInverse(const std::filesystem::path& coordinates, const std:
     out.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(J(J::Object{
         {"method", "coordinate-inverse"}, {"coordinate_archive", std::filesystem::absolute(coordinates).generic_u8string()},
         {"inverse", inverse.description()}, {"coordinate_names", names}, {"coordinate_labels", labels}})));
+    stampDataObject(out, c::object_kind::timeSeries, "coordinate-inverse", {coordinates});
     c::writeNpzAtomic(output, out);
 }
 

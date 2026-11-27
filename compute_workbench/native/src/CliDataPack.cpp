@@ -4,7 +4,7 @@
 #include <dynsyslab/core/Text.hpp>
 #include <dynsyslab/workflow/DataPack.hpp>
 #include <dynsyslab/workflow/JobGroup.hpp>
-#include <dynsyslab/workflow/Pipeline.hpp>
+#include <dynsyslab/workflow/Experiment.hpp>
 #include <dynsyslab/workflow/Plan.hpp>
 #include <dynsyslab/workflow/Queue.hpp>
 #include <dynsyslab/workflow/Run.hpp>

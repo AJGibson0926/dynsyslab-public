@@ -1,0 +1,78 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "experiment",
+  "extends": "examples/native/experiments/rpe-viscous-klqr-multisine/xi4-history-exact.json",
+  "label": "rpe-viscous-klqr-multisine-xi4-regressed",
+  "description": "As xi4-history-exact, but echo-only: a constant input map is regressed in xi from one random-pulse identification run (measurement only), and the controller never reads the simulator state.",
+  "parameters": {
+    "control_krom": "${xi_input_map.archive}",
+    "control_representation": "constant"
+  },
+  "stages": [
+    {
+      "id": "identify",
+      "before": "control",
+      "job": {
+        "kind": "solve",
+        "system": "${params.system}",
+        "time": {
+          "start": 0,
+          "stop": 40,
+          "output_step": 0.001,
+          "coordinate_system": "dimensionless"
+        },
+        "initial_conditions": {
+          "mode": "explicit",
+          "count": 1,
+          "clusters": 1,
+          "seed": 0,
+          "values": [
+            [
+              1,
+              0
+            ]
+          ],
+          "ranges": []
+        },
+        "controller": {
+          "kind": "random_pulse",
+          "settings": {
+            "model_amplitude": 1.0,
+            "model_pulse_duration": 0.5,
+            "seed": 20261112
+          }
+        },
+        "solver": {
+          "method": "BDF",
+          "rtol": 1e-09,
+          "atol": 1e-09,
+          "max_step": 0.001
+        },
+        "archive": {
+          "enabled": true,
+          "data_role": "control_identification"
+        }
+      }
+    },
+    {
+      "id": "xi_input_map",
+      "before": "control",
+      "job": {
+        "kind": "postprocess",
+        "sources": [
+          "${identify.archive}"
+        ],
+        "methods": [
+          {
+            "name": "history_control_regression",
+            "settings": {
+              "krom": "${artefact.archive}",
+              "measurement_observable": "${params.xi_measurement}",
+              "representation": "constant"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

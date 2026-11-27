@@ -1,3 +1,0 @@
-interface:
-  display_name: "Sensor and delay reconstruction"
-  short_description: "Compare measured readouts and autonomous forecasts"

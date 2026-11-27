@@ -1,5 +1,6 @@
 #include "dynsyslab_viewer/Workbench.hpp"
 #include "PanelPickerDialog.hpp"
+#include <dynsyslab/core/ArchiveIndex.hpp>
 #include <chrono>
 #include <algorithm>
 namespace dsl {
@@ -55,6 +56,24 @@ void Workbench::refreshCatalog() {
     task_ = std::async(std::launch::async, [this]() {
         AsyncResult result; result.kind = AsyncResult::Kind::Catalog;
         try { result.catalog = std::make_unique<Catalog>(backend_.refreshCatalog()); }
+        catch (const std::exception& error) { result.error = wide(error.what()); }
+        return result;
+    });
+}
+
+void Workbench::watchArchive() {
+    if (taskActive_) return;
+    std::uint64_t generation = 0;
+    try { generation = dynsyslab::core::archiveIndexGeneration(arguments_.backend.archiveRoot); }
+    catch (const std::exception&) { return; }  // no index yet: nothing to watch
+    if (!archiveGeneration_ || generation == archiveGeneration_) { archiveGeneration_ = generation; return; }
+    archiveGeneration_ = generation;
+    if (selected_ >= 0 && static_cast<std::size_t>(selected_) < catalog_.items.size())
+        arguments_.initialSource = backend_.resolveSource(catalog_.items[static_cast<std::size_t>(selected_)]);
+    taskActive_ = true;
+    task_ = std::async(std::launch::async, [this]() {
+        AsyncResult result; result.kind = AsyncResult::Kind::Catalog;
+        try { result.catalog = std::make_unique<Catalog>(backend_.loadCatalog()); }
         catch (const std::exception& error) { result.error = wide(error.what()); }
         return result;
     });

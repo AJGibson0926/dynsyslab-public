@@ -41,13 +41,17 @@ struct TimeSeriesRecord {
     // Solver record whose states these channels were computed from (the record itself for a
     // solve). Absent for measured data: then no state domain exists.
     std::optional<DataReference> stateSource;
+    // Inputs applied during the record, one row per sample, or per interval when inputsOnIntervals.
+    std::optional<TimeSeries> inputs;
+    bool inputsOnIntervals{};
 };
 
 // Channel identities, in order; used to recognize interpolation domains.
 [[nodiscard]] std::vector<std::string> channelObservables(const TimeSeriesRecord& record);
 
 // Joins records sampled on one clock into a single multichannel record. Clocks must match exactly;
-// nothing is resampled. Origin inputs and channels are concatenated in order.
+// nothing is resampled. Origin inputs and channels are concatenated in order. Records carrying
+// inputs are refused (a single record is returned as is): drop the inputs first.
 [[nodiscard]] TimeSeriesRecord joinTimeSeriesRecords(const std::vector<TimeSeriesRecord>& records);
 
 [[nodiscard]] json::Value dataOriginJson(const DataOrigin& origin);

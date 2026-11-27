@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <dynsyslab/core/Observable.hpp>
+#include <dynsyslab/core/Spectrum.hpp>
 
 namespace dynsyslab::core {
 
@@ -26,8 +27,7 @@ struct EDMDOptions {
 };
 
 struct EDMDResult {
-    std::vector<std::complex<double>> discreteEigenvalues;
-    std::vector<std::complex<double>> continuousEigenvalues;
+    Spectrum spectrum;  // the sampled multipliers mu and their principal rates log(mu) / deltaTime
     std::vector<std::complex<double>> modes; // state x mode
     std::vector<std::complex<double>> eigenfunctionValues; // sample x mode
     std::vector<std::complex<double>> eigenfunctionCoefficients; // feature x mode
@@ -48,6 +48,10 @@ struct HAVOKOptions {
     std::size_t delays{100};
     std::size_t rank{15};
     std::size_t observableIndex{};
+    // Derivative of the delay coordinates: central differences inside with one-sided ends of
+    // order 1 or 2 (as numpy.gradient's edge_order), or 4: fourth-order central differences inside
+    // (the HAVOK paper's choice, Brunton et al., Nat. Commun. 8:19, 2017) with second-order ends.
+    std::size_t derivativeOrder{2};
 };
 
 struct HAVOKResult {

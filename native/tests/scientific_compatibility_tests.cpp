@@ -45,12 +45,6 @@ int main() {
         auto reordered=model.extract({1,0});
         rejects([&]{reordered.setControlMap("wrong",model.storedControlMap("constant"));},"Mode ordering identity ignored");
         rejects([&]{auto other=makeModel(changed);other.setControlMap("wrong",model.storedControlMap("constant"));},"Physical identity ignored");
-        auto file=c::readNpz(saved);file.arrays["metadata_json"]=c::NpyArray::fromString("{}");
-        const auto legacy=path("legacy");c::writeNpzAtomic(legacy,file);
-        c::ModelBindingOptions strict;strict.allowUnverifiedLegacy=false;
-        rejects([&]{(void)c::loadKoopmanModel(legacy,system,{},strict);},"Unverified workflow attachment accepted");
-        strict.unverifiedLegacyReason="independently checked original experiment";
-        check(c::loadKoopmanModel(legacy,system,{},strict).bindingEvidenceJson().find("unverified-legacy")!=std::string::npos,"Missing legacy evidence");
         const auto external=path("map");c::NpzRecord map;
         map.arrays["matrix"]=c::NpyArray::fromComplex({2,1},{1.,2.});
         map.arrays["model_identity"]=c::NpyArray::fromString(c::koopmanModelIdentity(model));
@@ -58,8 +52,10 @@ int main() {
         (void)c::loadApproximateControlMap(external,"",model);
         rejects([&]{(void)c::loadApproximateControlMap(external,"",reordered);},"External same-sized mismatched map accepted");
         const auto oldMap=path("old-map");map.arrays.erase("model_identity");c::writeNpzAtomic(oldMap,map);
-        rejects([&]{(void)c::loadApproximateControlMap(oldMap,"",model);},"Unbound map accepted without reason");
-        (void)c::loadApproximateControlMap(oldMap,"",model,"checked coefficient order");
+        rejects([&]{(void)c::loadApproximateControlMap(oldMap,"",model);},"Unbound map accepted");
+        const auto vouched=c::loadApproximateControlMap(oldMap,"",model,true);
+        check(std::visit([](const auto& map){return map.provenance.find("external map")!=std::string::npos;},vouched),
+                "external map provenance not recorded");
         const auto dtPath=path("legacy-dt");c::saveKoopmanModel(dtPath,model,"{\"delta_t\":0.01}");
         (void)c::loadKoopmanModel(dtPath); // map identity must reflect the serialized dt
         c::requireContinuousControlModel(model,"constant");

@@ -34,7 +34,7 @@ RkhsAdjointSpectrum rkhsAdjointSpectrum(const KoopmanSnapshotPairs& data,double 
     out.eigenvalues=spectrum.eigenvalues;out.sectionCoefficients.resize(n*r);
     out.assumptions="Gaussian RKHS adjoint compression: K* k_x=k_T(x). Kernel norms replace empirical L2 quadrature. Boundedness/domain and dense-section limits are required for operator-level convergence; residuals are finite-space diagnostics. Adjoint eigenvectors are not automatically Koopman eigenfunctions or a forward predictor.";
     out.residuals.scope="finite-rkhs-section-span";out.residuals.definition="RKHS norm ||(K*-lambda)f||/||f|| using exact kernel Gram matrices, subject to floating-point error";
-    out.residuals.features=n;out.residuals.grid=grid;
+    out.residuals.pseudospectrum={out.residuals.definition,out.residuals.scope,grid,{},{},n};
     const auto residualMatrix=[&](std::complex<double> z) {
         if(!std::isfinite(z.real())||!std::isfinite(z.imag()))throw std::invalid_argument("Nonfinite RKHS spectral point");
         std::vector<std::complex<double>> h(r*r);
@@ -51,10 +51,10 @@ RkhsAdjointSpectrum rkhsAdjointSpectrum(const KoopmanSnapshotPairs& data,double 
     }
     for(auto z:grid) {
         auto minimum=numerics::hermitianEigensystem(residualMatrix(z),r);
-        out.residuals.minimum.push_back(std::sqrt(std::max(0.,minimum.eigenvalues.front())));
+        out.residuals.pseudospectrum.minimum.push_back(std::sqrt(std::max(0.,minimum.eigenvalues.front())));
         for(std::size_t i=0;i<n;++i) {
             std::complex<double> value{};for(std::size_t k=0;k<r;++k)value+=b[i*r+k]*minimum.eigenvectors[k*r];
-            out.residuals.minimizingCoefficients.push_back(value);
+            out.residuals.pseudospectrum.minimizingCoefficients.push_back(value);
         }
     }
     return out;

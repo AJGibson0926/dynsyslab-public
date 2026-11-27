@@ -16,7 +16,7 @@ namespace dynsyslab::core {
 
 struct ReducedRegulatorDesign {
     BalancedReduction reduction;
-    RegulatorDesign regulator;      // on the reduced model
+    numerics::ContinuousLqrResult regulator;      // on the reduced model
     std::vector<double> liftedGain; // inputs x full states: K_r P
     std::vector<std::complex<double>> liftedClosedLoopPoles; // eig(A - B K_r P)
     bool liftedClosedLoopStable{};

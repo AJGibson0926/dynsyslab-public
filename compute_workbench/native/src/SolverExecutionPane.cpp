@@ -53,7 +53,8 @@ bool SolverExecutionPane::create(HWND parent, const dsl::theme::Fonts& fonts) {
          absoluteTolerance_, maximumStep_, maximumInternalSteps_, backend_})
         controls_.push_back(control);
     setComboItems(method_, {"RK45", "BDF", "RK4", "Euler",
-                            "method_of_steps", "metropolis"});
+                            "method_of_steps", "metropolis",
+                            "RK23", "DOP853", "Radau", "Adams", "LSODA"});
     setComboItems(backend_, {"auto", "native"});
     resetForFamily("ode");
     return true;

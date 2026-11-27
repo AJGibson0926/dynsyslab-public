@@ -1,3 +1,4 @@
+#include <dynsyslab/core/ScientificCompatibility.hpp>
 #include <dynsyslab/workflow/EstimationPostprocess.hpp>
 #include "ObservationSource.hpp"
 #include "ModelBindingOptions.hpp"
@@ -109,15 +110,19 @@ std::filesystem::path runEstimationPostprocess(
     auto model=config?dynsyslab::core::loadKoopmanModel(
             dynsyslab::core::wide(kromPath),*config,selectedModes(settings),modelBindingOptions(settings)):
         dynsyslab::core::loadKoopmanModel(dynsyslab::core::wide(kromPath),selectedModes(settings));
-    if(!config&&model.hasPhysicalSystem()&&settings.at("unverified_legacy_reason").string().empty())
-        throw std::invalid_argument("Measurement source lacks physical provenance; provide unverified_legacy_reason for a physical KROM");
+    // A measurement with no recorded system (for example laboratory data) may drive a physical K-ROM
+    // only when the job says it is external data; the result records that origin.
+    const bool externalMeasurement=settings.at("measurement_origin").string()=="external";
+    if(!config&&model.hasPhysicalSystem()&&!externalMeasurement)
+        throw std::invalid_argument("the measurement source records no physical system, but the KROM does; "
+                                    "set measurement_origin \"external\" for measured data");
     const std::string stateName=settings.at("output_reconstruction").string(
         settings.at("state_reconstruction").string(model.hasReconstruction("state")?"state":""));
     const std::size_t n=model.splitDimension();
     if (!model.hasReconstruction(measurement) || (!stateName.empty()&&!model.hasReconstruction(stateName)))
         throw std::invalid_argument("requested KROM reconstruction map is unavailable");
     const std::size_t p=model.reconstruction(measurement).outputs;
-    if(observed.dimension!=p)throw std::invalid_argument("Measurement components differ from the KROM reconstruction");
+    if(observed.dimension()!=p)throw std::invalid_argument("Measurement components differ from the KROM reconstruction");
     const auto Q=diagonal(n,settings.at("process_variance").number(1.0),
                           settings.at("process_diagonal"));
     const auto R=diagonal(p,settings.at("measurement_variance").number(1.0e-4),
@@ -141,6 +146,11 @@ std::filesystem::path runEstimationPostprocess(
         {observability.singularValues.size()},observability.singularValues);
     output.arrays["observable_directions"]=dynsyslab::core::NpyArray::fromDoubles(
         {n,n},observability.rightDirections);
+    {   // Squared participation of each nonredundant Koopman mode in each observability direction.
+        const auto groups=dynsyslab::core::splitModeGroups(model);
+        output.arrays["mode_participation"]=dynsyslab::core::NpyArray::fromDoubles(
+            {groups.size(),n},dynsyslab::core::observabilityModeParticipation(observability,groups));
+    }
     output.arrays["estimator_gain"]=dynsyslab::core::NpyArray::fromDoubles(
         {n,p},design.solution.gain);
     output.arrays["estimator_covariance"]=dynsyslab::core::NpyArray::fromDoubles(
@@ -151,7 +161,8 @@ std::filesystem::path runEstimationPostprocess(
         {p,n},design.measurementMatrix);
     if(design.outputDimension)output.arrays["state_reconstruction_matrix"]=dynsyslab::core::NpyArray::fromDoubles(
         {design.outputDimension,n},design.stateReconstructionMatrix);
-    std::string details="\"source_krom\":\""+escaped(kromPath)
+    std::string details="\"krom_identity\":\""+escaped(dynsyslab::core::koopmanModelIdentity(model))
+        +"\",\"source_krom\":\""+escaped(kromPath)
         +"\",\"measurement_observable\":\""+escaped(measurement)
         +"\",\"state_reconstruction\":\""+escaped(stateName)
         +"\",\"observability_method\":\""
@@ -168,7 +179,7 @@ std::filesystem::path runEstimationPostprocess(
         +",\"detectable\":"+(design.solution.detectable?"true":"false")
         +",\"observer_poles\":"+complexJson(design.solution.observerPoles)
         +",\"model_binding_evidence\":"+model.bindingEvidenceJson()
-        +",\"unverified_measurement_reason\":"+json::dump(settings.at("unverified_legacy_reason"))
+        +",\"measurement_origin\":"+json::dump(json::Value(config?"solve":(externalMeasurement?"external":"unrecorded")))
         +reductionJson;
     if (method=="klqe") {
         const auto sourceMeta=source.metadataJson().empty()?json::Value{}:json::parse(source.metadataJson());
@@ -176,7 +187,7 @@ std::filesystem::path runEstimationPostprocess(
         const bool stateSpace=space.empty()||space=="physical-state"||space=="dynamical-state";
         const auto stateKey=source.contains("states")?"states":"values";
         const bool hasTruth=config&&stateSpace&&model.physicalStateDimension()&&source.contains(stateKey)
-            &&source.at(stateKey).shape==std::vector<std::size_t>{observed.samples,*model.physicalStateDimension()};
+            &&source.at(stateKey).shape==std::vector<std::size_t>{observed.samples(),*model.physicalStateDimension()};
         std::vector<double> initial,truth;
         // initial_estimate: "zero" (no prior knowledge), "truth" (psi at the true first state; benchmark
         // only), or the legacy default (explicit values / initial_state / the system's initial state).
@@ -199,15 +210,15 @@ std::filesystem::path runEstimationPostprocess(
             const double strideValue=settings.at("sample_stride").number(1);
             if(!(strideValue>=1)||std::floor(strideValue)!=strideValue)throw std::invalid_argument("klqe sample_stride must be a positive integer");
             std::size_t kept=0;
-            for(std::size_t i=0;i<observed.samples;++i)
-                if(observed.time[i]>=start&&observed.time[i]<=stop&&(kept++%static_cast<std::size_t>(strideValue))==0)rows.push_back(i);
+            for(std::size_t i=0;i<observed.samples();++i)
+                if(observed.time()[i]>=start&&observed.time()[i]<=stop&&(kept++%static_cast<std::size_t>(strideValue))==0)rows.push_back(i);
             if(rows.size()<2)throw std::invalid_argument("klqe row selection leaves fewer than two samples");
         }
         if(initial.empty()&&initialMode=="truth") {
             if(!hasTruth||model.requiresExternalCoordinates())
                 throw std::invalid_argument("initial_estimate truth needs physical truth and a state-evaluable KROM");
             const auto physical=postprocess_detail::loadSource(sourcePath);
-            initial=model.evaluateSplit(physical.values.data()+rows.front()*physical.dimension);
+            initial=model.evaluateSplit(physical.values().data()+rows.front()*physical.dimension());
         }
         if(initial.empty()&&hasTruth&&!model.requiresExternalCoordinates()) {
             const auto system=dynsyslab::core::createSystem(*config);
@@ -216,16 +227,16 @@ std::filesystem::path runEstimationPostprocess(
         if(initial.empty())initial.assign(n,0.0);
         if(stateName=="state"&&hasTruth) {
             const auto physical=postprocess_detail::loadSource(sourcePath);
-            if(physical.time!=observed.time)throw std::invalid_argument("Truth and measurement clocks differ; explicitly normalize measurements first");
-            truth=physical.values;
+            if(physical.time()!=observed.time())throw std::invalid_argument("Truth and measurement clocks differ; explicitly normalize measurements first");
+            truth=physical.values();
         }
         std::vector<double> time,measurements,selectedTruth;
         for(const auto i:rows) {
-            time.push_back(observed.time[i]);
-            measurements.insert(measurements.end(),observed.values.begin()+i*observed.dimension,
-                                observed.values.begin()+(i+1)*observed.dimension);
+            time.push_back(observed.time()[i]);
+            measurements.insert(measurements.end(),observed.values().begin()+i*observed.dimension(),
+                                observed.values().begin()+(i+1)*observed.dimension());
             if(!truth.empty()) {
-                const auto width=truth.size()/observed.samples;
+                const auto width=truth.size()/observed.samples();
                 selectedTruth.insert(selectedTruth.end(),truth.begin()+i*width,truth.begin()+(i+1)*width);
             }
         }
@@ -246,8 +257,17 @@ std::filesystem::path runEstimationPostprocess(
             {run.samples,run.measurementDimension},run.measurementEstimate);
         output.arrays["innovation"]=dynsyslab::core::NpyArray::fromDoubles(
             {run.samples,run.measurementDimension},run.innovation);
-        if(!run.stateError.empty())output.arrays["state_error"]=dynsyslab::core::NpyArray::fromDoubles(
-            {run.samples,run.stateDimension},run.stateError);
+        if(!run.stateError.empty()) {
+            output.arrays["state_error"]=dynsyslab::core::NpyArray::fromDoubles(
+                {run.samples,run.stateDimension},run.stateError);
+            std::vector<double> norms(run.samples,0.0);  // Euclidean ||x - xhat|| per sample
+            for(std::size_t i=0;i<run.samples;++i){
+                for(std::size_t j=0;j<run.stateDimension;++j)
+                    norms[i]+=run.stateError[i*run.stateDimension+j]*run.stateError[i*run.stateDimension+j];
+                norms[i]=std::sqrt(norms[i]);
+            }
+            output.arrays["state_error_norm"]=dynsyslab::core::NpyArray::fromDoubles({run.samples},norms);
+        }
         output.arrays["state_rmse"]=dynsyslab::core::NpyArray::fromDoubles(
             {run.stateDimension},run.stateRmse);
         output.arrays["innovation_rmse"]=dynsyslab::core::NpyArray::fromDoubles(
@@ -257,7 +277,7 @@ std::filesystem::path runEstimationPostprocess(
     }
     output.arrays["metadata_json"]=dynsyslab::core::NpyArray::fromString(
         postprocess_detail::metadata(observed,method,label,details));
-    return postprocess_detail::publish(root,observed,method,label,std::move(output));
+    return postprocess_detail::publishObject(root,observed,dynsyslab::core::object_kind::timeSeries,method,std::move(output));
 }
 
 }  // namespace dynsyslab::workflow

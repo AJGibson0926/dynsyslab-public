@@ -258,7 +258,18 @@ void writeTextZip(const std::filesystem::path& path, const std::vector<std::pair
     archive_write_free(handle);
 }
 
-static void writeNpzAtomicImpl(const std::filesystem::path& path, const NpzRecord& record, bool replaceExisting) {
+// libarchive option for the ZIP codec (lzma is ZIP method 14, as written by Python's zipfile).
+static const char* zipOption(ArchiveCompression compression) {
+    switch (compression) {
+    case ArchiveCompression::lzma: return "zip:compression=lzma";
+    case ArchiveCompression::stored: return "zip:compression=store";
+    case ArchiveCompression::deflate: break;
+    }
+    return "zip:compression=deflate";
+}
+
+void writeNpz(const std::filesystem::path& path, const NpzRecord& record, const NpzWriteOptions& options) {
+    const bool replaceExisting = options.replaceExisting;
     std::filesystem::create_directories(extendedLengthPath(path.parent_path()));
     const auto token = std::chrono::high_resolution_clock::now().time_since_epoch().count();
     const auto temporary = path.parent_path() / (path.filename().wstring() + L"."
@@ -266,7 +277,11 @@ static void writeNpzAtomicImpl(const std::filesystem::path& path, const NpzRecor
     archive* handle = archive_write_new();
     if (!handle) throw std::runtime_error("unable to allocate archive writer");
     archive_write_set_format_zip(handle);
-    archive_write_set_options(handle, "zip:compression=deflate");
+    if (archive_write_set_options(handle, zipOption(options.compression)) != ARCHIVE_OK) {
+        archive_write_free(handle);
+        throw std::runtime_error("this libarchive build cannot write "
+            + archiveCompressionName(options.compression) + " ZIP entries");
+    }
 #ifdef _WIN32
     const int opened = archive_write_open_filename_w(handle, temporary.c_str());
 #else
@@ -275,7 +290,8 @@ static void writeNpzAtomicImpl(const std::filesystem::path& path, const NpzRecor
     if (opened != ARCHIVE_OK) archiveError(handle, "unable to create NPZ archive");
     try {
         for (const auto& [name, array] : record.arrays) {
-            const auto bytes = encodeNpy(name == "metadata_json" ? withRunProvenance(array) : array);
+            const auto bytes = encodeNpy(name == "metadata_json" && options.addRunProvenance
+                ? withRunProvenance(array) : array);
             archive_entry* entry = archive_entry_new();
             archive_entry_set_pathname(entry, (name + ".npy").c_str());
             archive_entry_set_filetype(entry, AE_IFREG);
@@ -312,10 +328,10 @@ static void writeNpzAtomicImpl(const std::filesystem::path& path, const NpzRecor
 }
 
 void writeNpzAtomic(const std::filesystem::path& path, const NpzRecord& record) {
-    writeNpzAtomicImpl(path,record,true);
+    writeNpz(path, record, {archiveCompression(), true, true});
 }
 void writeNpzAtomicNew(const std::filesystem::path& path, const NpzRecord& record) {
-    writeNpzAtomicImpl(path,record,false);
+    writeNpz(path, record, {archiveCompression(), false, true});
 }
 
 }  // namespace dynsyslab::core

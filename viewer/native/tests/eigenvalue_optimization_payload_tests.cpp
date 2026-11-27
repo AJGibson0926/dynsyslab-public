@@ -23,7 +23,7 @@ int main(){const auto path=std::filesystem::temp_directory_path()
         archive.arrays["optimization_metrics"]=
             dynsyslab::core::NpyArray::fromDoubles({1,5},{.01,.1,12.,30.,1.});
         archive.arrays["metadata_json"]=dynsyslab::core::NpyArray::fromString(
-            R"({"format":"dynsyslab.derived/v1","label":"Optimized spectrum","method":"trajectory-eigenvalue-optimization"})");
+            R"({"schema":"dynsyslab.derived/v1","label":"Optimized spectrum","method":"eigenvalue_optimization"})");
         dynsyslab::core::writeNpzAtomic(path,archive);
         const auto payload=dsl::buildNativePayload(path,"eigenvalue_optimization");
         require(payload.figures.size()==3,"optimization dashboard is incomplete");

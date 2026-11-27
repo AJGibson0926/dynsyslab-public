@@ -32,7 +32,7 @@ void rotationAndRollout() {
         require(model.rank==2,"Rotation rank");
         for(auto z:model.multipliers)require(std::abs(std::abs(z)-1)<1e-10,"Rotation eigenvalue radius");
         for(auto res:model.spectral.residuals.eigenpair)require(res<1e-10,"Analytic rotation eigenpair residual");
-        require(model.spectral.residuals.minimum[0]<1e-7&&std::abs(model.spectral.residuals.minimum[1]-1)<1e-10,"Pseudospectral distances for normal rotation");
+        require(model.spectral.residuals.pseudospectrum.minimum[0]<1e-7&&std::abs(model.spectral.residuals.pseudospectrum.minimum[1]-1)<1e-10,"Pseudospectral distances for normal rotation");
         require(model.spectral.invariance.projectionDefect<1e-10,"Invariant coordinate span");
         c::fitSpectralReconstruction(model,"position",data.x,data.x,2);
         auto rollout=c::rolloutSpectralKrom(model,"position",{1,0},40);
@@ -113,15 +113,41 @@ void existingModelAttachments() {
     c::PolynomialDictionary dictionary;dictionary.coordinateDimension=1;dictionary.exponents={1};
     c::FunctionDomain coordinates;coordinates.dimension=1;coordinates.names={"x"};
     c::KoopmanModel model(c::EigenfunctionFitResult{c::FunctionExpansion(dictionary, {{1,0}}, coordinates), c::Spectrum::fromContinuousRates({{-1,0}}), {}});
-    c::SpectralData data;data.residuals.eigenpair={.01};
+    // Eigenpair, Spectrum and Pseudospectrum round trip through the krom archive (Spectrum.hpp).
+    c::SpectralData data;data.residuals.eigenpair={.01};data.residuals.definition=c::residual_definition::oneStep;
+    data.residuals.scope=c::residual_scope::empiricalTraining;
+    data.residuals.pseudospectrum={data.residuals.definition,data.residuals.scope,{{0.5,0.1},{-1,0}},{0.3,0.02},{{1,0},{0,1}},1};
     c::SpectralMeasure measure;measure.name="x";measure.method="test-atom";measure.atomLocations={0};measure.atomMasses={2};measure.totalMass=2;
-    data.measures.push_back(measure);model.setSpectralData(data);
+    data.measures.push_back(measure);data.invariance.projectionDefect=0.25;
+    auto evidence=model.spectrum();c::attachSpectralData(evidence,data);
+    model.setSpectralEvidence(evidence);model.setSpectralDiagnostics(data);
     const auto path=std::filesystem::temp_directory_path()/("dynsyslab-spectral-attachment-"+
         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".npz");
-    c::writeNpzAtomicNew(path,c::makeKoopmanArchive(model));
-    const auto loaded=c::loadKoopmanModel(path);std::filesystem::remove(path);
-    require(loaded.spectralData().measures.front().atomMasses.front()==2,"Existing KROM spectral data archive round trip");
-    require(loaded.extract({0}).spectralData().measures.empty(),"Extraction clears diagnostics of the parent trial space");
+    c::saveKoopmanModel(path,model);
+    const auto loaded=c::loadKoopmanModel(path);
+    std::filesystem::remove(path);
+    const auto pair=loaded.eigenpair(0);
+    require(pair.residual&&pair.residual->value==.01&&pair.residual->definition=="one-step"&&pair.residual->scope=="empirical-training"
+            &&pair.eigenfunction&&pair.eigenvalue.continuous==std::complex<double>(-1,0),"Eigenpair round trip");
+    const auto& pseudo=loaded.spectrum().pseudospectrum();
+    require(pseudo&&pseudo->grid.size()==2&&pseudo->minimum[1]==0.02&&pseudo->minimizingCoefficients.size()==2&&pseudo->levelSet(0.1).size()==1,
+            "Pseudospectrum round trip");
+    require(loaded.spectrum().continuous().front().atomMasses.front()==2,"Continuous spectrum round trip");
+    require(loaded.spectralDiagnostics().invariance.projectionDefect==0.25,"Spectral diagnostics round trip");
+    const auto subset=loaded.extract({0});
+    require(subset.spectrum().residual(0)->value==.01&&subset.spectrum().pseudospectrum()&&!subset.spectrum().continuous().empty(),
+            "Extraction keeps the selected pairs' residuals and the operator's evidence");
+    require(subset.spectralDiagnostics().invariance.projectionDefect==0,"Extraction clears diagnostics of the parent trial space");
+    {   // A pair with no residual stays empty.
+        c::KoopmanModel plain(c::EigenfunctionFitResult{c::FunctionExpansion(dictionary, {{1,0}}, coordinates), c::Spectrum::fromContinuousRates({{-2,0}}), {}});
+        const auto other=std::filesystem::temp_directory_path()/("dynsyslab-plain-krom-"+
+            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".npz");
+        c::saveKoopmanModel(other,plain);
+        const auto archive=c::readNpz(other);
+        const auto reread=c::loadKoopmanModel(other);std::filesystem::remove(other);
+        require(!archive.contains("eigenpair_residual")&&!reread.eigenpair(0).residual&&!reread.spectrum().pseudospectrum(),
+                "A method with no residual publishes pairs with empty residuals");
+    }
     auto observable=c::Observable::fromExpressions({"x","x","","measured",{},false},
         {c::AnalyticExpression::state(1,0)});
     c::ObservableDecompositionReference ref{"test.npz","identity","x","spectral-measure",0};

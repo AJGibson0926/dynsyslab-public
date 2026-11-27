@@ -16,5 +16,7 @@ HankelAnalysis prepareHankel(const SourceData&, const json::Value& settings, boo
 // "first" receives the index of the first kept row in the full source.
 SourceData hankelTimeWindow(const SourceData&, const json::Value& settings, std::size_t& first);
 HankelAnalysis readHankel(const SourceData&, const std::filesystem::path& archive, bool requirePair);
+// The Hankel matrix as a data object (layout, matrices, label times, source hash), for publishing.
+dynsyslab::core::NpzRecord hankelMatrixObject(const SourceData&,const HankelAnalysis&,const std::string& label);
 std::filesystem::path runHankelMatrix(const SourceData&,const json::Value&,const std::filesystem::path& root,const std::string& label);
 } // namespace dynsyslab::workflow::postprocess_detail

@@ -13,6 +13,7 @@
 
 #include <windows.h>
 
+#include <cstdint>
 #include <future>
 #include <memory>
 #include <string>
@@ -93,6 +94,7 @@ private:
     std::optional<KromWorkspaceOptions> pendingKrom_;
     std::future<AsyncResult> task_;
     bool taskActive_ = false;
+    std::uint64_t archiveGeneration_ = 0;  // archive index generation last shown (watchArchive)
     bool updatingCatalog_ = false;
     unsigned checkedRefreshes_ = 0;
     unsigned checkedWorkspaceStage_ = 0;
@@ -126,6 +128,9 @@ private:
     void requestView(const std::string& view);
     void requestKrom(KromWorkspaceOptions options);
     void refreshCatalog();
+    // Automatic refresh: when the archive index generation changes (new results were indexed),
+    // reload the catalog in the background and reopen the selected archive.
+    void watchArchive();
     void setTreeSort(CatalogTreeSort sort);
     void pollTask();
     void applyCatalog(Catalog catalog);

@@ -1,0 +1,167 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "experiment",
+  "label": "duffing-hdmd-sindy-sop",
+  "description": "Duffing H-DMD to SINDy operating procedure (Korda & Mezic 2018 double well): 30 retained unit-circle initial conditions from the checksum-verified table, pooled scalar H-DMD of x (400 delays, 400 windows per trajectory, rank 20), full-state SINDy over the same 30 trajectories anchored to the H-DMD eigenfunctions, and the H-DMD readouts transferred after a validation gate (refitted when it fails). Run from the repository root (the IC table path is relative).",
+  "stages": [
+    {
+      "id": "free",
+      "job": {
+        "kind": "solve",
+        "label": "duffing-sop-free-training",
+        "system": {
+          "name": "duffing",
+          "parameters": {
+            "alpha": 1.0,
+            "beta": 4.0,
+            "delta": 0.5
+          }
+        },
+        "time": {
+          "start": 0,
+          "stop": 8,
+          "output_step": 0.01,
+          "coordinate_system": "automatic"
+        },
+        "initial_conditions": {
+          "mode": "file",
+          "count": 30,
+          "clusters": 1,
+          "path": "data/duffing_korda_mezic_initial_conditions.csv",
+          "layout": "columns",
+          "norm": 1.0,
+          "norm_tolerance": 1e-12,
+          "values_sha256": "483c99c65b72c0f9e44d1bd587b25a2ad5a8aedb868de43208b2cde2edfe5df2"
+        },
+        "solver": {
+          "method": "RK45",
+          "rtol": 1e-10,
+          "atol": 1e-12
+        },
+        "archive": {
+          "enabled": true,
+          "data_role": "free_training"
+        }
+      }
+    },
+    {
+      "id": "hdmd",
+      "job": {
+        "kind": "postprocess",
+        "sources": [
+          "${free.archives[0]}"
+        ],
+        "methods": [
+          {
+            "name": "hdmd",
+            "enabled": true,
+            "settings": {
+              "observable": 0,
+              "matrix_size": 400,
+              "sampling_window": 400,
+              "rank": 20,
+              "mode_sort": "terminal-amplitude-energy",
+              "additional_sources": [
+                "${free.archives[1]}",
+                "${free.archives[2]}",
+                "${free.archives[3]}",
+                "${free.archives[4]}",
+                "${free.archives[5]}",
+                "${free.archives[6]}",
+                "${free.archives[7]}",
+                "${free.archives[8]}",
+                "${free.archives[9]}",
+                "${free.archives[10]}",
+                "${free.archives[11]}",
+                "${free.archives[12]}",
+                "${free.archives[13]}",
+                "${free.archives[14]}",
+                "${free.archives[15]}",
+                "${free.archives[16]}",
+                "${free.archives[17]}",
+                "${free.archives[18]}",
+                "${free.archives[19]}",
+                "${free.archives[20]}",
+                "${free.archives[21]}",
+                "${free.archives[22]}",
+                "${free.archives[23]}",
+                "${free.archives[24]}",
+                "${free.archives[25]}",
+                "${free.archives[26]}",
+                "${free.archives[27]}",
+                "${free.archives[28]}",
+                "${free.archives[29]}"
+              ]
+            }
+          }
+        ],
+        "archive": {
+          "enabled": true
+        }
+      }
+    },
+    {
+      "id": "sindy",
+      "job": {
+        "kind": "postprocess",
+        "sources": [
+          "${free.archives[0]}"
+        ],
+        "methods": [
+          {
+            "name": "sindy",
+            "enabled": true,
+            "settings": {
+              "krom": "${hdmd.archive}",
+              "polynomial_degree": 4,
+              "threshold": 0.05,
+              "normalize": true,
+              "nullspace_solver": "gram",
+              "gamma_method": "system_rhs",
+              "additional_sources": [
+                "${free.archives[1]}",
+                "${free.archives[2]}",
+                "${free.archives[3]}",
+                "${free.archives[4]}",
+                "${free.archives[5]}",
+                "${free.archives[6]}",
+                "${free.archives[7]}",
+                "${free.archives[8]}",
+                "${free.archives[9]}",
+                "${free.archives[10]}",
+                "${free.archives[11]}",
+                "${free.archives[12]}",
+                "${free.archives[13]}",
+                "${free.archives[14]}",
+                "${free.archives[15]}",
+                "${free.archives[16]}",
+                "${free.archives[17]}",
+                "${free.archives[18]}",
+                "${free.archives[19]}",
+                "${free.archives[20]}",
+                "${free.archives[21]}",
+                "${free.archives[22]}",
+                "${free.archives[23]}",
+                "${free.archives[24]}",
+                "${free.archives[25]}",
+                "${free.archives[26]}",
+                "${free.archives[27]}",
+                "${free.archives[28]}",
+                "${free.archives[29]}"
+              ],
+              "readout_transfer": {
+                "tolerance": 0.2
+              },
+              "reconstruction_observables": [
+                "state"
+              ]
+            }
+          }
+        ],
+        "archive": {
+          "enabled": true
+        }
+      }
+    }
+  ]
+}

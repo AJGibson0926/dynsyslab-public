@@ -4,14 +4,22 @@
 #include <dynsyslab/core/System.hpp>
 
 #include <cstddef>
+#include <functional>
 #include <vector>
 
 namespace dynsyslab::core {
+
+// Called every checkpointSteps steps (before the end) with the trajectory's samples so far:
+// times[0..samples) and values[0..samples). Durable mid-solve history for long delay runs.
+using DelayCheckpoint = std::function<void(std::size_t trajectory, std::size_t samples,
+                                           const double* times, const double* values)>;
 
 struct DelayIntegrationOptions {
     double initialTime{};
     double finalTime{100.0};
     double step{0.05};
+    std::size_t checkpointSteps{0};
+    DelayCheckpoint checkpoint;
 };
 
 struct DelaySolution {

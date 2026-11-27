@@ -5,11 +5,29 @@
 
 namespace dynsyslab::core {
 // Original SINDy: qdot = Theta(q) C. Separate from Koopman eigenfunction fitting.
+// Sequentially thresholded least squares (SINDy: Brunton, Proctor & Kutz, PNAS 113:3932, 2016) on
+// rows that are either the instantaneous rates or, in weak (integral) form, state increments over
+// physical-time windows, q(t + D) - q(t) = int_t^{t+D} Theta(q) dt xi (integral SINDy: Schaeffer &
+// McCalla, Phys. Rev. E 96:023302, 2017; weak SINDy: Messenger & Bortz, Multiscale Model. Simul.
+// 19:1474, 2021), with Theta piecewise linear between samples and the window end interpolated.
 struct SindyDynamicsOptions {
     double threshold{0.001}; // applied after feature and response RMS normalization
     double singularValueTolerance{1e-10};
     std::size_t maximumIterations{20};
+    // Tikhonov ridge on the normalized problem, min ||A xi - b||^2 + ridge ||xi||^2 (ridge
+    // regression: Hoerl & Kennard, Technometrics 12:55, 1970). Zero: plain least squares.
+    double ridge{0.0};
+    // Per-sample weights on the instantaneous rows (empty: equal); a row's squared residual is
+    // multiplied by its weight.
+    std::vector<double> sampleWeights;
+    // Weak form: physical window lengths D (empty: instantaneous rows), windows starting every
+    // `weakStride` samples. Only for a vector field (the response is the predictors' own rate).
+    std::vector<double> weakDurations;
+    std::size_t weakStride{1};
 };
+// Nodal weights of the trapezoid rule on an increasing clock (the integral of the piecewise-linear
+// interpolant): a sample's share of the time it represents.
+std::vector<double> trapezoidWeights(const TimeSeries& series);
 struct SindyDynamicsFitDiagnostics {
     // Per output: least-squares error and support size BEFORE each pruning step.
     std::vector<std::vector<double>> relativeResidual;

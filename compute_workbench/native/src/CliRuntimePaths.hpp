@@ -1,6 +1,7 @@
 #pragma once
 // Default archive root of dynsyslab_cli when --archive-root is not given. Same order as the
 // desktop apps (viewer/native/src/RuntimePaths.cpp), never the current working directory:
+//   0. DYNSYSLAB_ARCHIVE_DIR environment variable    -> that folder (source "environment")
 //   1. <install>/resources/runtime.json             -> its archive_root (written by install.ps1)
 //   2. source checkout containing the executable   -> <checkout>/archives
 //   3. %LOCALAPPDATA%/DynSysLab/runtime.json        -> its archive_root
@@ -13,11 +14,15 @@ namespace dynsyslab::cli {
 
 struct ArchiveRootChoice {
     std::filesystem::path path;
-    std::string source;  // "source_checkout", "install_runtime", "user_runtime", "user_default"
+    std::string source;  // "environment", "source_checkout", "install_runtime", "user_runtime", "user_default"
 };
 
+// `environmentRoot` is the DYNSYSLAB_ARCHIVE_DIR value (empty when unset).
 [[nodiscard]] ArchiveRootChoice resolveArchiveRoot(const std::filesystem::path& executable,
-                                                   const std::filesystem::path& userDataRoot);
+                                                   const std::filesystem::path& userDataRoot,
+                                                   const std::filesystem::path& environmentRoot = {});
+// The DYNSYSLAB_ARCHIVE_DIR environment variable (empty when unset).
+[[nodiscard]] std::filesystem::path archiveDirectoryVariable();
 [[nodiscard]] ArchiveRootChoice defaultArchiveRoot();
 
 // The running executable, and the source checkout containing it (empty for an install).

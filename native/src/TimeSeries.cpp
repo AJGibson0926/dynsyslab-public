@@ -15,6 +15,7 @@ TimeSeries::TimeSeries(std::vector<double> time, std::vector<double> values,
                        std::size_t componentCount)
     : ownedTime_(std::make_shared<const std::vector<double>>(std::move(time))),
       ownedValues_(std::make_shared<const std::vector<double>>(std::move(values))) {
+    if (ownedTime_->empty() && ownedValues_->empty()) { componentCount_ = componentCount; return; }
     initialize(ownedTime_->data(), ownedValues_->data(), ownedTime_->size(), componentCount);
     if (ownedValues_->size() != sampleCount_ * componentCount_)
         throw std::invalid_argument("TimeSeries value shape does not match its time axis");
@@ -49,6 +50,24 @@ void TimeSeries::initialize(const double* time, const double* values,
         const double scale = std::max({1.0, std::abs(deltaTime_), std::abs(step)});
         if (std::abs(step - deltaTime_) > 1.0e-12 * scale) uniformTimeSteps_ = false;
     }
+}
+
+const std::vector<double>& TimeSeries::timeVector() const {
+    if (!ownedTime_) {
+        if (sampleCount_) throw std::logic_error("a TimeSeries view owns no time buffer");
+        static const std::vector<double> empty;
+        return empty;
+    }
+    return *ownedTime_;
+}
+
+const std::vector<double>& TimeSeries::valueVector() const {
+    if (!ownedValues_) {
+        if (sampleCount_) throw std::logic_error("a TimeSeries view owns no value buffer");
+        static const std::vector<double> empty;
+        return empty;
+    }
+    return *ownedValues_;
 }
 
 double TimeSeries::deltaTime() const {

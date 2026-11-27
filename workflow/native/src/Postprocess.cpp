@@ -1,6 +1,7 @@
+#include "KromTools.hpp"
 #include "TimeSeriesSource.hpp"
 #include <dynsyslab/core/EigenfunctionFit.hpp>
-#include <dynsyslab/core/EigenfunctionArchive.hpp>
+#include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/workflow/Postprocess.hpp>
 #include <dynsyslab/workflow/EstimationPostprocess.hpp>
 #include <dynsyslab/workflow/DecompositionPostprocess.hpp>
@@ -13,8 +14,15 @@
 #include "HankelAnalysis.hpp"
 #include "ObservationSource.hpp"
 #include "KromEvidence.hpp"
+#include "FieldModelPostprocess.hpp"
+#include "PulseControlPostprocess.hpp"
+#include "GeometryPostprocess.hpp"
+#include "ReceiverPostprocess.hpp"
+#include "TrajectoryKernelsPostprocess.hpp"
+#include "DelayDiagnosticsPostprocess.hpp"
 
 #include <dynsyslab/core/Text.hpp>
+#include <dynsyslab/numerics/Svd.hpp>
 
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/ControlRegression.hpp>
@@ -91,18 +99,18 @@ dynsyslab::core::SystemConfiguration systemConfiguration(const SourceData& sourc
 
 std::vector<double> exactVelocities(const SourceData& source, bool includeInputTerms) {
     auto system=dynsyslab::core::createSystem(systemConfiguration(source));
-    if(system->descriptor().stateDimension!=source.dimension)
+    if(system->descriptor().stateDimension!=source.dimension())
         throw std::invalid_argument("source state dimension differs from model");
-    std::vector<double> result(source.values.size());
-    if(!source.inputs.empty()&&source.inputDimension!=1)
+    std::vector<double> result(source.values().size());
+    if(!source.inputs().empty()&&source.inputDimension()!=1)
         throw std::invalid_argument("system-RHS training currently requires scalar control input");
-    for(std::size_t sample=0;sample<source.samples;++sample) {
-        const auto x=source.values.data()+sample*source.dimension;
-        const auto f=result.data()+sample*source.dimension;
-        if(!includeInputTerms)system->rhsWithInput(source.time[sample],x,0.,f);
-        else if(source.inputs.empty())system->rhs(source.time[sample],x,f);
-        else system->rhsWithInput(source.time[sample],x,
-            source.inputs[std::min(sample,source.inputs.size()-1)],f);
+    for(std::size_t sample=0;sample<source.samples();++sample) {
+        const auto x=source.values().data()+sample*source.dimension();
+        const auto f=result.data()+sample*source.dimension();
+        if(!includeInputTerms)system->rhsWithInput(source.time()[sample],x,0.,f);
+        else if(source.inputs().empty())system->rhs(source.time()[sample],x,f);
+        else system->rhsWithInput(source.time()[sample],x,
+            source.inputs()[std::min(sample,source.inputs().size()-1)],f);
     }
     return result;
 }
@@ -115,7 +123,7 @@ std::filesystem::path runControlRegression(
     std::vector<std::size_t> selected;
     for (const auto value : settings.at("selected_modes").array())
         selected.push_back(static_cast<std::size_t>(value.number()));
-    auto model = dynsyslab::core::loadKoopmanModel(   // readouts may be separate reconstructions objects
+    auto model = dynsyslab::core::loadKoopmanModel(   // the K-ROM this step adds input maps B to
             dynsyslab::core::wide(kromPath), systemConfiguration(source), selected, composedBinding(settings));
     std::vector<SourceData> sources{source};
     const auto referenceConfiguration=systemConfiguration(source);
@@ -130,14 +138,13 @@ std::filesystem::path runControlRegression(
         const auto configuration=systemConfiguration(additional);
         const auto fingerprint=dynsyslab::core::equationsFingerprint(
             dynsyslab::core::createSystem(configuration)->configuration());
-        if(additional.dimension!=source.dimension||fingerprint!=referenceFingerprint)
+        if(additional.dimension()!=source.dimension()||fingerprint!=referenceFingerprint)
             throw std::invalid_argument(
                 "all control-regression trajectories must share identical dynamics");
         sources.push_back(std::move(additional));
     }
-    std::vector<dynsyslab::core::ControlledData> data;
-    for(const auto& item:sources)data.push_back({item.time,item.values,item.inputs,
-        item.samples,item.dimension,item.inputDimension});
+    std::vector<dynsyslab::core::TimeSeriesRecord> data;
+    for(const auto& item:sources)data.push_back(item.record);
     const double ridge = settings.at("ridge").number(0.0);
     const bool conjugate = settings.at("conjugate_complete").boolean(false);
     const std::string constantMethod=settings.at("constant_method").string(
@@ -149,16 +156,16 @@ std::filesystem::path runControlRegression(
         throw std::invalid_argument("map_sample_stride must be a positive integer");
     const std::size_t stride=static_cast<std::size_t>(strideValue);
     std::vector<double> mapStates;
-    for(const auto& item:sources)for(std::size_t sample=0;sample<item.samples;sample+=stride)
-        mapStates.insert(mapStates.end(),item.values.begin()+sample*item.dimension,
-                         item.values.begin()+(sample+1)*item.dimension);
-    if(mapStates.size()<3*source.dimension)
+    for(const auto& item:sources)for(std::size_t sample=0;sample<item.samples();sample+=stride)
+        mapStates.insert(mapStates.end(),item.values().begin()+sample*item.dimension(),
+                         item.values().begin()+(sample+1)*item.dimension());
+    if(mapStates.size()<3*source.dimension())
         throw std::invalid_argument("control-map regression needs at least three sampled states");
     const auto constant=[&]{
         if(constantMethod=="exact-map")return dynsyslab::core::fitConstantExactControlMap(
-            model,mapStates,mapStates.size()/source.dimension);
+            model,mapStates,mapStates.size()/source.dimension());
         if(std::any_of(sources.begin(),sources.end(),[](const SourceData& item){
-            return item.inputs.empty();}))throw std::invalid_argument(
+            return item.inputs().empty();}))throw std::invalid_argument(
             "selected constant regression requires an archived control history");
         if(constantMethod=="controlled-residual")
             return dynsyslab::core::fitConstantControlResidual(model,data,ridge);
@@ -176,22 +183,22 @@ std::filesystem::path runControlRegression(
     }();
     const auto bilinear=[&]{
         if(bilinearMethod=="exact-map")return dynsyslab::core::fitBilinearExactControlMap(
-            model,mapStates,mapStates.size()/source.dimension,ridge,conjugate);
+            model,mapStates,mapStates.size()/source.dimension(),ridge,conjugate);
         if(bilinearMethod!="controlled-residual")throw std::invalid_argument(
             "bilinear_method must be controlled-residual or exact-map");
         if(std::any_of(sources.begin(),sources.end(),[](const SourceData& item){
-            return item.inputs.empty();}))throw std::invalid_argument(
+            return item.inputs().empty();}))throw std::invalid_argument(
             "controlled-residual bilinear regression requires an archived control history");
         return dynsyslab::core::fitBilinearControlResidual(model,data,ridge,conjugate);
     }();
     model.setControlMap("constant", constant.representation);
     model.setControlMap("bilinear", bilinear.representation);
-    double x0 = source.values[0], x1 = x0, y0 = source.values[1], y1 = y0;
-    for(const auto& item:sources)for(std::size_t sample=0;sample<item.samples;++sample){
-        x0=std::min(x0,item.values[sample*item.dimension]);
-        x1=std::max(x1,item.values[sample*item.dimension]);
-        y0=std::min(y0,item.values[sample*item.dimension+1]);
-        y1=std::max(y1,item.values[sample*item.dimension+1]);
+    double x0 = source.values()[0], x1 = x0, y0 = source.values()[1], y1 = y0;
+    for(const auto& item:sources)for(std::size_t sample=0;sample<item.samples();++sample){
+        x0=std::min(x0,item.values()[sample*item.dimension()]);
+        x1=std::max(x1,item.values()[sample*item.dimension()]);
+        y0=std::min(y0,item.values()[sample*item.dimension()+1]);
+        y1=std::max(y1,item.values()[sample*item.dimension()+1]);
     }
     const auto bounds = settings.at("bounds").array();
     if (bounds.size() == 4) {
@@ -211,7 +218,6 @@ std::filesystem::path runControlRegression(
     std::map<std::string, dynsyslab::core::NpyArray> extra;
     const auto sourceKromArchive=dynsyslab::core::readNpz(
         dynsyslab::core::wide(kromPath));
-    inheritKromEvidence(sourceKromArchive,selected,extra);
     const auto sourceModes=inheritedSourceModes(
         sourceKromArchive,selected,model.liftedDimension());
     std::vector<double> encodedSourceModes;
@@ -225,7 +231,7 @@ std::filesystem::path runControlRegression(
     extra["constant_relative_error"] = dynsyslab::core::NpyArray::fromDoubles({rows,columns}, constantError.relativeError);
     extra["bilinear_absolute_error"] = dynsyslab::core::NpyArray::fromDoubles({rows,columns}, bilinearError.absoluteError);
     extra["bilinear_relative_error"] = dynsyslab::core::NpyArray::fromDoubles({rows,columns}, bilinearError.relativeError);
-    const auto directory = objectFolder(root, "koopman-control-regression");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::krom);
     const auto path = directory / dynsyslab::core::wide(safeName(source.path.stem().u8string()
         + "__control-regression__" + timestamp()) + ".npz");
     const std::string details = "\"source_krom\":\"" + escaped(kromPath)
@@ -238,9 +244,11 @@ std::filesystem::path runControlRegression(
         + ",\"bilinear_relative_residual\":" + std::to_string(bilinear.diagnostics.relativeResidual)
         + ",\"constant_error_mean\":" + std::to_string(constantError.relativeMean)
         + ",\"bilinear_error_mean\":" + std::to_string(bilinearError.relativeMean)
+        + ",\"constant_error_p95\":" + std::to_string(constantError.relativeP95)
+        + ",\"bilinear_error_p95\":" + std::to_string(bilinearError.relativeP95)
         + ",\"control_map_time_domain\":\"continuous-time\"";
-    dynsyslab::core::savePolynomialKoopmanModel(path, model,
-        metadata(source, "koopman-control-regression", label, details), std::move(extra));
+    dynsyslab::core::saveKoopmanModel(path, model, withDataObject(
+        metadata(source, "koopman-control-regression", label, details), dynsyslab::core::object_kind::krom, {}), std::move(extra));
     return path;
 }
 
@@ -250,201 +258,11 @@ bool pooledMethod(const std::string& name) {
     return name == "echo_history_koopman" || name == "history_basis" || name == "history_control_regression"
         || name == "input_map" || name == "bilinear_certificate" || name == "control_target" || name == "derivative_benchmark"
         || name == "mode_selection" || name == "krom_recenter" || name == "krom_readout"
-        || name == "reference_signal" || name == "control_score" || name == "figure_dataset" || name == "io_delay_model" || name == "animation";
-}
-// SINDy fits on the rows it is given. "sample_stride" and "time_window" select
-// those rows explicitly so the fit can use the same clock as the H-DMD stage
-// (whose Hankel sample_stride does not otherwise propagate).
-SourceData sindyRows(const SourceData& full, const json::Value& settings) {
-    const double strideValue = settings.at("sample_stride").number(1);
-    if (!std::isfinite(strideValue) || strideValue < 1 || std::floor(strideValue) != strideValue)
-        throw std::invalid_argument("SINDy sample_stride must be a positive integer");
-    const auto stride = static_cast<std::size_t>(strideValue);
-    const auto& window = settings.at("time_window").array();
-    if (!window.empty() && window.size() != 2)
-        throw std::invalid_argument("SINDy time_window must be [start, stop]");
-    if (stride == 1 && window.empty()) return full;
-    // Measured derivative arrays are matched to the kept rows by time (coordinate SINDy).
-    const double start = window.empty() ? -INFINITY : window[0].number();
-    const double stop = window.empty() ? INFINITY : window[1].number();
-    SourceData rows = full; rows.time.clear(); rows.values.clear(); rows.inputs.clear();
-    std::size_t kept = 0;
-    for (std::size_t sample = 0; sample < full.samples; ++sample) {
-        if (full.time[sample] < start || full.time[sample] > stop) continue;
-        if (kept++ % stride) continue;
-        rows.time.push_back(full.time[sample]);
-        rows.values.insert(rows.values.end(), full.values.begin() + sample * full.dimension,
-                           full.values.begin() + (sample + 1) * full.dimension);
-        if (!full.inputs.empty())
-            rows.inputs.insert(rows.inputs.end(), full.inputs.begin() + sample * full.inputDimension,
-                               full.inputs.begin() + (sample + 1) * full.inputDimension);
-    }
-    rows.samples = rows.time.size();
-    if (rows.samples < 3) throw std::invalid_argument("SINDy row selection leaves fewer than three samples");
-    return rows;
+        || name == "reference_signal" || name == "control_score" || name == "figure_dataset" || name == "bifurcation_points" || name == "observable_spectrum_comparison" || name == "io_delay_model" || name == "animation"
+        || name == "ssm" || name == "orbit_geometry" || name == "run_invariant" || name == "field_model" || name == "pulse_response"
+        || name == "control_map_audit" || isKromToolMethod(name);
 }
 }  // namespace
-
-std::filesystem::path runSindy(const SourceData& givenSource, const json::Value& givenSettings,
-                               const std::filesystem::path& spectrumPath,
-                               const std::filesystem::path& root, const std::string& label) {
-    const auto input = analyticCoordinateInput(givenSource, givenSettings);
-    const auto& fullSource = input.source;
-    const auto& settings = input.settings;
-    const auto selectedRows = sindyRows(fullSource, settings);
-    const auto& source = selectedRows;
-    const auto requestedSpectrum=settings.at("spectrum_archive").string();
-    const auto activeSpectrum=requestedSpectrum.empty()?spectrumPath:std::filesystem::u8path(requestedSpectrum);
-    if (activeSpectrum.empty()) throw std::invalid_argument(
-        "SINDy requires a preceding native spectrum in the ordered pipeline");
-    const auto spectrum = dynsyslab::core::readNpz(activeSpectrum);
-    std::vector<std::complex<double>> continuous;
-    if (spectrum.contains("continuous_eigenvalues"))
-        continuous = spectrum.at("continuous_eigenvalues").complexDoubles();
-    else {
-        const auto discrete = spectrum.at("eigenvalues").complexDoubles();
-        const double dt = uniformDeltaTime(source);
-        for (const auto value : discrete) continuous.push_back(std::log(value) / dt);
-    }
-    dynsyslab::core::KoopmanSINDyOptions options;
-    options.polynomialDegree = static_cast<std::size_t>(settings.at("polynomial_degree").number(4));
-    options.threshold = settings.at("threshold").number(0.05);
-    options.maximumIterations = static_cast<std::size_t>(settings.at("max_iterations").number(20));
-    options.normalizeStates = settings.at("normalize").boolean(true);
-    options.includeConstant = settings.at("include_constant").boolean(true);
-    options.reuseConjugateFits = settings.at("reuse_conjugate_fits").boolean(true);
-    options.materializeTrainingValues = settings.at("compute_training_values").boolean(false);
-    const auto nullspace = settings.at("nullspace_solver").string("gram");
-    if (nullspace != "gram" && nullspace != "svd")
-        throw std::invalid_argument("SINDy nullspace_solver must be gram or svd");
-    options.gramNullspace = nullspace == "gram";
-    const auto sourceMetadata=source.metadataJson.empty()?json::Value{}:json::parse(source.metadataJson);
-    if(sourceMetadata.at("value_space").string()=="history-coordinates" || settings.at("input_space").string()=="coordinates")
-        return runCoordinateSindy(source,settings,activeSpectrum,continuous,options,root,label);
-    const bool includeInputTerms=settings.at("include_input_terms").boolean(true);
-    const auto velocities = settings.at("gamma_method").string("system_rhs") == "finite_difference"
-        ? std::vector<double>{} : exactVelocities(source,includeInputTerms);
-    auto system=dynsyslab::core::createSystem(systemConfiguration(source));
-    const auto catalog=system->observableCatalog();
-    std::vector<std::string> coordinateNames;
-    for (const auto& value : settings.at("coordinate_observables").array())
-        coordinateNames.push_back(value.string());
-    const std::string coordinateName=settings.at("coordinate_observable").string();
-    dynsyslab::core::Observable coordinates = !settings.at("coordinate_expression").isNull()
-        ? dynsyslab::core::Observable::fromExpressionDefinition(settings.at("coordinate_expression"))
-        : !coordinateNames.empty()
-        ? catalog.coordinates(coordinateNames,"requested_coordinates")
-        : (!coordinateName.empty() && catalog.coordinatePresets().count(coordinateName)
-            ? catalog.coordinatePreset(coordinateName)
-            : catalog.at(coordinateName.empty() ? "state" : coordinateName));
-    const auto result = dynsyslab::core::fitKoopmanEigenfunctionsInCoordinates(
-        source.values, source.samples, source.dimension, source.time, continuous,
-        coordinates, velocities, options);
-    std::vector<std::complex<double>> discrete;
-    const double dt = uniformDeltaTime(source);
-    for (const auto value : continuous) discrete.push_back(std::exp(value * dt));
-    const bool archiveDerivatives=settings.at("archive_coordinate_derivatives").boolean(false);
-    if (archiveDerivatives && (velocities.empty() || !coordinates.hasAnalyticJacobian()))
-        throw std::invalid_argument("coordinate derivative evidence requires system_rhs and an analytic coordinate Jacobian");
-    // SINDy publishes data objects only: its eigenfunctions (spectrum + one polynomial expansion,
-    // each eigenfunction's coefficients its own row) and the reconstructions written over them. The
-    // training series is referenced by its origin, never copied.
-    namespace c = dynsyslab::core;
-    c::NpzRecord archive, readouts;
-    c::DataOrigin origin{"sindy", settings, {dataReference(fullSource.path, "time_series")}};
-    origin.inputs.push_back(dataReference(activeSpectrum, "spectrum"));
-    auto fit = c::polynomialEigenfunctionsFromLegacy(result);
-    c::EigenfunctionSamples samples;
-    samples.modes = continuous.size();
-    if (!result.trainingValues.empty()) {
-        samples.values = result.trainingValues;
-        for (std::size_t k = 0; k < source.samples; ++k) {  // rows of the input series, matched by time
-            const auto found = std::lower_bound(fullSource.time.begin(), fullSource.time.end(), source.time[k] - 1e-12);
-            samples.sampleIndices.push_back(std::size_t(found - fullSource.time.begin()));
-            samples.time.push_back(source.time[k]);
-        }
-    }
-    const c::EigenfunctionSet set(c::Spectrum::fromDiscrete(discrete, continuous, dt, origin), samples, origin,
-        {std::make_shared<c::SharedRepresentation>(std::make_shared<const c::FunctionExpansion>(fit.functions))});
-    auto objects = c::writeEigenfunctionSet(archive, set, timeSeriesRecord(fullSource).channels);
-    archive.arrays["sample_interval"] = c::NpyArray::fromDoubles({1}, {dt});
-    archive.arrays["training_residual_rms"] = c::NpyArray::fromDoubles({continuous.size()}, result.residualRms);
-    archive.arrays["training_residual_maximum"] = c::NpyArray::fromDoubles({continuous.size()}, result.residualMaximum);
-    if (archiveDerivatives) {  // requested evidence: the coordinates' exact rates and Jacobians at the samples
-        archive.arrays["training_coordinate_velocities"]=c::NpyArray::fromDoubles(
-            {source.samples,result.stateDimension},
-            coordinates.pushForwardRealBatch(source.values,velocities,source.samples,
-                c::ObservableJacobianBackend::analytic));
-        std::vector<double> gradients;
-        gradients.reserve(source.samples*result.stateDimension*source.dimension);
-        for (std::size_t row=0;row<source.samples;++row)
-            for (const auto value:coordinates.jacobian(source.values.data()+row*source.dimension,
-                    c::ObservableJacobianBackend::analytic))
-                gradients.push_back(value.real());
-        archive.arrays["training_coordinate_jacobians"]=c::NpyArray::fromDoubles(
-            {source.samples,result.stateDimension,source.dimension},gradients);
-    }
-    dynsyslab::core::KoopmanModel fittedModel(result,systemConfiguration(source));
-    std::vector<std::string> reconstructionNames;
-    for (const auto& value : settings.at("reconstruction_observables").array())
-        reconstructionNames.push_back(value.string());
-    // "reconstruction":"none" skips the all-mode least-squares C fit (samples x
-    // retained modes), which dominates SINDy runtime for a full H-DMD spectrum
-    // and is unused by state-Jacobian/coordinate-target control.
-    const bool skipReconstruction = settings.at("reconstruction").string() == "none";
-    if (skipReconstruction && !reconstructionNames.empty())
-        throw std::invalid_argument("reconstruction \"none\" conflicts with reconstruction_observables");
-    if (reconstructionNames.empty() && !skipReconstruction) reconstructionNames.push_back("state");
-    std::string encodedReconstructions;
-    for (const auto& name : reconstructionNames) {
-        const auto projection=dynsyslab::core::fitObservableReconstruction(
-            fittedModel,source.values,source.samples,catalog.at(name),
-            settings.at("reconstruction_ridge").number(0.0));
-        readouts.arrays["reconstruction__"+safeArrayKey(name)]=
-            dynsyslab::core::NpyArray::fromComplex(
-                {projection.outputs,projection.modes},projection.matrix);
-        if (!encodedReconstructions.empty()) encodedReconstructions.push_back('\n');
-        encodedReconstructions+=name;
-    }
-    if (!encodedReconstructions.empty())
-        readouts.arrays["reconstruction_names"]=dynsyslab::core::NpyArray::fromString(encodedReconstructions);
-    const std::string gamma = velocities.empty() ? "finite_difference" : "system_rhs";
-    const std::vector<double> multipliers(result.stateDimension, 1.0);
-    auto sindyMeta = json::parse(metadata(source,
-        "koopman-with-sindy", label, "\"eigenvalue_domain\":\"discrete-time\","
-        "\"generator_eigenvalue_domain\":\"continuous-time\",\"generator_conversion\":"
-        "\"lambda=log(mu)/delta_t\",\"delta_t\":" + std::to_string(dt)
-        + ",\"polynomial_degree\":" + std::to_string(options.polynomialDegree)
-        + ",\"feature_count\":" + std::to_string(result.featureCount)
-        + ",\"threshold\":" + std::to_string(options.threshold)
-        + ",\"sample_stride\":" + std::to_string(static_cast<long long>(settings.at("sample_stride").number(1)))
-        + ",\"training_samples\":" + std::to_string(source.samples)
-        + ",\"source_samples\":" + std::to_string(fullSource.samples)
-        + ",\"gamma_method\":\"" + gamma + "\",\"state_preprocessing\":{\"center\":"
-        + jsonArray(result.center) + ",\"scale\":" + jsonArray(result.scale)
-        + ",\"multiplier\":" + jsonArray(multipliers)
-        + "},\"eigenfunction_representation\":\"analytic-polynomial\","
-        "\"coordinate_observables\":" + jsonStringArray(result.coordinateObservableNames) + ","
-        "\"reconstruction_observables\":" + jsonStringArray(reconstructionNames) + ","
-        "\"source_spectrum_archive\":\"" + escaped(activeSpectrum.generic_u8string()) + "\","
-        "\"include_input_terms\":" + (includeInputTerms?"true":"false") + ","
-        "\"coordinate_derivative_evidence\":\"" + (archiveDerivatives?"analytic-push-forward/v1":"none") + "\","
-        "\"coordinate_gradient_backend\":\"" + (coordinates.hasAnalyticJacobian()?"analytic":"finite-difference") + "\","
-        "\"analytic_gradient_available\":" + (coordinates.hasAnalyticJacobian()?"true":"false") + ",\"direct_eigenvalue_fits\":"
-        + std::to_string(result.directFits)));
-    sindyMeta.object()["eigenfunction_objects"] = std::move(objects);
-    sindyMeta.object()["object_properties"] = json::Value::Object{
-        {"per_eigenfunction", json::Value::Array{"training_residual_rms", "training_residual_maximum"}}};
-    archive.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(json::dump(sindyMeta));
-    const auto eigenfunctions = publish(root, source, "sindy-eigenfunctions", label, std::move(archive));
-    if (readouts.contains("reconstruction_names")) {
-        auto readoutMeta = json::parse(metadata(source, "sindy-reconstructions", label, ""));
-        readoutMeta.object()["reconstructions"] = c::reconstructionsBlock(eigenfunctions, continuous.size());
-        readouts.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(readoutMeta));
-        registerAdditionalObject(publish(root, source, "reconstructions", label, std::move(readouts)));
-    }
-    return eigenfunctions;
-}
 
 }  // namespace postprocess_detail
 
@@ -497,6 +315,7 @@ PostprocessResult executePostprocess(const json::Value& submitted,
         const std::string label = job.at("label").string("native-postprocess")
             + " / " + name;
         const StageScope scope(name, stage->at("settings"));
+        const dynsyslab::numerics::SvdDriverScope svdScope(dynsyslab::numerics::svdDriverFromName(stage->at("settings").at("svd_driver").string()));
         const auto output = name=="history_basis"?runHistoryBasis(sources,stage->at("settings"),archiveRoot,label):
             name=="history_control_regression"?runHistoryControlRegression(sources,stage->at("settings"),archiveRoot,label):
             name=="input_map"?runInputMap(sources,stage->at("settings"),archiveRoot,label):
@@ -509,8 +328,17 @@ PostprocessResult executePostprocess(const json::Value& submitted,
             name=="reference_signal"?runReferenceSignal(sources,stage->at("settings"),archiveRoot,label):
             name=="control_score"?runControlScore(sources,stage->at("settings"),archiveRoot,label):
             name=="figure_dataset"?runFigureDataset(sources,stage->at("settings"),archiveRoot,label):
+            name=="bifurcation_points"?runBifurcationPoints(sources,stage->at("settings"),archiveRoot,label):
+            name=="observable_spectrum_comparison"?runObservableSpectrumComparison(sources,stage->at("settings"),archiveRoot,label):
             name=="animation"?runAnimation(sources,stage->at("settings"),archiveRoot,label):
             name=="io_delay_model"?runIoDelayModel(sources,stage->at("settings"),archiveRoot,label):
+            name=="ssm"?runSsm(sources,stage->at("settings"),archiveRoot,label):
+            name=="orbit_geometry"?runOrbitGeometry(sources,stage->at("settings"),archiveRoot,label):
+            name=="run_invariant"?runRunInvariant(sources,stage->at("settings"),archiveRoot,label):
+            name=="field_model"?runFieldModel(sources,stage->at("settings"),archiveRoot,label):
+            name=="pulse_response"?runPulseResponse(sources,stage->at("settings"),archiveRoot,label):
+            name=="control_map_audit"?runControlMapAudit(sources,stage->at("settings"),archiveRoot,label):
+            isKromToolMethod(name)?runKromTool(name,sources,stage->at("settings"),archiveRoot,label):
             runEchoHistoryKoopman(sources, stage->at("settings"), archiveRoot, label);
         addStepObjects(result, output, name);
         ++complete;
@@ -549,12 +377,25 @@ PostprocessResult executePostprocess(const json::Value& submitted,
         }
         const std::string label = job.at("label").string("native-postprocess") + " / " + method;
         const StageScope scope(method, settings);
+        const dynsyslab::numerics::SvdDriverScope svdScope(dynsyslab::numerics::svdDriverFromName(settings.at("svd_driver").string()));
         std::filesystem::path output;
-        if (method == "linear_analysis" || method == "linear_systems" || method == "controllability" || method == "observable_reconstruction" || method == "krom_extract" || method == "dmdc" || method == "edmdc" || method=="history_projection" || method=="eigenfunction_expansion" || method=="eigenfunction_errors" || method=="domain_field"
+        if (method == "linear_analysis" || method == "linear_systems" || method == "controllability" || method == "observable_reconstruction" || method == "krom_extract" || method == "dmdc" || method == "edmdc" || method=="history_projection" || method=="eigenfunction_expansion" || method=="eigenfunction_errors" || method=="domain_field" || method=="ftle"
+            || method=="receiver_signals" || method=="state_readout" || method=="ring_errors"
+            || method=="affine_dynamics" || method=="prehistory" || method=="clock_audit"
+            || method=="delay_pairs" || method=="delay_consistency"
             || method=="klqe" || method=="observability" || method=="empirical_observability") {
             if(method=="history_projection")output=runHistoryProjection(sourcePath,settings,archiveRoot,label);
             else if(method=="eigenfunction_expansion")output=runEigenfunctionExpansion(sourcePath,settings,archiveRoot,label);
             else if(method=="domain_field")output=runDomainField(sourcePath,settings,archiveRoot,label);
+            else if(method=="ftle")output=runFtle(sourcePath,settings,archiveRoot,label);
+            else if(method=="receiver_signals")output=runReceiverSignals(sourcePath,settings,archiveRoot,label);
+            else if(method=="state_readout")output=runStateReadout(sourcePath,settings,archiveRoot,label);
+            else if(method=="ring_errors")output=runRingErrors(sourcePath,settings,archiveRoot,label);
+            else if(method=="affine_dynamics")output=runAffineDynamics(sourcePath,settings,archiveRoot,label);
+            else if(method=="prehistory")output=runPrehistory(sourcePath,settings,archiveRoot,label);
+            else if(method=="clock_audit")output=runClockAudit(sourcePath,settings,archiveRoot,label);
+            else if(method=="delay_pairs")output=runDelayPairs(sourcePath,settings,archiveRoot,label);
+            else if(method=="delay_consistency")output=runDelayConsistency(sourcePath,settings,archiveRoot,label);
             else if(method=="eigenfunction_errors")output=runEigenfunctionErrors(sourcePath,settings,archiveRoot,label);
             else if(method=="linear_analysis"||method=="controllability")output=runLinearAnalysis(sourcePath,settings,archiveRoot,label);
             else if(method=="linear_systems")output=runLinearSystems(sourcePath,settings,archiveRoot,label);
@@ -596,7 +437,13 @@ PostprocessResult executePostprocess(const json::Value& submitted,
             coordinateInput = loadSource(precedingHankelInput);
         const bool readsCoordinates = coordinateInput.has_value();
         if (!readsCoordinates && !loadedSource) loadedSource = loadSource(sourcePath);
-        const auto& source = readsCoordinates ? *coordinateInput : *loadedSource;
+        // "analysis_coordinates": "archive" analyses the stored (dimensional) values instead.
+        std::optional<SourceData> archiveSource;
+        if (!readsCoordinates && settings.at("analysis_coordinates").string("integration") == "archive")
+            archiveSource = loadSource(sourcePath, true);
+        else if (settings.at("analysis_coordinates").string("integration") != "integration")
+            throw std::invalid_argument("analysis_coordinates must be integration or archive");
+        const auto& source = readsCoordinates ? *coordinateInput : archiveSource ? *archiveSource : *loadedSource;
         if (method=="hankel_matrix") {
             output=runHankelMatrix(source,settings,archiveRoot,label);
             precedingHankel=output;

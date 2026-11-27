@@ -48,17 +48,8 @@ std::vector<double> flattenedRows(
     return result;
 }
 
-dynsyslab::core::IntegrationMethod method(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char item) {
-        return static_cast<char>(std::tolower(item));
-    });
-    if (value == "euler") return dynsyslab::core::IntegrationMethod::euler;
-    if (value == "rk4") return dynsyslab::core::IntegrationMethod::rk4;
-    if (value == "rk45" || value == "dopri5")
-        return dynsyslab::core::IntegrationMethod::dormandPrince45;
-    if (value == "bdf" || value == "ode15s")
-        return dynsyslab::core::IntegrationMethod::bdf;
-    throw std::invalid_argument("training preflight supports Euler, RK4, RK45, and BDF");
+dynsyslab::core::IntegrationMethod method(const std::string& value) {
+    return dynsyslab::core::integrationMethodFromName(value);
 }
 
 json::Value vectorValue(const std::vector<double>& values) {

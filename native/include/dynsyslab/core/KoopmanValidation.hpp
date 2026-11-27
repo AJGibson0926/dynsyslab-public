@@ -8,12 +8,8 @@
 
 namespace dynsyslab::core {
 
-using KoopmanErrorStatistics = EigenfunctionErrorStatistics;
-using KoopmanHorizonError = EigenfunctionHorizonError;
-using KoopmanModeValidation = EigenfunctionModeValidation;
-using KoopmanValidationResult = EigenfunctionValidationResult;
 
-KoopmanValidationResult validateKoopmanSemigroup(
+EigenfunctionValidationResult validateKoopmanSemigroup(
     const KoopmanModel& model,
     const std::vector<double>& time,
     const std::vector<double>& states,

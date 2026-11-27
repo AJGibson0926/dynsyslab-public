@@ -64,7 +64,7 @@ int main() {
         dsl::CatalogItem dmdc;
         dsl::enrichArchiveCatalogItem(dmdc, {{"eigenvalues", "operator", "control_matrix",
             "projection_basis", "eigenfunction_coefficients"},
-            R"({"method":"dmdc","snapshot_array":"measured_latents","format":"dynsyslab.derived/v1"})"});
+            R"({"method":"dmdc","snapshot_array":"measured_latents","schema":"dynsyslab.derived/v1"})"});
         require(dmdc.kind=="koopman_spectrum"&&dmdc.category=="Koopman spectra"
             &&dmdc.properties.at("snapshot array")=="measured_latents"
             &&dmdc.subtitle.find("not a control-ready KROM")!=std::string::npos,
@@ -72,7 +72,7 @@ int main() {
         dsl::CatalogItem edmdc;
         dsl::enrichArchiveCatalogItem(edmdc, {{"eigenvalues", "operator", "control_matrix",
             "projection_basis", "eigenfunction_coefficients", "polynomial_exponents", "state_center", "state_scale"},
-            R"({"method":"edmdc","snapshot_array":"measured_latents","format":"dynsyslab.derived/v1"})"});
+            R"({"method":"edmdc","snapshot_array":"measured_latents","schema":"dynsyslab.derived/v1"})"});
         require(edmdc.kind=="koopman_spectrum"&&edmdc.properties.at("eigenfunction coordinates").find("Polynomials")!=std::string::npos
             &&edmdc.subtitle.find("not a control-ready KROM")!=std::string::npos,
             "EDMDc polynomial model misclassified");

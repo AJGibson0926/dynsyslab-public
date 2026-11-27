@@ -1,10 +1,12 @@
 #include "PlotSeries.hpp"
+#include <cstdio>
 #include "dynsyslab_viewer/PlotPresentation.hpp"
 #include "MathTextDrawing.hpp"
 #include "DomainColor.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <vector>
 namespace dsl {
 namespace {
 Gdiplus::PointF project(double x,double y,const PlotTransform& t) {
@@ -118,7 +120,7 @@ void drawPlotSeries(Gdiplus::Graphics& g,const Trace& trace,std::size_t traceInd
         g.SetClip(&stripes,Gdiplus::CombineModeIntersect);
     }
     const auto times=sharedTimeRange.value_or(timeRange(trace.colorValues));
-    const double maxMagnitude=trace.magnitudes.empty()?1.:
+    const double maxMagnitude=trace.magnitudeScale>0?trace.magnitudeScale:trace.magnitudes.empty()?1.:
         *std::max_element(trace.magnitudes.begin(),trace.magnitudes.end());
     std::vector<Gdiplus::PointF> points;
     auto flush=[&](){if(points.size()>1) g.DrawLines(&pen,points.data(),static_cast<INT>(points.size()));points.clear();};
@@ -191,6 +193,7 @@ void drawPlotReferences(Gdiplus::Graphics& g,const Figure& f,const PlotTransform
     Gdiplus::Pen pen(Gdiplus::Color(255, 255, 0, 0),1.5f);
     Gdiplus::SolidBrush red(Gdiplus::Color(255, 255, 0, 0));
     Gdiplus::SolidBrush background(theme::color(theme::plotBackground));
+    std::vector<Gdiplus::RectF> placed;  // labels already drawn: later ones move to a clear side
     for(const auto& ref:f.references) {
         if (!plotReferenceVisible(f,ref)) continue;
         const auto p=project(ref.x,ref.y,t);
@@ -207,30 +210,26 @@ void drawPlotReferences(Gdiplus::Graphics& g,const Figure& f,const PlotTransform
             g.DrawEllipse(&pen,p.X-radius,p.Y-radius,2*radius,2*radius);
         }
         if(f.kind=="phase"&&(ref.equilibrium||!coincident)) {
-            const auto label=wide(coincident?"IC / EC":ref.label);
+            // An initial condition is labelled with its coordinates in the current display units.
+            char coordinates[64]{};
+            std::snprintf(coordinates,sizeof coordinates,"(%.3g, %.3g)",ref.x,ref.y);
+            const auto label=wide(coincident?"IC / EC":(!ref.equilibrium&&ref.label=="IC")?std::string(coordinates):ref.label);
             const float markerRadius=coincident?6.f:ref.equilibrium?3.f:4.f;
-            const auto bounds=plotReferenceLabelBounds(p,markerRadius,
-                measureMathText(g,label,fonts.caption),area);
+            auto bounds=plotReferenceLabelBounds(p,markerRadius,measureMathText(g,label,fonts.caption),area);
+            const auto clear=[&](const Gdiplus::RectF& r) {
+                return std::none_of(placed.begin(),placed.end(),[&](const auto& q) { return r.IntersectsWith(q); });
+            };
+            if(!clear(bounds)) {  // one, then two label heights above or below, keeping the same side
+                const float h=bounds.Height;
+                for(const float rows:{-1.f,1.f,-2.f,2.f}) {
+                    auto candidate=bounds; candidate.Y=std::clamp(bounds.Y+rows*h,area.Y,std::max(area.Y,area.GetBottom()-h));
+                    if(clear(candidate)) { bounds=candidate; break; }
+                }
+            }
+            placed.push_back(bounds);
             drawMathText(g,label,bounds,fonts.caption,theme::plotMuted);
         }
     }
     g.Restore(state);
-}
-void drawTimeColorbar(Gdiplus::Graphics& g,const Figure& f,const Gdiplus::RectF& plot,const theme::Fonts& fonts) {
-    const Trace* colored=nullptr;
-    for(const auto& trace:f.traces) if(trace.encoding=="time"&&!trace.colorValues.empty()) {colored=&trace;break;}
-    if(!colored) return;
-    const auto values=trajectoryTimeRange(f);
-    const float scale=scientificTextScale(fonts.body);
-    const float width=std::min(140.f*scale,plot.Width*.38f),x=plot.GetRight()-width-50*scale,y=plot.Y-19*scale;
-    for(int i=0;i<64;++i) {
-        Gdiplus::SolidBrush brush(trajectoryTimeColor(i/63.));
-        g.FillRectangle(&brush,x+width*i/64,y,width/64+.5f,5.f*scale);
-    }
-    wchar_t low[32]{},high[32]{};
-    swprintf_s(low,L"%.3g",values.first);swprintf_s(high,L"%.3g",values.second);
-    drawMathText(g,low,{x-50*scale,y-9*scale,46*scale,20*scale},fonts.caption,theme::plotMuted,Gdiplus::StringAlignmentFar);
-    drawMathText(g,high,{x+width+4*scale,y-9*scale,48*scale,20*scale},fonts.caption,theme::plotMuted);
-    drawMathText(g,wide(f.colorLabel),{x-88*scale,y-9*scale,34*scale,20*scale},fonts.caption,theme::plotMuted);
 }
 }

@@ -19,6 +19,15 @@ std::vector<double> HarmonicStateTarget::evaluate(double time) const {
     return {state, velocity};
 }
 
+std::pair<std::vector<double>, std::vector<double>> HarmonicStateTarget::conservativeEnvelope() const {
+    double radius = 0.0, velocity = 0.0;
+    for (std::size_t index = 0; index < amplitudes.size(); ++index) {
+        radius += std::abs(amplitudes[index]);
+        velocity += std::abs(amplitudes[index] * angularFrequencies[index]);
+    }
+    return {{offset - radius, -velocity}, {offset + radius, velocity}};
+}
+
 const std::vector<HarmonicStateTarget>& rpeControlTargets() {
     constexpr double pi = 3.141592653589793238462643383279502884;
     static const std::vector<HarmonicStateTarget> targets{

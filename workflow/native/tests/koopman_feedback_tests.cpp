@@ -73,7 +73,7 @@ int main(int argc,char** argv) {
         config.parameters={{"alpha",2},{"beta",0},{"delta",1}};
         const auto model=fixture(config);
         const auto modelPath=root/"feedback-fixture.npz";
-        c::savePolynomialKoopmanModel(modelPath,model);
+        c::saveKoopmanModel(modelPath,model);
         auto request=job(modelPath);
         if(argc>1) {std::ofstream stream(root/"feedback-job.json");stream<<c::json::dump(request);}
         (void)w::planJob(request);

@@ -104,10 +104,15 @@ A spectral measure is not an eigenmode list. Wave packets are finite-width
 functions, not certified distributional limits. RKHS adjoint sections are stored
 as **adjoint** results and are not accepted as an autonomous forward model.
 
-Existing `KoopmanModel` objects also accept `SpectralData` attachments. Their archives
-persist `spectral_data_json`. Mode extraction clears these diagnostics because
-they refer to the original trial subspace; it does not silently relabel them as
-diagnostics of the extracted subspace. New spectral KROM archives use
+A `koopman_spectral` step publishes its `SpectralData` once, on the krom (see
+[EIGENFUNCTION_OBJECTS.md](EIGENFUNCTION_OBJECTS.md#eigenpairs-spectrum-and-pseudospectrum)): the
+one-step residuals on the eigenpairs, the residual grid as the spectrum's `Pseudospectrum`, the
+measures as its continuous components, and invariance, wave packets, stochastic residuals and RKHS
+adjoints as the krom's `spectralDiagnostics()` (`spectral_diagnostics_json`). The operator contract
+embedded in the krom carries none of it; `readSpectralKromArchive` restores it. Mode extraction
+keeps the selected pairs' residuals and the operator's pseudospectrum and continuous part, and
+clears the diagnostics because they refer to the original trial subspace; it does not silently
+relabel them as diagnostics of the extracted subspace. New spectral KROM archives use
 `dynsyslab.spectral-krom/v1`, a compact JSON contract, and separate NPZ numeric
 arrays. Identity is checked on loading. Spectral KROMs do not automatically become
 control-ready polynomial KROMs: no continuous input map or physical-state provider
@@ -207,7 +212,7 @@ silently performed. Higher-order rational kernels can have negative lobes.
 associated data without constructing a forward KROM. `pagerank` requires a
 nonnegative transition graph; a signed EDMD matrix is not automatically such a graph.
 
-## Pipeline jobs
+## Experiments
 
 The [observable and dictionary guide](OSCILLATOR_OBSERVABLES_DICTIONARIES.md)
 documents the Pendulum/Duffing scalar observables, reusable Chebyshev, Laguerre,
@@ -260,12 +265,18 @@ archive identities and reference binding. Python tests exercise the C ABI, CLI,
 immutable archive readback and shared-Hankel workflow, and independently compare
 weighted EDMD to normal equations.
 
-The optional [MATLAB parity script](../../tools/experiments/miscellaneous_computes/references/colbrook/check_native_reference.m)
-executes the pinned upstream mpEDMD/Rigged routines on a synthetic rotation.
-It uses explicit observable coefficients and requests the spectral-density grid.
-Native and upstream operators, order-1/order-4 densities and wave packets agree
-within the tests' 2e-10 absolute tolerance. The parity artifact is local build output;
-the test skips that comparison if the reference script has not been run.
+`dynsyslab_colbrook_reference_tests` (`workflow/native/tests/colbrook_reference_tests.cpp`)
+holds upstream parity natively. The pinned upstream `mpEDMDqr` and `riggedDMD` were
+run once on the synthetic rotation (128 samples, rotation 0.31, bandwidth 0.08,
+257 angles). Their operator and their order-1 and order-4 densities and wave packets,
+taken at every 16th angle, are frozen in
+[`colbrook_rotation_reference_v1.json`](../../workflow/native/tests/data/colbrook_rotation_reference_v1.json)
+together with the upstream commits. The native results match within 2e-10. The order-1
+density and packets also equal the closed-form Poisson-smoothed two-atom answer.
+The same test checks two invariances of the weighted fit (Colbrook 2023, Sec. 3).
+Block-QR compression of the weighted joint rows (Demmel et al. 2012) leaves the
+operator, density and packets unchanged. Whitening the dictionary changes only the
+coefficients. These checks replace the retired MATLAB reference adapters.
 
 Validation run on 2026-11-11: all 121 native CTest targets passed; all four
 Python/C-ABI/CLI/workflow tests passed against both the build and the isolated
@@ -286,5 +297,5 @@ unitary and triangular factors. See the
 and the Rigged DMD source cited above.
 
 Source inventory and attribution:
-[reference acquisition](../../tools/experiments/miscellaneous_computes/references/colbrook/README.md),
+reference acquisition ([reference acquisition](../provenance/colbrook/README.md)),
 [third-party notices](../provenance/COLBROOK_NATIVE_ADAPTATION.md).

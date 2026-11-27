@@ -47,7 +47,9 @@ class FourierSidecar;
 
 // Resampling (TimeSeriesOperations.hpp): linear or cubic Hermite; outside the source span an
 // error, the end value held, or NaN.
-enum class Interpolation { linear, cubic };
+// linear; cubic = Hermite with Catmull-Rom slopes; pchip = monotone piecewise-cubic Hermite
+// (Fritsch & Carlson 1980; Fritsch & Butland 1984 slopes); nearest = nearest sample (ties down).
+enum class Interpolation { linear, cubic, pchip, nearest };
 enum class Extrapolation { error, hold, nan };
 struct ResampleOptions {
     Interpolation method{Interpolation::linear};
@@ -59,6 +61,10 @@ struct ResampleOptions {
 // buffers to outlive the TimeSeries.
 class TimeSeries {
 public:
+    // An empty series: no samples and no components.
+    TimeSeries() = default;
+    // Owns `time` and `values` (row-major sample x component). Empty `time` and `values` give an
+    // empty series that keeps `componentCount`.
     TimeSeries(std::vector<double> time, std::vector<double> values,
                std::size_t componentCount);
 
@@ -72,6 +78,10 @@ public:
     [[nodiscard]] double deltaTime() const;
     [[nodiscard]] const double* timeData() const noexcept { return timeData_; }
     [[nodiscard]] const double* valuesData() const noexcept { return valuesData_; }
+    // The owned buffers: times, and values row-major (sample x component). Throw std::logic_error
+    // for a `view` series, which owns no buffers.
+    [[nodiscard]] const std::vector<double>& timeVector() const;
+    [[nodiscard]] const std::vector<double>& valueVector() const;
     [[nodiscard]] double time(std::size_t sample) const;
     [[nodiscard]] double value(std::size_t sample, std::size_t component) const;
     [[nodiscard]] FourierSidecar fourier() const;
@@ -88,7 +98,6 @@ public:
 
 private:
     struct FourierCache;
-    TimeSeries() = default;
     void initialize(const double* time, const double* values,
                     std::size_t samples, std::size_t components);
 

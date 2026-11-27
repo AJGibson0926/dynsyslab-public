@@ -1,10 +1,11 @@
 # dynsyslab
 
-`dynsyslab` provides a plug-in dynamical-system library, single and composite numerical solves, durable
-archives, postprocessing, read-only viewing, and separate JobManager and
-Campaigner planning/execution layers.
+`dynsyslab` provides a native C++ dynamical-system library, single and composite
+numerical solves, durable archives, post-processing, read-only viewing, and a
+durable job queue with campaign planning. Everything runs in the compiled core
+(`dynsyslab-cli`, `DynSysLab.exe`, `DynSysLabViewer.exe`); Python is optional.
 
-**New here? Read the [DynSysLab overview](docs/OVERVIEW.md)** — what the suite does, its modules and pipelines, and how to analyse and control a dynamical system, with architecture diagrams.
+**New here? Read the [DynSysLab overview](docs/OVERVIEW.md)** — what the suite does, its modules and experiments, and how to analyse and control a dynamical system, with architecture diagrams.
 
 ## Using DynSysLab with an AI agent
 
@@ -51,50 +52,52 @@ immutable artifacts, not permanent commands; see the
 `rpe`, `marmottant`, `reddy_szeri`, `duffing`, `van_der_pol`,
 `nonlinear_pendulum`, `double_pendulum`,
 `spring_coupled_pendulums`, `rossler`, `lorenz`, `chua`, `henon_heiles`,
-`hindmarsh_rose`, `hodgkin_huxley`, `fput`, and `kuramoto` are selected with the same launcher. Every dynsyslib object
-supplies `rhs`, `jacobian`, `initial_state`, `period`, and `invalid`; the
+`hindmarsh_rose`, `hodgkin_huxley`, `fput`, and `kuramoto` are native ODE models selected by `system.name` in a solve job; `dynsyslab-cli systems`
+lists them with their family, state dimension, and presets. Every model supplies
+its right-hand side, Jacobian, initial state, period, and invalid-state guard; the
 campaign machinery never branches on equations.
 
-Mackey--Glass is in `DELAY_LIBRARY` because a delay equation requires a history
-buffer and a different integrator. The 2-D/3-D Ising and Potts models are in `STATISTICAL_LIBRARY`
-with Metropolis dynamics; it produces temperature/field phase maps rather than a
-deterministic bifurcation diagram or Lyapunov exponent.
+Mackey--Glass is the native `dde` model because a delay equation requires a history
+buffer and a different integrator. The 2-D/3-D Ising and Potts models are native
+`lattice` models with Metropolis dynamics; they produce temperature/field phase maps
+rather than a deterministic bifurcation diagram or Lyapunov exponent.
 
 Campaign axes are encoded in the common compute-job contract and executed by
 the compiled workflow, either directly or through its durable SQLite queue.
-`dynsyslab-jobs submit|list|status|cancel|run-next|recover` is an optional thin
-client for that queue. The historical `python -m job_manager` scheduler remains
-an explicit migration reference for scheduling policies not yet admitted to
-the native contract. Numerical data remains exclusively in the archive. A
+`dynsyslab-cli queue submit|list|status|cancel|run-next|serve|recover` operates
+that queue (see [the job queue](docs/architecture/JOB_QUEUE.md)). Numerical data remains exclusively in the archive. A
 positive Lyapunov screen remains a candidate, not by itself proof of a chaotic
 attractor.
 
 ## Adding a system
 
-Add one class in `dynsyslib/lib/` or a separate system module there, inheriting the
-matching `ODESystem`, `DelaySystem`, or `LatticeSystem` contract. An ODE plug-in
-supplies `rhs`, `jacobian`, `initial_state`, `period`, and `invalid`, then joins
-`ODE_LIBRARY`. Attach a `SinusoidalDriver` (or a new driver implementing
-`value(t)` and `period`) rather than changing the integrator.
+Built-in systems are registered in the native core (`native/src/Systems*.cpp`).
+A third-party system is a compiled extension implementing
+`native/include/dynsyslab/extension_api.h`: an ODE extension supplies `rhs`,
+`jacobian`, `input_matrix`, `invalid`, and observables, with optional delay, field
+(PDE), and lattice tables. Forcing belongs to the system's parameters or to a
+prescribed controller, not to the integrator. See
+[the native solver](docs/architecture/NATIVE_SOLVER.md).
 
 ## Standalone solver
 
-The system-agnostic solver is in `solver/`; see `SOLVER.md`. It dispatches ODE,
+The system-agnostic solver is the native `solve` job; see `SOLVER.md`. It dispatches ODE,
 PDE, delay-equation, and lattice requests and saves every completed result to a
 per-system archive. History checkpoints are opt-in.
 
 Numerical execution is owned by the native C++ engine. Euler, RK4, adaptive
 Dormand-Prince RK45, and SUNDIALS/CVODE BDF are available through the same
-workflow API. Optional Python bindings call this engine; they do not own a
+workflow API. The optional Python client calls this engine; it does not own a
 second solver implementation. See [native build and installation](docs/BUILD_NATIVE.md)
 and `ADAPTIVE_BACKENDS.md`.
 
 ## Independent archives
 
-`archives/` is a separate package and durable data store. Completed solutions
-go to `archives/solutions/`; optional in-progress histories go to
-`archives/history/`. It is intentionally independent of both the equation
-dynsyslib and numerical solver implementation.
+The archive root (by default `archives/` in a source build, or the installed
+archive folder) is the durable data store. Completed solutions go to
+`archives/solutions/`; optional in-progress histories go to `archives/history/`.
+Archives are read and maintained only through the native workflow and
+`dynsyslab-cli archive|storage`; see [archive management](docs/ARCHIVE_MANAGEMENT.md).
 
 ## Installation outside Codex
 
@@ -110,10 +113,9 @@ python -m dynsyslab_client doctor
 ```
 
 The wheel contains only `dynsyslab_client` and has no NumPy or SciPy runtime
-dependency. Historical Python research packages remain available only from a
-source checkout after installing `requirements/reference-parity.txt` while
-parity and retirement work proceeds; they are not distributed as an alternate
-scientific engine or advertised as optional product features.
+dependency. The former Python research packages have been retired: every
+capability is in the native core (see the
+[native port ledgers](docs/architecture/native-port/README.md)).
 
 ## Post-processing CLI
 
@@ -130,8 +132,7 @@ dynsyslab run postprocess.json --archive-root C:\data\dynsyslab-archives
 These commands are pass-through conveniences for `dynsyslab-cli plan` and
 `dynsyslab-cli run`. See
 `examples/native/duffing-hdmd-sindy-postprocess.json` for the standard chained
-H-DMD-to-SINDy job. `python -m postprocessing` is retained only as the explicit
-Python reference CLI used by migration parity tests.
+H-DMD-to-SINDy job.
 
 H-DMD's standard default remains the first scalar state component (radius for
 RPE and Marmottant, position for Duffing), but the same workflow accepts any
@@ -145,10 +146,9 @@ Use separate immutable jobs with identical matrix, window, rank, sampling,
 sorting, and linear-algebra settings to compare spectra from several scalar
 observables in Viewer.
 
-The retained Python reference API additionally accepts an `Observable` instance
-or an already sampled scalar `TimeSeries` through `observable_series=`. This is
-kept for parity experiments involving history-dependent signals while the
-compiled workflow remains canonical.
+A history-dependent or externally sampled scalar signal can be joined to the
+source as an additional time series; see
+[H-DMD scalar observables](docs/architecture/HDMD_SCALAR_OBSERVABLES.md).
 
 An expensive run requires the explicit `--execute` confirmation flag. Stage
 settings expose the SVD driver/thread policy, rank and tolerance, SINDy storage
@@ -172,18 +172,17 @@ defers construction of that matrix in memory, avoiding roughly 763 MiB for the
 
 The versioned compute-job contract and compiled workflow service are the stable
 front-end API. The native queue schedules durable job manifests and exposes
-lifecycle state without importing Python package internals. The primary human front end is the native Solver and
-Post-processor described below. The older Tk interface remains a compact
-compatibility surface; inspect it with `python -m gui --help` and launch it
-explicitly with `python -m gui launch` or `dynsyslab-gui launch`.
+lifecycle state. The primary human front end is the native Solver and
+Post-processor described below.
 
-Sampled solves should set `SolverOptions(control_evaluation="sampled",
-control_sample_time=...)`. This creates an integer-tick zero-order-hold clock
+Sampled solves should set `solver.control_evaluation: "sampled"` with a
+`control_sample_time`. This creates an integer-tick zero-order-hold clock
 instead of changing a PID/observer state at internal RHS evaluations. Stateless
-LQR/SDRE/KLQR laws may instead request `control_evaluation="continuous_rhs"`
+LQR/SDRE/KLQR laws may instead request `control_evaluation: "continuous_rhs"`
 to recompute their state-dependent gain at every internal solver evaluation.
-Archive compression defaults to lossless LZMA; set
-`DYNSYSLAB_COMPRESSION=deflate` when write speed matters more than disk space.
+Native archives are written with lossless deflate; choose LZMA (denser) or stored (fastest)
+with `--compression` or `DYNSYSLAB_COMPRESSION`, and re-encode existing archives with
+`dynsyslab-cli archive recompress`. See [archive management](docs/ARCHIVE_MANAGEMENT.md).
 
 ### Native Solver and Post-processor
 
@@ -197,13 +196,11 @@ settings while the user navigates between nodes. The same `solve_set` contract
 is accepted by the compiled planner, runner, and durable queue.
 
 ```powershell
-dynsyslab-compute launch
-# Source checkout:
-python -m compute_workbench.cli launch
+& "$env:LOCALAPPDATA\Programs\DynSysLab\bin\DynSysLab.exe"
+# or: python -m dynsyslab ui   (source checkout)   /   dynsyslab-compute (Python client)
 ```
 
-Use `template`, `validate`, `plan`, and explicitly gated `run --execute`
-subcommands for automation. See the
+Use `dynsyslab-cli template`, `validate`, `plan`, and `run` for automation. See the
 [user guide](docs/SOLVER_POSTPROCESSOR.md) and
 [architecture](docs/architecture/SOLVER_POSTPROCESSOR_CPP_WORKBENCH.md).
 
@@ -217,26 +214,27 @@ compiled archive/payload services as its scientific boundary and renders bounded
 plot payloads natively, so archive meaning is not duplicated in the UI.
 
 ```powershell
-dynsyslab-viewer build
-dynsyslab-viewer launch
-dynsyslab-viewer launch --source <a run .npz from your archive folder>
+& "$env:LOCALAPPDATA\Programs\DynSysLab\bin\DynSysLabViewer.exe"
+# or: python -m dynsyslab viewer   (source checkout)   /   dynsyslab-viewer (Python client)
 ```
 
-Use `python -m viewer.ui_cli` for the source-tree equivalent. `catalog` and
-`payload` subcommands expose the same versioned boundary for tooling and tests.
-See [the native Viewer architecture](docs/architecture/VIEWER_CPP_WORKBENCH.md)
+Source builds produce the same executable through CMake (see
+[native build and installation](docs/BUILD_NATIVE.md)); the
+[Viewer CLI](docs/architecture/VIEWER_CLI.md) exposes its versioned boundary for
+tooling and tests. See [the native Viewer architecture](docs/architecture/VIEWER_CPP_WORKBENCH.md)
 for the information model, UI modules, supported views, performance policy, and
 first-pass limitations.
 
 ## Control and estimation
 
-Canonical dimensionless RPE state targets are exposed through
-`control.RPE_CONTROL_TARGETS` and `control.rpe_control_target(name)`. Each
-harmonic target returns the analytic pair `(r, dr/dtau)` from angular-frequency
+Canonical dimensionless RPE state targets are native expression targets (see
+[native observable expressions and
+targets](docs/architecture/NATIVE_OBSERVABLE_EXPRESSIONS_AND_TARGETS.md)). Each
+harmonic target supplies the analytic pair `(r, dr/dtau)` from angular-frequency
 parameters, avoiding numerical differentiation.
 
 Controlled solves archive three distinct records: the solution-aligned actual
-control `TimeSeries`, the solution-aligned target `TimeSeries`, and the exact
+control (`control_values`), the solution-aligned target (`control_target_values`), and the exact
 controller-evaluation log. Continuous-RHS logs include repeated and rejected
 adaptive-solver evaluations; sampled logs contain only actual clock updates,
 not reuse of held values. Viewer keeps
@@ -246,61 +244,61 @@ time-series panel(s).
 
 ## KROM extraction
 
-`KROM.extract(selection)` and `rom.extract_krom(source, selection)` create a
-new KROM from selected nonredundant KROM indices or exact source eigenvalue /
-eigenfunction objects. Existing conjugate partners are included by default;
-pass `include_conjugate_duals=False` only when a deliberately unpaired complex
-coordinate is required. Eigenvalues, eigenfunctions, sampled values,
+The post-processing method `krom_extract` (with `selected_modes` or a
+`mode_selection` rule) creates a new KROM from selected nonredundant KROM indices.
+Existing conjugate partners are included, so each complex pair stays one
+real/imaginary group. Eigenvalues, eigenfunctions, sampled values,
 coefficients, reconstruction modes, and compatible linear/bilinear control
 matrices are copied into an independent model. Extraction provenance records
 the source spectrum and all source-spectrum indices; the source KROM is not
 mutated.
 
-`rom.reserve_krom_archive(...)` publishes that subset as an immutable derived
-archive, including coefficient vectors, sampled eigenfunction values when
-available, dictionary/state preprocessing, coordinate-system metadata, and
-source lineage. `rom.load_krom_archive(...)` reconstructs an executable
-polynomial-eigenfunction KROM from either a full or reserved archive.
+The subset is published as an immutable derived archive, including coefficient
+vectors, sampled eigenfunction values when available, dictionary/state
+preprocessing, coordinate-system metadata, and source lineage. Full and
+extracted KROM archives are both executable by the native control and rollout
+stages; `dynsyslab-cli krom-info <krom.npz>` summarizes one.
 
-`rom.select_observable_modes(...)` applies grouped greedy state-observability
-selection to polynomial KROMs. Complex conjugate coordinates remain one
+The `state_observability` mode-selection rule applies grouped greedy
+state-observability selection to polynomial KROMs. Complex conjugate coordinates remain one
 indivisible real/imaginary group, control authority is an optional tie-breaker,
 and the report records every selected full-spectrum index and cumulative state
 `R^2`. The implementation works in the small polynomial-feature space rather
-than loading the full eigenfunction-value matrix. Use
-`python -m rom select-observable <archive>` to publish an immutable selected
-KROM with the complete policy report embedded in its provenance.
+than loading the full eigenfunction-value matrix. Used with `krom_extract`, it
+publishes an immutable selected KROM with the complete policy report
+(`mode_selection_report`) embedded in its provenance. See
+[KROM tools](docs/architecture/KROM_TOOLS.md) and
+[mode selection](docs/architecture/MODE_SELECTION.md).
 
 KROM archives expose an axis-aligned training domain when training states are
 available. Koopman LQR/MPC defaults to `target_domain_policy="error"`; an
 out-of-domain state or target must be explicitly changed to `"warn"` or
 `"ignore"` for a labeled extrapolation study.
 
-State reconstruction is a separate validated capability. Use
-`python -m rom fit-observation <archive>` to fit an affine real/imaginary-split
+State reconstruction is a separate validated capability. The post-processing
+method `observable_reconstruction` fits an affine real/imaginary-split ridge
 decoder with held-out quality gates; failed maps are not published unless the
-diagnostic override is explicit. `dynsyslab-krom-training` plans a
+diagnostic override is explicit. `dynsyslab-cli krom-training-plan <request.json>` plans a
 system-agnostic state-domain expansion for any compatible ODE KROM and writes
-no campaign until `--publish` is supplied. Publication requires a matching
-`--screen`; the screen uses the non-persistent canonical ODE kernel and checks
-candidate ICs plus any supplied state probes. RPE's canonical target envelopes
+no campaign: it returns the plan and its screened solve job, which runs only
+when you submit it. The screen uses the non-persistent canonical ODE kernel and
+checks candidate ICs plus any supplied state probes. RPE's canonical target envelopes
 are now a preset adapter over this same generic workflow. See
 [`docs/KROM_OBSERVATION_AND_TRAINING_DOMAIN.md`](docs/KROM_OBSERVATION_AND_TRAINING_DOMAIN.md).
 
-`control/` is an optional solver plug-in package with multi-tone waveform,
-continuous LQR/SDRE-style LQR, finite-horizon linear MPC, Koopman-ROM LQR/MPC,
-and PID laws. Targets may be constants, functions, or `TimeSeries` objects.
-`estimation/` supplies identity, static-map, and linear Luenberger estimators.
-Pass either or both to `SolveRequest(controller=..., estimator=...)`; the
-solver gives the controller the estimator's current state at each RHS
-evaluation. The default estimator is `IdentityEstimator`, so unspecified
-estimation means exact full-state feedback. Every controller accepts
-`active_time_window=(start, end)` on its own time coordinate; outside that
+A solve job's `controller` section selects a multi-tone `waveform`, `lqr`,
+`sdre`, finite-horizon linear `mpc`, Koopman-ROM `klqr`/`kmpc`, or `pid` law.
+Targets may be constants, expressions, or archived time series. The `estimator`
+section supplies `static_map`, `luenberger`, `lqe`, or Koopman (KLQE)
+estimators; the solver gives the controller the estimator's current state at
+each evaluation. Without an estimator the controller receives the exact full
+state. Every controller accepts `active_time_window: [start, end]` on its own
+time coordinate; outside that
 interval it has no effect. No controller or estimator changes an ordinary solve. A controller
 with `actuation="system_input"` calls a model's explicit input channel (RPE
 supports this); `additive_state` controllers return a state-derivative vector.
-ODE plug-ins expose their input channels as `rhs_with_input(t, x, u)` and an
-`input_matrix(x)` accessor. For most models this returns a constant matrix
+Native models expose their input channels through an input-aware right-hand
+side and an `input_matrix(x)` accessor. For most models this returns a constant matrix
 `B`; RPE returns its state-dependent `B(x)`. RPE input is external acoustic
 pressure: positive pressure compresses the bubble. New systems record
 `pressure_input_convention="external-acoustic-pressure/v2"`. Archives that
@@ -308,7 +306,7 @@ predate this field reconstruct with `legacy-positive-acceleration/v1` so old
 solutions and analytic KROM control experiments remain reproducible.
 When a controller is used, its actual solve-time output is stored as an aligned
 `control_values` time series (and `raw_control_values` when interpolation is
-requested); load it with `archives.load_control_time_series`.
+requested); Viewer and post-processing read it from the archive.
 The native workflow binds that history to the model's declared coordinates.
 For physically nondimensionalized bubble systems, prescribed pressure and
 clock settings are accepted in Pa, Hz, and seconds and converted to
@@ -317,7 +315,7 @@ scale back to physical units; explicit `model_*` controller settings are
 available when an experiment is already specified in nondimensional
 coordinates.
 
-`rom.KROM` is an explicit reduced-order model built from a `KoopmanSpectrum`
+A KROM is an explicit reduced-order model built from a Koopman spectrum
 with callable eigenfunctions. A spectrum always identifies its source dynamical
 system; the KROM control mode determines how its lifted input matrix is formed.
 KROM capability metadata distinguishes lifted evolution, state reconstruction,
@@ -325,9 +323,9 @@ and analytic control. Delay-coordinate H-DMD modes cannot be used as physical
 state modes, while SINDy KROMs expose eigenfunction lifting/control without
 claiming reconstruction modes. Dimensionless controller adapters accept physical
 solver state/time and preserve the system input's physical units.
-`KoopmanLQRController(..., target=<state target>)` lifts a canonical model-state
+A `klqr` controller with a state target lifts the canonical model-state
 target for feedback while exposing the corresponding physical-state target to
-the archive and Viewer. Pass `target_space="lifted"` only for a target already
+the archive and Viewer. Set `target.space: "lifted"` only for a target already
 defined in the KROM's real split-coordinate representation.
 
 SINDy eigenfunctions may instead be represented in arbitrary ordered model
@@ -342,16 +340,17 @@ observables, SINDy uses `ydot=J_h(x)f(x)`, and KROM/KLQR control uses
 Archive publication and manifest writes are atomic. Archive read-modify-write
 operations use per-record locks, while readers remain lock-free. Failed jobs
 are retried only when their `execution.retry_limit` permits it (the default is
-zero extra retries). Low-level dense DMD, Hankel-DMD, and Koopman-with-SINDy
-calls retain a conservative `max_memory_mb=1024` preflight. The explicitly
-large `trajectory-hdmd-sindy` preset declares an 8192 MiB workstation budget;
-its CLI planning command reports the estimate before execution. Pass `None`
-only when an external resource manager has reserved sufficient memory.
+zero extra retries). Dense DMD, Hankel-DMD, and SINDy stages refuse a job
+before allocation when their working-set estimate exceeds the execution memory
+limit (`execution.max_memory_mib` or `--max-memory-mib`); `dynsyslab-cli plan`
+reports the estimate before execution.
 
 ## RPE presets
 
-`dynsyslib/lib/rpe.py` contains ten named liquid/gas starting presets. Their source
-notes and limitations are in `dynsyslib/lib/PRESET_SOURCES.md`; several deliberately carry
+The native bubble models carry named liquid/gas starting presets
+(`air_water_0c` ... `co2_honey_25c`); `dynsyslab-cli systems` lists them, and each
+system reports its source papers in its
+[research metadata](docs/SYSTEM_RESEARCH_METADATA.md). Several deliberately carry
 cautions because classical RPE does not validate a non-Newtonian or strongly
 viscoelastic liquid.
 

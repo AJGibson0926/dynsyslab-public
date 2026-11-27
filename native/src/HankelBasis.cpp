@@ -1,4 +1,4 @@
-#include <dynsyslab/core/EigenfunctionArchive.hpp>
+#include <dynsyslab/core/HankelRepresentations.hpp>
 #include <dynsyslab/core/HankelBasis.hpp>
 
 #include <stdexcept>

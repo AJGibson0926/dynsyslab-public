@@ -82,42 +82,111 @@ Observable polynomialDynamicsLibrary(std::size_t d,std::size_t degree,
         center.empty()?std::vector<double>(d,0):center,scale.empty()?std::vector<double>(d,1):scale};
     return dictionary.asObservable();
 }
-SindyDynamicsModel fitSindyDynamics(const TimeSeries& q,const TimeSeries& rates,
-    const Observable& library,const SindyDynamicsOptions& options,SindyDynamicsFitDiagnostics* diagnostics) {
-    aligned(q,rates,false);const auto n=q.sampleCount(),p=library.outputDimension();
-    const auto inputs=q.componentCount(),d=rates.componentCount();  // d: fitted outputs
-    if(library.stateDimension()!=inputs||!d||n<p||options.threshold<0||!std::isfinite(options.threshold)
-        ||options.singularValueTolerance<0||!std::isfinite(options.singularValueTolerance)||!options.maximumIterations)
-        throw std::invalid_argument("Invalid SINDy dimensions, sample count or options");
-    std::vector<double> theta(n*p),scales(p,0),outputs(d,0),coefficients(p*d,0);
+std::vector<double> trapezoidWeights(const TimeSeries& series) {
+    const auto n=series.sampleCount();std::vector<double> w(n,0);
+    for(std::size_t k=1;k<n;++k){const double h=series.time(k)-series.time(k-1);w[k-1]+=h/2;w[k]+=h/2;}
+    return w;
+}
+namespace {
+// Regression rows: theta (rows x p) and targets (rows x d), each row with its weight.
+struct Rows { std::vector<double> theta,targets,weights;std::size_t count{}; };
+Rows instantaneousRows(const TimeSeries& q,const TimeSeries& rates,const Observable& library,const SindyDynamicsOptions& o) {
+    const auto n=q.sampleCount(),p=library.outputDimension(),inputs=q.componentCount(),d=rates.componentCount();
+    if(!o.sampleWeights.empty()&&o.sampleWeights.size()!=n)throw std::invalid_argument("SINDy sample weights need one value per sample");
+    Rows r;r.count=n;r.theta.resize(n*p);r.targets.resize(n*d);r.weights.assign(n,1.0);
     for(std::size_t k=0;k<n;++k) {
         for(std::size_t j=0;j<inputs;++j)finite(q.value(k,j));
         const auto row=library.evaluateReal(q.valuesData()+k*inputs);
-        for(std::size_t f=0;f<p;++f){finite(row[f]);theta[k*p+f]=row[f];scales[f]+=row[f]*row[f]/n;}
-        for(std::size_t j=0;j<d;++j){finite(rates.value(k,j));outputs[j]+=rates.value(k,j)*rates.value(k,j)/n;}
+        for(std::size_t f=0;f<p;++f){finite(row[f]);r.theta[k*p+f]=row[f];}
+        for(std::size_t j=0;j<d;++j){finite(rates.value(k,j));r.targets[k*d+j]=rates.value(k,j);}
+        if(!o.sampleWeights.empty()) {
+            if(!(o.sampleWeights[k]>=0)||!std::isfinite(o.sampleWeights[k]))throw std::invalid_argument("SINDy sample weights must be nonnegative");
+            r.weights[k]=o.sampleWeights[k];
+        }
+    }
+    return r;
+}
+// Window averages of Theta over [t, t + D] and the mean rate (q(t + D) - q(t)) / D, exact for the
+// piecewise-linear interpolant of both.
+Rows weakRows(const TimeSeries& q,const Observable& library,const SindyDynamicsOptions& o) {
+    const auto n=q.sampleCount(),p=library.outputDimension(),d=q.componentCount();
+    if(!o.weakStride)throw std::invalid_argument("SINDy weak_stride must be positive");
+    std::vector<double> theta(n*p);
+    for(std::size_t k=0;k<n;++k){const auto row=library.evaluateReal(q.valuesData()+k*d);
+        for(std::size_t f=0;f<p;++f){finite(row[f]);theta[k*p+f]=row[f];}}
+    Rows r;
+    for(const double D:o.weakDurations) {
+        if(!(D>0)||!std::isfinite(D))throw std::invalid_argument("SINDy weak durations must be positive");
+        for(std::size_t i=0;i<n;i+=o.weakStride) {
+            const double end=q.time(i)+D;
+            if(end>q.time(n-1)*(1+1e-12)+1e-15)break;  // the window would cross the record's end
+            std::vector<double> average(p,0),last(d);
+            std::size_t k=i;
+            for(;k+1<n&&q.time(k+1)<=end;++k){const double h=q.time(k+1)-q.time(k);
+                for(std::size_t f=0;f<p;++f)average[f]+=h*(theta[k*p+f]+theta[(k+1)*p+f])/2;}
+            double fraction=0;
+            if(k+1<n&&end>q.time(k)){  // the partial interval up to the window end
+                const double h=q.time(k+1)-q.time(k),part=end-q.time(k);fraction=part/h;
+                for(std::size_t f=0;f<p;++f){const double atEnd=theta[k*p+f]+fraction*(theta[(k+1)*p+f]-theta[k*p+f]);
+                    average[f]+=part*(theta[k*p+f]+atEnd)/2;}
+            }
+            for(std::size_t j=0;j<d;++j)last[j]=q.value(k,j)+(fraction>0?fraction*(q.value(k+1,j)-q.value(k,j)):0.0);
+            for(std::size_t f=0;f<p;++f)r.theta.push_back(average[f]/D);
+            for(std::size_t j=0;j<d;++j)r.targets.push_back((last[j]-q.value(i,j))/D);
+            r.weights.push_back(1.0);++r.count;
+        }
+    }
+    if(!r.count)throw std::invalid_argument("SINDy weak windows are longer than the record");
+    return r;
+}
+}  // namespace
+SindyDynamicsModel fitSindyDynamics(const TimeSeries& q,const TimeSeries& rates,
+    const Observable& library,const SindyDynamicsOptions& options,SindyDynamicsFitDiagnostics* diagnostics) {
+    aligned(q,rates,false);const auto p=library.outputDimension();
+    const auto inputs=q.componentCount(),d=rates.componentCount();  // d: fitted outputs
+    if(library.stateDimension()!=inputs||!d||options.threshold<0||!std::isfinite(options.threshold)
+        ||options.singularValueTolerance<0||!std::isfinite(options.singularValueTolerance)||!options.maximumIterations
+        ||!(options.ridge>=0)||!std::isfinite(options.ridge))
+        throw std::invalid_argument("Invalid SINDy dimensions, sample count or options");
+    const bool weak=!options.weakDurations.empty();
+    if(weak&&d!=inputs)throw std::invalid_argument("weak-form SINDy fits a vector field (the predictors' own rates)");
+    const auto rows=weak?weakRows(q,library,options):instantaneousRows(q,rates,library,options);
+    const auto n=rows.count;
+    if(n<p)throw std::invalid_argument("Invalid SINDy dimensions, sample count or options");
+    // RMS scales of features and responses over the weighted rows.
+    std::vector<double> scales(p,0),outputs(d,0),coefficients(p*d,0),root(n);
+    double total=0;for(const double w:rows.weights)total+=w;
+    if(!(total>0))throw std::invalid_argument("SINDy sample weights are all zero");
+    for(std::size_t k=0;k<n;++k) {
+        root[k]=std::sqrt(rows.weights[k]);
+        for(std::size_t f=0;f<p;++f)scales[f]+=rows.weights[k]*rows.theta[k*p+f]*rows.theta[k*p+f]/total;
+        for(std::size_t j=0;j<d;++j)outputs[j]+=rows.weights[k]*rows.targets[k*d+j]*rows.targets[k*d+j]/total;
     }
     for(auto& s:scales)s=std::sqrt(s);
     for(auto& s:outputs)s=std::sqrt(s);
     numerics::LeastSquaresOptions ls;ls.method=numerics::LeastSquaresMethod::divideAndConquerSvd;
     ls.singularValueTolerance=options.singularValueTolerance;
     if(diagnostics){diagnostics->relativeResidual.assign(d,{});diagnostics->supportSize.assign(d,{});}
+    const double ridge=std::sqrt(options.ridge*total);  // the weighted row sum carries the sample count
     for(std::size_t j=0;j<d;++j) {
         if(outputs[j]==0)continue;
         std::vector<std::size_t> support;
         for(std::size_t f=0;f<p;++f)if(scales[f]>0)support.push_back(f);
         std::vector<double> solution;
         for(std::size_t iteration=0;iteration<=options.maximumIterations&&!support.empty();++iteration) {
-            const auto m=support.size();std::vector<double> matrix(n*m),rhs(n);
+            const auto m=support.size();const std::size_t extra=options.ridge>0?m:0;
+            std::vector<double> matrix((n+extra)*m,0.0),rhs(n+extra,0.0);
             for(std::size_t k=0;k<n;++k) {
-                rhs[k]=rates.value(k,j)/outputs[j];
-                for(std::size_t f=0;f<m;++f)matrix[k*m+f]=theta[k*p+support[f]]/scales[support[f]];
+                rhs[k]=root[k]*rows.targets[k*d+j]/outputs[j];
+                for(std::size_t f=0;f<m;++f)matrix[k*m+f]=root[k]*rows.theta[k*p+support[f]]/scales[support[f]];
             }
-            solution=numerics::solveLeastSquares(matrix,n,m,rhs,1,ls);
+            for(std::size_t f=0;f<extra;++f)matrix[(n+f)*m+f]=ridge;  // ridge as augmented rows
+            solution=numerics::solveLeastSquares(matrix,n+extra,m,rhs,1,ls);
             if(diagnostics) {
                 double error=0;
                 for(std::size_t k=0;k<n;++k) {
                     double predicted=0;for(std::size_t f=0;f<m;++f)predicted+=matrix[k*m+f]*solution[f];
-                    error+=std::pow(predicted-rhs[k],2)/n;
+                    error+=std::pow(predicted-rhs[k],2)/total;
                 }
                 diagnostics->relativeResidual[j].push_back(std::sqrt(error));
                 diagnostics->supportSize[j].push_back(m);

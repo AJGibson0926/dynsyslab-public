@@ -21,6 +21,10 @@ void writeNpzAtomic(const std::filesystem::path&, const NpzRecord&) {
     throw std::runtime_error("This DynSysLab build does not include native NPZ support");
 }
 
+void writeNpz(const std::filesystem::path&, const NpzRecord&, const NpzWriteOptions&) {
+    throw std::runtime_error("This DynSysLab build does not include native NPZ support");
+}
+
 void writeNpzAtomicNew(const std::filesystem::path& path, const NpzRecord& record) {
     writeNpzAtomic(path,record);
 }

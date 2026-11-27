@@ -52,4 +52,44 @@ if(NOT queue_schema STREQUAL "dynsyslab.job-queue/v1" OR
    NOT result_kind STREQUAL "solve" OR archive_count LESS 1)
   message(FATAL_ERROR "queue execution result JSON contract failed")
 endif()
+
+# Phase C: retry flag, side tray, templates, campaign profiles, benchmark cases and gates.
+execute_process(COMMAND "${CLI}" queue submit "${JOB}" --hold --retry-limit 2 --archive-root "${ROOT}"
+  RESULT_VARIABLE status OUTPUT_VARIABLE held ERROR_VARIABLE error)
+string(JSON held_id GET "${held}" payload job_id)
+execute_process(COMMAND "${CLI}" queue status "${held_id}" --archive-root "${ROOT}"
+  RESULT_VARIABLE status OUTPUT_VARIABLE reserved ERROR_VARIABLE error)
+string(JSON held_status GET "${reserved}" payload status)
+string(JSON held_retry GET "${reserved}" payload retry_limit)
+if(NOT status EQUAL 0 OR NOT held_status STREQUAL "reserved" OR NOT held_retry EQUAL 2)
+  message(FATAL_ERROR "queue side tray or retry flag failed: ${reserved} ${error}")
+endif()
+execute_process(COMMAND "${CLI}" queue remove "${held_id}" --archive-root "${ROOT}"
+  RESULT_VARIABLE status ERROR_VARIABLE error)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "queue remove failed: ${error}")
+endif()
+execute_process(COMMAND "${CLI}" template solve
+  RESULT_VARIABLE status OUTPUT_VARIABLE template ERROR_VARIABLE error)
+string(JSON template_kind GET "${template}" kind)
+if(NOT status EQUAL 0 OR NOT template_kind STREQUAL "solve")
+  message(FATAL_ERROR "template solve failed: ${error}")
+endif()
+execute_process(COMMAND "${CLI}" campaign profiles
+  RESULT_VARIABLE status OUTPUT_VARIABLE profiles ERROR_VARIABLE error)
+string(JSON low_points GET "${profiles}" quality low points)
+if(NOT status EQUAL 0 OR NOT low_points EQUAL 31)
+  message(FATAL_ERROR "campaign profiles failed: ${error}")
+endif()
+execute_process(COMMAND "${CLI}" benchmark --case ode_rk4_duffing --iterations 1 --warmup 0
+  --output "${ROOT}/benchmark.json" RESULT_VARIABLE status ERROR_VARIABLE error)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "benchmark failed: ${error}")
+endif()
+execute_process(COMMAND "${CLI}" benchmark gate "${ROOT}/benchmark.json" "${ROOT}/benchmark.json"
+  --required-speedup 0.5 RESULT_VARIABLE status OUTPUT_VARIABLE gate ERROR_VARIABLE error)
+string(JSON gate_passed GET "${gate}" passed)
+if(NOT status EQUAL 0 OR NOT gate_passed)
+  message(FATAL_ERROR "benchmark gate failed: ${gate} ${error}")
+endif()
 file(REMOVE_RECURSE "${ROOT}")

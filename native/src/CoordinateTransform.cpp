@@ -87,15 +87,15 @@ CoordinateSeries transformHistoryCoordinates(const TimeSeries& s,const FrozenHis
     if(rates)requireAlignedTimeSeries(s,*rates);
     const auto& full=transform.basis();auto basis=full;
     const auto& selected=transform.retainedCoordinates();
-    basis.rank=selected.size();basis.leftSingularVectors.resize(basis.delays*basis.rank);
+    basis.rank=selected.size();basis.leftSingularVectors.resize(basis.rows*basis.rank);
     basis.singularValues.resize(basis.rank);basis.cumulativeEnergy.clear();
     for(std::size_t j=0;j<basis.rank;++j) {
         basis.singularValues[j]=full.singularValues[selected[j]];
-        for(std::size_t k=0;k<basis.delays;++k)
+        for(std::size_t k=0;k<basis.rows;++k)
             basis.leftSingularVectors[k*basis.rank+j]=full.leftSingularVectors[k*full.rank+selected[j]];
     }
     const auto q=projectHistory(values(s),basis);
-    std::vector<double> t(s.timeData()+basis.delays-1,s.timeData()+s.sampleCount());
+    std::vector<double> t(s.timeData()+basis.rows-1,s.timeData()+s.sampleCount());
     CoordinateSeries result{TimeSeries(t,q.coordinates,basis.rank),{}};
     if(rates)result.derivatives=TimeSeries(t,projectHistory(values(*rates),basis).coordinates,basis.rank);
     return result;

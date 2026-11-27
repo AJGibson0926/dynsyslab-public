@@ -6,10 +6,13 @@
 #include "CliQuickstart.hpp"
 #include "CliDataPack.hpp"
 #include "CliArchiveTools.hpp"
+#include "CliArchive.hpp"
+#include "CliExperimentReport.hpp"
+#include "CliQueue.hpp"
 #include <dynsyslab/workflow/JobGroup.hpp>
 #include <dynsyslab/math/Query.hpp>
 #include <dynsyslab/workflow/Run.hpp>
-#include <dynsyslab/workflow/Pipeline.hpp>
+#include <dynsyslab/workflow/Experiment.hpp>
 #include <dynsyslab/workflow/ObservableQuery.hpp>
 #include <dynsyslab/workflow/KoopmanSpectralQuery.hpp>
 #include <dynsyslab/workflow/CoordinateClosureQuery.hpp>
@@ -22,10 +25,9 @@
 #include <dynsyslab/workflow/SystemKnowledge.hpp>
 #include <dynsyslab/workflow/Plan.hpp>
 #include <dynsyslab/workflow/KromValidationPlan.hpp>
+#include <dynsyslab/workflow/KromTrainingPlan.hpp>
 #include <dynsyslab/workflow/Queue.hpp>
 #include <dynsyslab/workflow/Solve.hpp>
-#include <dynsyslab/core/ArchiveAudit.hpp>
-#include <dynsyslab/core/ArchiveDeduplication.hpp>
 #include <dynsyslab/core/ArchiveIndex.hpp>
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
@@ -103,38 +105,6 @@ void fourier(const Arguments& args) {
         std::cout << transform->amplitude(bin, args.fourierComponent);
     }
     std::cout << "]}\n";
-}
-
-void archive(const Arguments& args) {
-    if (args.positional.size() < 2)
-        throw std::invalid_argument("archive requires audit, deduplicate, or index");
-    if (args.positional[1] == L"index") {
-        const auto update = dynsyslab::core::reconcileArchiveIndex(args.archiveRoot);
-        json::Value::Object result;
-        result["schema"] = "dynsyslab.archive-index-update/v1";
-        result["index"] = dynsyslab::core::archiveIndexPath(args.archiveRoot).generic_u8string();
-        result["discovered"] = static_cast<double>(update.discovered);
-        result["unchanged"] = static_cast<double>(update.unchanged);
-        result["indexed"] = static_cast<double>(update.indexed);
-        result["removed"] = static_cast<double>(update.removed);
-        result["failed"] = static_cast<double>(update.failed);
-        std::cout << json::dump(json::Value(std::move(result))) << '\n';
-        return;
-    }
-    dynsyslab::core::ArchiveAuditScope scope;
-    scope.modifiedWithinDays = args.auditDays;
-    if (!args.auditSections.empty()) scope.sections = args.auditSections;
-    scope.systems = args.auditSystems;
-    scope.includeDerived = args.auditDerived;
-    if (args.positional[1] == L"audit") {
-        const auto report = dynsyslab::core::auditArchives(args.archiveRoot, scope);
-        std::cout << dynsyslab::core::archiveAuditJson(report, scope) << '\n';
-      } else if (args.positional[1] == L"deduplicate") {
-          const auto result = dynsyslab::core::deduplicateArchives(
-              args.archiveRoot, scope, args.apply);
-          if (args.apply) (void)dynsyslab::core::reconcileArchiveIndex(args.archiveRoot);
-          std::cout << dynsyslab::core::archiveDeduplicationJson(result) << '\n';
-    } else throw std::invalid_argument("archive requires audit, deduplicate, or index");
 }
 
 void importData(const Arguments& args) {
@@ -225,10 +195,17 @@ json::Value runJson(const dynsyslab::workflow::RunResult& run) {
     return dynsyslab::workflow::queueRunJson(run);
 }
 
+// --max-threads / --max-memory-mib cap the job's own `execution` limits.
 json::Value execute(const json::Value& job,
                     const std::filesystem::path& archiveRoot,
-                    const std::filesystem::path& progress) {
-    return runJson(dynsyslab::workflow::executeJob(job, archiveRoot, progress));
+                    const std::filesystem::path& progress,
+                    const dynsyslab::core::ExecutionLimits& requested) {
+    dynsyslab::core::ExecutionContext execution;
+    execution.limits = dynsyslab::workflow::combinedLimits(
+        requested, dynsyslab::workflow::jobExecutionLimits(job));
+    if (execution.limits.maximumThreads)
+        dynsyslab::core::setProcessThreadLimit(execution.limits.maximumThreads);
+    return runJson(dynsyslab::workflow::executeJob(job, archiveRoot, progress, &execution));
 }
 
 void capabilities() {
@@ -275,85 +252,13 @@ void systems() {
     std::cout << "]}\n";
 }
 
-json::Value jobJson(const dynsyslab::core::JobRecord& job) {
-    json::Value::Object value;
-    value["id"] = job.id; value["label"] = job.label; value["kind"] = job.kind;
-    value["status"] = dynsyslab::core::jobStatusName(job.status);
-    value["progress"] = job.progress; value["message"] = job.message;
-    value["worker"] = job.worker; value["created_utc"] = job.createdUtc;
-    value["updated_utc"] = job.updatedUtc;
-    value["attempts"] = static_cast<double>(job.attempts);
-    return json::Value(std::move(value));
-}
-
-void printQueue(std::string operation, json::Value payload) {
-    json::Value::Object value;
-    value["schema"] = "dynsyslab.job-queue/v1";
-    value["operation"] = std::move(operation);
-    value["payload"] = std::move(payload);
-    std::cout << json::dump(json::Value(std::move(value))) << '\n';
-}
-
-int queue(const Arguments& args) {
-    if (args.positional.size() < 2) { usage(); return 2; }
-    dynsyslab::workflow::JobQueue jobs(args.archiveRoot);
-    const std::wstring operation = args.positional[1];
-    if (operation == L"submit") {
-        if (args.positional.size() < 3) throw std::invalid_argument("queue submit needs a job file");
-        const std::string text = readText(args.positional[2]);
-        auto job = dynsyslab::workflow::applyJobInputs(dynsyslab::workflow::bindJobFile(
-            json::parse(text), args.positional[2]), args.params, args.sets);
-        dynsyslab::cli::applyJobGroupRuntime(job, args);
-        requireJob(job);
-        json::Value::Object submitted;
-        submitted["job_id"] = jobs.submit(job);
-        printQueue("submit", json::Value(std::move(submitted))); return 0;
-    }
-    if (operation == L"list") {
-        json::Value::Array values;
-        for (const auto& job : jobs.list()) values.push_back(jobJson(job));
-        printQueue("list", json::Value(std::move(values))); return 0;
-    }
-    if (operation == L"status") {
-        if (args.positional.size() < 3) throw std::invalid_argument("queue status needs a job id");
-        const auto job = jobs.find(dynsyslab::core::narrow(args.positional[2]));
-        if (!job) return 3; printQueue("status", jobJson(*job)); return 0;
-    }
-    if (operation == L"cancel") {
-        if (args.positional.size() < 3) throw std::invalid_argument("queue cancel needs a job id");
-        const auto id = dynsyslab::core::narrow(args.positional[2]);
-        if (!jobs.find(id)) return 3;
-        printQueue("cancel", jobJson(jobs.cancel(id))); return 0;
-    }
-    if (operation == L"recover") {
-        if (args.positional.size() < 3) throw std::invalid_argument("queue recover needs age seconds");
-        json::Value::Object recovered;
-        recovered["recovered_jobs"] = static_cast<double>(
-            jobs.recoverStale(std::stod(args.positional[2])));
-        printQueue("recover", json::Value(std::move(recovered))); return 0;
-    }
-    if (operation == L"run-next") {
-        const auto result = jobs.runNext("dynsyslab-native-cli");
-        if (result.state == dynsyslab::workflow::QueueRunResult::State::empty) {
-            json::Value::Object empty; empty["status"] = "empty";
-            printQueue("run-next", json::Value(std::move(empty))); return 0;
-        }
-        json::Value::Object completed;
-        completed["job"] = jobJson(*result.job);
-        if (result.run) completed["result"] = runJson(*result.run);
-        completed["status"] = result.state ==
-            dynsyslab::workflow::QueueRunResult::State::completed
-            ? "completed" : "cancelled";
-        printQueue("run-next", json::Value(std::move(completed))); return 0;
-    }
-    throw std::invalid_argument("unknown queue operation");
-}
-
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
     try {
         const Arguments args = arguments(argc, argv);
+        if (!args.compression.empty())  // codec of every archive this run writes
+            dynsyslab::core::setArchiveCompression(dynsyslab::core::parseArchiveCompression(args.compression));
         if (args.positional.empty() || args.help || args.positional.front() == L"help") { usage(); return 0; }
         const std::wstring command = args.positional.front();
         if (command == L"capabilities") capabilities();
@@ -375,6 +280,10 @@ int wmain(int argc, wchar_t** argv) {
                 std::cout<<json::dump(dynsyslab::workflow::evaluateKoopmanSpectralQuery(json::Value::Object{
                     {"action","inspect"},{"archive",dynsyslab::core::narrow(args.positional[1])},{"include_model",false}}))<<'\n';
             else std::cout<<json::dump(dynsyslab::core::inspectKoopmanModel(dynsyslab::core::loadKoopmanModel(args.positional[1])))<<'\n';
+        } else if (command == L"krom-training-plan") {  // non-executing; see KromTrainingPlan.hpp
+            if(args.positional.size()!=2)throw std::invalid_argument("krom-training-plan requires a request JSON file");
+            std::cout << json::dump(dynsyslab::workflow::designKromTrainingPlan(
+                json::parse(readText(args.positional[1])))) << std::endl;
         } else if (command == L"krom-validation-plan") {
             if(args.positional.size()!=2)throw std::invalid_argument("krom-validation-plan requires a KROM archive");
             std::cout << json::dump(dynsyslab::workflow::planAutonomousKoopmanValidation(
@@ -457,15 +366,20 @@ int wmain(int argc, wchar_t** argv) {
                 dynsyslab::workflow::resolveOdeInitialConditions(job))) << '\n';
         }
         else if (command == L"fourier") fourier(args);
-        else if (command == L"archive") archive(args);
+        else if (command == L"archive") dynsyslab::cli::archiveCommand(args);
+        else if (command == L"storage") dynsyslab::cli::storageCommand(args);
+        else if (command == L"experiment") return dynsyslab::cli::experimentCommand(args);
         else if (command == L"import") {
             (void)dynsyslab::core::prepareOutputDirectory(args.archiveRoot, "--archive-root");
             importData(args);
         }
         else if (command == L"queue") {
             (void)dynsyslab::core::prepareOutputDirectory(args.archiveRoot, "--archive-root");
-            return queue(args);
+            return dynsyslab::cli::queueCommand(args);
         }
+        else if (command == L"campaign") return dynsyslab::cli::campaignCommand(args);
+        else if (command == L"benchmark") return dynsyslab::cli::benchmarkCommand(args);
+        else if (command == L"template") return dynsyslab::cli::templateCommand(args);
         else if (command == L"validate" || command == L"plan" || command == L"run") {
             if (args.positional.size() < 2) throw std::invalid_argument("command needs a job file");
             auto job = dynsyslab::workflow::applyJobInputs(dynsyslab::workflow::bindJobFile(
@@ -482,7 +396,8 @@ int wmain(int argc, wchar_t** argv) {
                 const auto root = dynsyslab::core::prepareOutputDirectory(args.archiveRoot, "--archive-root");
                 const auto progress = args.progress.empty() ? std::filesystem::path{}
                     : dynsyslab::core::prepareOutputFile(args.progress, "--progress");
-                std::cout << json::dump(execute(job, root, progress)) << '\n';
+                std::cout << json::dump(execute(job, root, progress,
+                    dynsyslab::cli::executionLimits(args))) << '\n';
             }
         } else { usage(); return 2; }
         return 0;

@@ -1,5 +1,6 @@
 #include <dynsyslab/core/SINDy.hpp>
 #include "PolynomialEvaluation.hpp"
+#include "SindyLibrary.hpp"
 #include <dynsyslab/numerics/MatrixFunctions.hpp>
 #include <dynsyslab/numerics/Nullspace.hpp>
 
@@ -10,275 +11,194 @@
 #include <stdexcept>
 
 namespace dynsyslab::core {
+using namespace sindy_detail;
+
+
 namespace {
 
+// The library the generator equation is written in: the normalized polynomial table, or a given
+// ExpansionDictionary on the raw coordinates.
+struct Library {
+    std::vector<std::size_t> exponents;
+    std::vector<double> center, scale;
+    std::shared_ptr<const ExpansionDictionary> dictionary;
+    std::size_t dimension{}, features{};
 
-double power(double value, std::size_t exponent) {
-    double result = 1.0;
-    for (std::size_t index = 0; index < exponent; ++index) result *= value;
-    return result;
-}
-
-std::vector<double> featureMatrix(
-    const std::vector<double>& states,std::size_t samples,std::size_t dimension,
-    const std::vector<std::size_t>& exponents,
-    const std::vector<double>& center,const std::vector<double>& scale) {
-    const std::size_t features = exponents.size() / dimension;
-    std::vector<double> result(samples*features);
-    for (std::size_t row = 0; row < samples; ++row)
-        for (std::size_t feature = 0; feature < features; ++feature) {
-            double value = 1.0;
-            for (std::size_t axis = 0; axis < dimension; ++axis)
-                value *= power((states[row*dimension+axis] - center[axis]) / scale[axis],
-                               exponents[feature * dimension + axis]);
-            result[row*features+feature] = value;
+    std::vector<double> theta(const std::vector<double>& q, std::size_t rows) const {
+        if (!dictionary) return featureMatrix(q, rows, dimension, exponents, center, scale);
+        std::vector<double> out(rows * features);
+        for (std::size_t k = 0; k < rows; ++k) {
+            const auto row = dictionary->evaluate(q.data() + k * dimension);
+            std::copy(row.begin(), row.end(), out.begin() + std::ptrdiff_t(k * features));
         }
-    return result;
-}
-
-std::vector<double> finiteDifference(
-    const std::vector<double>& values,std::size_t samples,std::size_t columns,
-    const std::vector<double>& time) {
-    std::vector<double> result(values.size());
-    const std::size_t last = samples - 1;
-    const double firstStep = time[1] - time[0], lastStep = time[time.size()-1] - time[time.size()-2];
-    for(std::size_t column=0;column<columns;++column) {
-        result[column]=(-3.0*values[column]+4.0*values[columns+column]
-            -values[2*columns+column])/(2.0*firstStep);
-        result[last*columns+column]=(3.0*values[last*columns+column]
-            -4.0*values[(last-1)*columns+column]
-            +values[(last-2)*columns+column])/(2.0*lastStep);
+        return out;
     }
-    for (std::size_t row = 1; row < last; ++row) {
-        const double backward = time[row] - time[row-1];
-        const double forward = time[row+1] - time[row];
-        for(std::size_t column=0;column<columns;++column)
-            result[row*columns+column]=
-                (-forward/(backward*(backward+forward)))*values[(row-1)*columns+column]
-                +((forward-backward)/(backward*forward))*values[row*columns+column]
-                +(backward/(forward*(backward+forward)))*values[(row+1)*columns+column];
-    }
-    return result;
-}
-
-std::vector<double> featureDerivative(
-    const std::vector<double>& states,const std::vector<double>& velocities,
-    std::size_t samples,std::size_t dimension,
-    const std::vector<std::size_t>& exponents,
-    const std::vector<double>& center,const std::vector<double>& scale) {
-    const std::size_t features = exponents.size() / dimension;
-    std::vector<double> result(samples*features);
-    for (std::size_t row = 0; row < samples; ++row)
-        for (std::size_t feature = 0; feature < features; ++feature)
-            for (std::size_t differentiated = 0; differentiated < dimension; ++differentiated) {
-                const std::size_t count = exponents[feature * dimension + differentiated];
-                if (!count) continue;
-                double derivative = static_cast<double>(count) / scale[differentiated];
-                for (std::size_t axis = 0; axis < dimension; ++axis) {
-                    std::size_t exponent = exponents[feature * dimension + axis];
-                    if (axis == differentiated) --exponent;
-                    derivative *= power((states[row*dimension+axis] - center[axis])
-                                        / scale[axis], exponent);
+    std::vector<double> gamma(const std::vector<double>& q, const std::vector<double>& v, std::size_t rows,
+                              const KoopmanSINDyOptions& options) const {
+        if (options.directionalDerivative == "finite-difference") {
+            // Directional central difference along the vector field (step relative to the state size).
+            std::vector<double> plus(q.size()), minus(q.size()), steps(rows);
+            for (std::size_t k = 0; k < rows; ++k) {
+                double largest = 1.0;
+                for (std::size_t i = 0; i < dimension; ++i) largest = std::max(largest, std::abs(q[k*dimension+i]));
+                steps[k] = options.directionalStep * largest;
+                for (std::size_t i = 0; i < dimension; ++i) {
+                    plus[k*dimension+i] = q[k*dimension+i] + steps[k] * v[k*dimension+i];
+                    minus[k*dimension+i] = q[k*dimension+i] - steps[k] * v[k*dimension+i];
                 }
-                result[row*features+feature] += derivative
-                    * velocities[row*dimension+differentiated];
             }
-    return result;
-}
-
-std::vector<std::complex<double>> sparseNullVector(
-    const std::vector<std::complex<double>>& source,std::size_t rows,
-    std::size_t columns,double threshold,std::size_t maximumIterations) {
-    std::vector<double> scales(columns);
-    for (std::size_t column = 0; column < columns; ++column) {
-        for(std::size_t row=0;row<rows;++row)
-            scales[column]+=std::norm(source[row*columns+column]);
-        scales[column]=std::sqrt(scales[column]);
-        if (scales[column] <= 1e-15) scales[column] = 1.0;
-    }
-    std::vector<std::size_t> active(columns);
-    std::iota(active.begin(), active.end(), std::size_t{0});
-    std::vector<std::complex<double>> vector;
-    auto solve = [&]() {
-        std::vector<std::complex<double>> block(rows*active.size());
-        for(std::size_t row=0;row<rows;++row)
-            for(std::size_t index=0;index<active.size();++index)
-                block[row*active.size()+index]=source[row*columns+active[index]]
-                    /scales[active[index]];
-        return numerics::smallestRightSingularVector(
-            block,rows,active.size());
-    };
-    for (std::size_t iteration = 0; iteration < maximumIterations; ++iteration) {
-        vector = solve(); double largest=0.0;
-        for(const auto value:vector)largest=std::max(largest,std::abs(value));
-        const double cutoff = threshold * largest;
-        std::vector<std::size_t> retained;
-        for (std::size_t index = 0; index < active.size(); ++index)
-            if (std::abs(vector[index]) >= cutoff) retained.push_back(active[index]);
-        if (retained.empty()) {
-            const auto largestIndex=static_cast<std::size_t>(std::distance(vector.begin(),
-                std::max_element(vector.begin(),vector.end(),[](const auto left,const auto right) {
-                    return std::abs(left)<std::abs(right);
-                })));
-            retained.push_back(active[largestIndex]);
+            auto out = theta(plus, rows);
+            const auto low = theta(minus, rows);
+            for (std::size_t k = 0; k < rows; ++k)
+                for (std::size_t f = 0; f < features; ++f)
+                    out[k*features+f] = (out[k*features+f] - low[k*features+f]) / (2.0 * steps[k]);
+            return out;
         }
-        if (retained == active) break; active = std::move(retained);
-    }
-    vector = solve(); std::vector<std::complex<double>> result(columns);
-    for (std::size_t index = 0; index < active.size(); ++index)
-        result[active[index]] = vector[index] / scales[active[index]];
-    double norm=0.0;for(const auto value:result)norm+=std::norm(value);
-    norm=std::sqrt(norm);
-    if (norm == 0.0) throw std::runtime_error("SINDy null vector vanished");
-    for(auto& value:result)value/=norm;
-    return result;
-}
-
-// Real feature Gram blocks, formed once per fit: A = ThetaᵀTheta, B = GammaᵀTheta,
-// C = GammaᵀGamma (all features x features, row-major).
-struct GramBlocks { std::vector<double> A, B, C; std::size_t n{}; };
-
-GramBlocks gramBlocks(const std::vector<double>& theta, const std::vector<double>& gamma,
-                      std::size_t rows, std::size_t n) {
-    GramBlocks g{std::vector<double>(n*n), std::vector<double>(n*n), std::vector<double>(n*n), n};
-    for (std::size_t r = 0; r < rows; ++r) {
-        const double* t = theta.data() + r*n; const double* d = gamma.data() + r*n;
-        for (std::size_t i = 0; i < n; ++i)
-            for (std::size_t j = 0; j < n; ++j) {
-                g.A[i*n+j] += t[i]*t[j]; g.B[i*n+j] += d[i]*t[j]; g.C[i*n+j] += d[i]*d[j];
-            }
-    }
-    return g;
-}
-
-// Same thresholded null-vector iteration as sparseNullVector, applied to
-// G(lambda) = (Gamma - lambda Theta)^H (Gamma - lambda Theta)
-//           = C - lambda B - conj(lambda) Bᵀ + |lambda|^2 A.
-// Returns nullopt when the active Gram system is too ill-conditioned (its
-// eigenvalue ratio below ~eps, i.e. singular-value ratio below ~sqrt(eps)).
-std::optional<std::vector<std::complex<double>>> sparseNullVectorGram(
-    const GramBlocks& g, std::complex<double> lambda, double threshold, std::size_t maximumIterations) {
-    const std::size_t n = g.n;
-    std::vector<std::complex<double>> G(n*n);
-    const double magnitude = std::norm(lambda);
-    for (std::size_t i = 0; i < n; ++i)
-        for (std::size_t j = 0; j < n; ++j)
-            G[i*n+j] = g.C[i*n+j] - lambda*g.B[i*n+j] - std::conj(lambda)*g.B[j*n+i] + magnitude*g.A[i*n+j];
-    std::vector<double> scales(n);
-    for (std::size_t c = 0; c < n; ++c) {
-        scales[c] = std::sqrt(std::max(0.0, G[c*n+c].real()));
-        if (scales[c] <= 1e-15) scales[c] = 1.0;
-    }
-    std::vector<std::size_t> active(n); std::iota(active.begin(), active.end(), std::size_t{0});
-    bool trusted = true;
-    auto solve = [&]() {
-        const std::size_t k = active.size();
-        std::vector<std::complex<double>> sub(k*k);
-        for (std::size_t a = 0; a < k; ++a)
-            for (std::size_t b = 0; b < k; ++b)
-                sub[a*k+b] = G[active[a]*n+active[b]] / (scales[active[a]]*scales[active[b]]);
-        const auto eig = numerics::hermitianEigensystem(sub, k);
-        // SINDy needs a small generator residual, not a unique eigenvector. If
-        // the smallest singular value is well separated the Gram eigenvector is
-        // accurate; if it is tiny, the smallest Gram eigenpairs may cluster, but
-        // every vector in the cluster attains a residual at the sqrt(eps) floor,
-        // far below the sparsity threshold. Only non-finite output falls back.
-        const double largest = eig.eigenvalues.back(), smallest = eig.eigenvalues.front();
-        if (!std::isfinite(smallest) || !std::isfinite(largest)) trusted = false;
-        std::vector<std::complex<double>> v(k);
-        for (std::size_t a = 0; a < k; ++a) v[a] = eig.eigenvectors[a*k];  // first (smallest) column
-        return v;
-    };
-    std::vector<std::complex<double>> vector;
-    for (std::size_t iteration = 0; iteration < maximumIterations; ++iteration) {
-        vector = solve(); double largest = 0.0;
-        for (const auto value : vector) largest = std::max(largest, std::abs(value));
-        const double cutoff = threshold * largest;
-        std::vector<std::size_t> retained;
-        for (std::size_t index = 0; index < active.size(); ++index)
-            if (std::abs(vector[index]) >= cutoff) retained.push_back(active[index]);
-        if (retained.empty()) {
-            const auto top = static_cast<std::size_t>(std::distance(vector.begin(),
-                std::max_element(vector.begin(), vector.end(),
-                    [](const auto l, const auto r) { return std::abs(l) < std::abs(r); })));
-            retained.push_back(active[top]);
+        if (options.directionalDerivative != "analytic")
+            throw std::invalid_argument("SINDy directional derivative must be analytic or finite-difference");
+        if (!dictionary) return featureDerivative(q, v, rows, dimension, exponents, center, scale);
+        std::vector<double> out(rows * features);
+        for (std::size_t k = 0; k < rows; ++k) {
+            const auto g = dictionary->gradient(q.data() + k * dimension);  // features x dimension
+            for (std::size_t f = 0; f < features; ++f)
+                for (std::size_t i = 0; i < dimension; ++i) out[k*features+f] += g[f*dimension+i] * v[k*dimension+i];
         }
-        if (retained == active) break; active = std::move(retained);
+        return out;
     }
-    vector = solve();
-    if (!trusted) return std::nullopt;
-    std::vector<std::complex<double>> result(n);
-    for (std::size_t index = 0; index < active.size(); ++index)
-        result[active[index]] = vector[index] / scales[active[index]];
-    double norm = 0.0; for (const auto value : result) norm += std::norm(value);
-    norm = std::sqrt(norm);
-    if (!(norm > 0.0)) return std::nullopt;
-    for (auto& value : result) value /= norm;
-    return result;
+};
+
+// Trajectory lengths covering the rows (one trajectory when none are given).
+std::vector<std::size_t> segmentLengths(const KoopmanSINDyOptions& options, std::size_t samples) {
+    if (options.segments.empty()) return {samples};
+    std::size_t total = 0;
+    for (const auto length : options.segments) {
+        if (!length) throw std::invalid_argument("SINDy trajectory segments must not be empty");
+        total += length;
+    }
+    if (total != samples) throw std::invalid_argument("SINDy trajectory segments do not cover the samples");
+    return options.segments;
 }
 
-bool conjugatePartner(std::complex<double> left, std::complex<double> right) {
-    return std::abs(right - std::conj(left)) <= 1e-9 + 1e-7 * std::abs(left);
+// The smallest right singular vector of the unnormalized generator, entries below the absolute
+// threshold zeroed ("single-absolute": one SVD, no refit).
+std::vector<std::complex<double>> singleAbsoluteVector(const std::vector<double>& theta, const std::vector<double>& gamma,
+                                                       std::size_t rows, std::size_t features,
+                                                       std::complex<double> lambda, double threshold) {
+    std::vector<std::complex<double>> generator(rows * features);
+    for (std::size_t index = 0; index < generator.size(); ++index) generator[index] = gamma[index] - lambda * theta[index];
+    auto vector = numerics::smallestRightSingularVector(generator, rows, features);
+    for (auto& value : vector) if (std::abs(value) < threshold) value = 0.0;
+    if (std::all_of(vector.begin(), vector.end(), [](auto z) { return z == std::complex<double>{}; }))
+        throw std::invalid_argument("single-absolute SINDy threshold removed every coefficient");
+    return vector;
 }
 
 }  // namespace
 
-
-KoopmanSINDyResult fitKoopmanEigenfunctions(
+EigenfunctionFitResult fitKoopmanEigenfunctions(
     const std::vector<double>& stateValues, std::size_t samples, std::size_t stateDimension,
     const std::vector<double>& time, const std::vector<std::complex<double>>& eigenvalues,
     const std::vector<double>& velocityValues, const KoopmanSINDyOptions& options) {
     if (samples < 3 || !stateDimension || stateValues.size() != samples * stateDimension
-        || time.size() != samples || eigenvalues.empty() || !options.polynomialDegree
+        || time.size() != samples || eigenvalues.empty() || (!options.polynomialDegree && !options.dictionary)
         || !options.maximumIterations || options.threshold < 0.0)
         throw std::invalid_argument("invalid Koopman-with-SINDy inputs");
-    for (std::size_t index = 1; index < time.size(); ++index)
-        if (!(time[index] > time[index-1])) throw std::invalid_argument("SINDy time must increase");
-    std::vector<double> center(stateDimension, 0.0), scale(stateDimension, 1.0);
-    if (options.normalizeStates) for (std::size_t axis = 0; axis < stateDimension; ++axis) {
-        for(std::size_t sample=0;sample<samples;++sample)
-            center[axis]+=stateValues[sample*stateDimension+axis];
-        center[axis]/=static_cast<double>(samples);
-        double squared=0.0;
-        for(std::size_t sample=0;sample<samples;++sample) {
-            const double value=stateValues[sample*stateDimension+axis]-center[axis];
-            squared+=value*value;
+    if (options.sparsification != "iterative-relative" && options.sparsification != "single-absolute")
+        throw std::invalid_argument("SINDy sparsification must be iterative-relative or single-absolute");
+    const auto segments = segmentLengths(options, samples);
+    // Time increases within each trajectory; the sampling step is the common one when every step agrees.
+    double dt = 0.0;
+    bool uniform = true;
+    for (std::size_t start = 0, s = 0; s < segments.size(); start += segments[s++])
+        for (std::size_t k = start + 1; k < start + segments[s]; ++k) {
+            const double step = time[k] - time[k-1];
+            if (!(step > 0)) throw std::invalid_argument("SINDy time must increase");
+            if (dt == 0.0) dt = step;
+            else if (std::abs(step - dt) > 1e-7 * dt) uniform = false;
         }
-        scale[axis]=std::sqrt(squared/static_cast<double>(samples));
-        if (scale[axis] <= 1e-15) scale[axis] = 1.0;
+    Library library;
+    library.dimension = stateDimension;
+    library.dictionary = options.dictionary;
+    if (library.dictionary) {
+        if (library.dictionary->dimension() != stateDimension)
+            throw std::invalid_argument("SINDy dictionary dimension differs from the coordinates");
+        library.features = library.dictionary->size();
+    } else {
+        normalization(stateValues, samples, stateDimension, options.normalizeStates, library.center, library.scale);
+        if (!options.rescale.empty()) {  // q' = (q - c) / s * m, stored as the scale s / m
+            if (options.rescale.size() != 1 && options.rescale.size() != stateDimension)
+                throw std::invalid_argument("SINDy rescale needs one value or one per component");
+            for (std::size_t i = 0; i < stateDimension; ++i) {
+                const double m = options.rescale[options.rescale.size() == 1 ? 0 : i];
+                if (!(m > 0) || !std::isfinite(m)) throw std::invalid_argument("SINDy rescale must be positive and finite");
+                library.scale[i] /= m;
+            }
+        }
+        library.exponents = polynomialExponentTable(stateDimension, options.polynomialDegree, options.includeConstant);
+        library.features = library.exponents.size() / stateDimension;
     }
-    const auto exponents = polynomialExponentTable(
-        stateDimension, options.polynomialDegree, options.includeConstant);
-    const auto theta = featureMatrix(
-        stateValues,samples,stateDimension,exponents,center,scale);
+    const auto theta = library.theta(stateValues, samples);
     std::vector<double> velocities;
-    if (velocityValues.empty()) velocities = finiteDifference(
-        stateValues,samples,stateDimension,time);
-    else {
+    if (velocityValues.empty()) {
+        velocities.resize(stateValues.size());
+        for (std::size_t start = 0, s = 0; s < segments.size(); start += segments[s++]) {
+            if (segments[s] < 3) throw std::invalid_argument("SINDy finite differences need three samples per trajectory");
+            const auto first = stateValues.begin() + std::ptrdiff_t(start * stateDimension);
+            const std::vector<double> part(first, first + std::ptrdiff_t(segments[s] * stateDimension));
+            const std::vector<double> clock(time.begin() + std::ptrdiff_t(start), time.begin() + std::ptrdiff_t(start + segments[s]));
+            const auto rates = finiteDifference(part, segments[s], stateDimension, clock);
+            std::copy(rates.begin(), rates.end(), velocities.begin() + std::ptrdiff_t(start * stateDimension));
+        }
+    } else {
         if (velocityValues.size() != stateValues.size()) throw std::invalid_argument("SINDy velocity shape mismatch");
         velocities = velocityValues;
     }
-    const auto gamma = featureDerivative(stateValues,velocities,samples,
-        stateDimension,exponents,center,scale);
-    KoopmanSINDyResult result;
-    result.continuousEigenvalues = eigenvalues; result.samples = samples;
-    result.stateDimension = stateDimension; result.dynamicalStateDimension=stateDimension;
-    result.featureCount = exponents.size() / stateDimension;
-    result.exponents = exponents; result.center = center; result.scale = scale;
-    const double dt=time[1]-time[0];
-    bool uniform=true;
-    for(std::size_t k=1;k<time.size();++k)
-        if(std::abs((time[k]-time[k-1])-dt)>1e-7*dt) {uniform=false;break;}
-    if(uniform) result.sampleTime=dt;
+    const auto gamma = library.gamma(stateValues, velocities, samples, options);
+    const auto& exponents = library.exponents;
+    const auto& center = library.center;
+    const auto& scale = library.scale;
+    struct {
+        std::size_t featureCount{}, directFits{};
+        std::vector<std::complex<double>> coefficients;  // eigenvalue x feature
+        std::vector<double> residualRms, residualMaximum;
+    } result;
+    result.featureCount = library.features;
     result.coefficients.resize(eigenvalues.size() * result.featureCount);
     result.residualRms.resize(eigenvalues.size()); result.residualMaximum.resize(eigenvalues.size());
     std::vector<bool> assigned(eigenvalues.size(), false);
+    const bool anchored = options.anchorStates && options.anchorValues;
     std::optional<GramBlocks> gram;
-    if (options.gramNullspace) gram = gramBlocks(theta, gamma, samples, result.featureCount);
+    const bool single = options.sparsification == "single-absolute";
+    if (single && anchored) throw std::invalid_argument("single-absolute sparsification has no anchored form");
+    if ((options.gramNullspace && !single) || anchored) gram = gramBlocks(theta, gamma, samples, result.featureCount);
+    // Anchored fit: Theta at the anchor states, its Gram matrix, and the reference values (see SINDy.hpp).
+    const std::size_t F = result.featureCount;
+    std::vector<double> anchorTheta, anchorGram;
+    std::size_t anchors = 0;
+    if (anchored) {
+        anchors = options.anchorStates->size() / stateDimension;
+        if (!anchors || options.anchorStates->size() != anchors * stateDimension
+            || options.anchorValues->size() != anchors * eigenvalues.size())
+            throw std::invalid_argument("anchored SINDy: anchor states and values do not match the eigenvalues");
+        anchorTheta = library.theta(*options.anchorStates, anchors);
+        anchorGram.assign(F * F, 0.0);
+        for (std::size_t k = 0; k < anchors; ++k)
+            for (std::size_t i = 0; i < F; ++i)
+                for (std::size_t j = 0; j < F; ++j) anchorGram[i*F+j] += anchorTheta[k*F+i] * anchorTheta[k*F+j];
+    }
     for (std::size_t mode = 0; mode < eigenvalues.size(); ++mode) {
         if (assigned[mode]) continue;
         std::optional<std::vector<std::complex<double>>> fitted;
-        if (gram) fitted = sparseNullVectorGram(*gram, eigenvalues[mode],
+        if (anchored) {  // each mode against its own reference values; no conjugate reuse
+            std::vector<std::complex<double>> rhs(F);
+            for (std::size_t k = 0; k < anchors; ++k)
+                for (std::size_t i = 0; i < F; ++i)
+                    rhs[i] += anchorTheta[k*F+i] * (*options.anchorValues)[k * eigenvalues.size() + mode];
+            fitted = anchoredVector(anchorGram, *gram, eigenvalues[mode], rhs, options.anchorWeight,
+                                    options.threshold, options.maximumIterations);
+        } else if (single) {
+            fitted = singleAbsoluteVector(theta, gamma, samples, F, eigenvalues[mode], options.threshold);
+        } else if (options.gramNullspace) fitted = sparseNullVectorGram(*gram, eigenvalues[mode],
                                                 options.threshold, options.maximumIterations);
         if (!fitted) {  // tall-SVD reference path (also the fallback for unresolved Gram modes)
             std::vector<std::complex<double>> generator(samples*result.featureCount);
@@ -291,7 +211,7 @@ KoopmanSINDyResult fitKoopmanEigenfunctions(
         std::copy(coefficient.begin(), coefficient.end(),
                   result.coefficients.begin() + static_cast<std::ptrdiff_t>(mode * result.featureCount));
         assigned[mode] = true; ++result.directFits;
-        if (options.reuseConjugateFits && std::abs(eigenvalues[mode].imag()) > 1e-12)
+        if (!anchored && options.reuseConjugateFits && std::abs(eigenvalues[mode].imag()) > 1e-12)
             for (std::size_t partner = mode + 1; partner < eigenvalues.size(); ++partner)
                 if (!assigned[partner] && conjugatePartner(eigenvalues[mode], eigenvalues[partner])) {
                     for (std::size_t feature = 0; feature < result.featureCount; ++feature)
@@ -300,15 +220,13 @@ KoopmanSINDyResult fitKoopmanEigenfunctions(
                     assigned[partner] = true; break;
                 }
     }
-    if (options.materializeTrainingValues) result.trainingValues.resize(samples * eigenvalues.size());
     for (std::size_t mode = 0; mode < eigenvalues.size(); ++mode) {
         double residualSquared=0.0;
         for (std::size_t sample = 0; sample < samples; ++sample) {
-            std::complex<double> residual{},value{};
+            std::complex<double> residual{};
             for(std::size_t feature=0;feature<result.featureCount;++feature) {
                 const auto coefficient=
                     result.coefficients[mode*result.featureCount+feature];
-                value+=theta[sample*result.featureCount+feature]*coefficient;
                 residual+=(gamma[sample*result.featureCount+feature]
                     -eigenvalues[mode]*theta[sample*result.featureCount+feature])
                     *coefficient;
@@ -317,15 +235,22 @@ KoopmanSINDyResult fitKoopmanEigenfunctions(
             residualSquared+=magnitude*magnitude;
             result.residualMaximum[mode]=std::max(
                 result.residualMaximum[mode],magnitude);
-            if (options.materializeTrainingValues)
-                result.trainingValues[sample * eigenvalues.size() + mode] = value;
         }
         result.residualRms[mode] = std::sqrt(residualSquared / samples);
     }
-    return result;
+    // Each pair's generator residual RMS_k |Dpsi(q_k) qdot_k - lambda psi(q_k)| (Kaiser, Kutz & Brunton 2021);
+    // the largest pointwise value stays with the fit.
+    EigenfunctionFitDiagnostics diagnostics{"sindy-generator", samples, result.directFits, std::move(result.residualMaximum)};
+    auto functions = library.dictionary
+        ? FunctionExpansion(library.dictionary, std::move(result.coefficients), FunctionDomain::physicalState(stateDimension))
+        : FunctionExpansion({stateDimension, exponents, center, scale}, std::move(result.coefficients),
+                            FunctionDomain::physicalState(stateDimension));
+    auto spectrum = Spectrum::fromContinuousRates(eigenvalues, uniform ? dt : 0.0);
+    spectrum.setResiduals(result.residualRms, residual_definition::generator, residual_scope::empiricalTraining);
+    return {std::move(functions), std::move(spectrum), std::move(diagnostics)};
 }
 
-KoopmanSINDyResult fitKoopmanEigenfunctionsInCoordinates(
+EigenfunctionFitResult fitKoopmanEigenfunctionsInCoordinates(
     const std::vector<double>& dynamicalStates, std::size_t samples,
     std::size_t dynamicalStateDimension, const std::vector<double>& time,
     const std::vector<std::complex<double>>& eigenvalues,
@@ -336,14 +261,24 @@ KoopmanSINDyResult fitKoopmanEigenfunctionsInCoordinates(
     auto values=coordinates.evaluateRealBatch(dynamicalStates,samples);
     const auto velocities=dynamicalVelocities.empty()?std::vector<double>{}
         :coordinates.pushForwardRealBatch(dynamicalStates,dynamicalVelocities,samples);
+    auto mapped=options;  // anchor states are dynamical states: map them into the fit's coordinates
+    std::vector<double> anchorCoordinates;
+    if (options.anchorStates) {
+        anchorCoordinates=coordinates.evaluateRealBatch(*options.anchorStates,
+            options.anchorStates->size()/dynamicalStateDimension);
+        mapped.anchorStates=&anchorCoordinates;
+    }
     auto result=fitKoopmanEigenfunctions(values,samples,coordinates.outputDimension(),time,
-                                         eigenvalues,velocities,options);
-    result.dynamicalStateDimension=dynamicalStateDimension;
-    if (!coordinates.expressions().empty())
-        result.coordinateObservableDefinition=json::dump(coordinates.expressionDefinition());
-    result.coordinateObservableNames=coordinates.descriptor().outputNames;
-    if (result.coordinateObservableNames.empty() && coordinates.outputDimension()==1)
-        result.coordinateObservableNames.push_back(coordinates.descriptor().name);
+                                         eigenvalues,velocities,mapped);
+    // The domain is y = h(x): the observable itself when it has closed forms, else its catalog names.
+    auto names=coordinates.descriptor().outputNames;
+    if (names.empty() && coordinates.outputDimension()==1) names.push_back(coordinates.descriptor().name);
+    auto domain=!coordinates.expressions().empty()
+        ? FunctionDomain::fromStateMap(Observable::fromExpressionDefinition(coordinates.expressionDefinition()))
+        : FunctionDomain::fromCatalog(names, coordinates.outputDimension());
+    if (!domain.stateMap) domain.physicalStateDimension=dynamicalStateDimension;
+    if (!names.empty()) domain.names=names;
+    result.functions=result.functions.withCoordinates(std::move(domain));
     return result;
 }
 

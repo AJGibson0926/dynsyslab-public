@@ -18,5 +18,4 @@ Gdiplus::RectF plotReferenceLabelBounds(const Gdiplus::PointF&,float markerRadiu
 void drawPlotSeries(Gdiplus::Graphics&,const Trace&,std::size_t,const PlotTransform&,
     std::optional<std::pair<double,double>> timeRange = std::nullopt);
 void drawPlotReferences(Gdiplus::Graphics&,const Figure&,const PlotTransform&,const theme::Fonts&);
-void drawTimeColorbar(Gdiplus::Graphics&,const Figure&,const Gdiplus::RectF&,const theme::Fonts&);
 }

@@ -22,9 +22,10 @@ to its data.
 
 - **Native core (C++):** system definitions, integrators, numerics, DMD/Koopman/SINDy model
   identification, estimation and control live in compiled libraries; Python is never required.
-- **Jobs and pipelines:** every computation is a versioned JSON job (`dynsyslab.compute-job/v1`):
-  a solve, a post-processing step, a campaign, or a pipeline that chains stages and generates its
-  own data. Jobs can be validated, planned, run and re-run.
+- **Jobs and experiments:** the pipeline is every DynSysLab module and data object (solver,
+  post-processing methods, control and estimation). Every computation on it is a versioned JSON
+  job (`dynsyslab.compute-job/v1`): a solve, a post-processing step, a campaign, or an experiment
+  that chains stages and generates its own data. Jobs can be validated, planned, run and re-run.
 - **Archives:** results are immutable `.npz` archives in your archive folder, organised
   Batch > System > Cluster > Trajectory, each recording its provenance. Nothing is shipped
   pre-computed; every example creates its own data.
@@ -60,7 +61,7 @@ to its data.
 | The whole suite at a glance, with diagrams | [OVERVIEW.md](OVERVIEW.md) |
 | A five-minute workflow and the agent checklist | [START_HERE.md](START_HERE.md) |
 | Package boundaries and engineering rules | [ARCHITECTURE.md](../ARCHITECTURE.md), [AGENTS.md](../AGENTS.md) |
-| Jobs and pipelines | [architecture/PIPELINE_JOBS.md](architecture/PIPELINE_JOBS.md) |
+| Jobs and experiments | [architecture/EXPERIMENTS.md](architecture/EXPERIMENTS.md) |
 | Estimation, control, linear systems | [architecture/ESTIMATOR_MODULE.md](architecture/ESTIMATOR_MODULE.md), [architecture/LINEAR_SYSTEMS_TOOLKIT.md](architecture/LINEAR_SYSTEMS_TOOLKIT.md) |
 | Figures | [architecture/VIEWER_CLI.md](architecture/VIEWER_CLI.md) |
 

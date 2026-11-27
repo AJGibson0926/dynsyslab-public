@@ -12,7 +12,9 @@ std::wstring symbol(const std::wstring& name) {
         {L"theta",L"\u03b8"},{L"Theta",L"\u0398"},
         {L"omega",L"ω"},{L"chi",L"χ"},{L"Pi",L"Π"},{L"psi",L"ψ"},
         {L"Psi",L"Ψ"},{L"phi",L"φ"},{L"nabla",L"∇"},{L"times",L"×"},
-        {L"cdot",L"·"},{L"infty",L"∞"},{L"partial",L"∂"}};
+        {L"cdot",L"·"},{L"infty",L"∞"},{L"partial",L"∂"},
+        {L"pi",L"π"},{L"epsilon",L"ε"},{L"eta",L"η"},{L"zeta",L"ζ"},{L"Gamma",L"Γ"},
+        {L"Lambda",L"Λ"},{L"Sigma",L"Σ"},{L"Phi",L"Φ"},{L"Omega",L"Ω"}};
     const auto found=values.find(name);
     return found==values.end()?name:found->second;
 }

@@ -133,6 +133,20 @@ CatalogItem batchItem(const json::Value& root, const std::filesystem::path& mani
     return item;
 }
 
+// Campaign type label for the catalog: bifurcation, lyapunov, trajectory ensemble, parameter
+// sweep, or generic, from the manifest's kind, label and goal.
+std::string campaignType(const json::Value& campaign) {
+    std::string text;
+    for (const char* key : {"kind", "label", "goal", "campaign_type"}) text += " " + campaign.at(key).string();
+    for (auto& character : text) character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+    if (text.find("bifurcation") != std::string::npos) return "bifurcation";
+    if (text.find("lyapunov") != std::string::npos) return "lyapunov";
+    if (text.find("ensemble") != std::string::npos || text.find("unforced") != std::string::npos)
+        return "trajectory ensemble";
+    if (text.find("sweep") != std::string::npos) return "parameter sweep";
+    return "generic";
+}
+
 }  // namespace
 
 std::filesystem::path resolveHierarchySource(
@@ -175,8 +189,6 @@ void appendHierarchyCatalog(Catalog& catalog, const std::filesystem::path& proje
                             std::set<std::string>& ownedSources,
                             const std::vector<dynsyslab::core::ArchiveIndexEntry>*
                                 indexEntries) {
-    appendLegacyHierarchyCatalog(catalog, projectRoot, archiveRoot, ownedSources,
-                                 indexEntries);
     std::map<std::string, const dynsyslab::core::ArchiveIndexEntry*> indexedSources;
     if (indexEntries)
         for (const auto& indexed : *indexEntries)
@@ -191,7 +203,7 @@ void appendHierarchyCatalog(Catalog& catalog, const std::filesystem::path& proje
         json::Value root;
         try { root = json::load(entry.path().wstring()); }
         catch (...) { continue; }
-        if (root.at("format").string() != "dynsyslab.hierarchy/v2") continue;
+        if (root.at("schema").string() != "dynsyslab.hierarchy/v2") continue;
         ownedSources.insert(normalizedSource(entry.path()));
         const std::string batchId = root.at("id").string();
         if (batchId.empty() || !representedBatches.insert(batchId).second) continue;
@@ -290,7 +302,7 @@ void appendHierarchyCatalog(Catalog& catalog, const std::filesystem::path& proje
         if (!entry.is_regular_file() || entry.path().extension() != L".json") continue;
         try {
             const auto campaign = json::load(entry.path().wstring());
-            if (campaign.at("format").string() == "dynsyslab.campaign/v3" &&
+            if (campaign.at("schema").string() == "dynsyslab.campaign/v3" &&
                 representedCampaigns.count(campaign.at("id").string())) {
                 ownedSources.insert(normalizedSource(entry.path()));
                 const std::string campaignId = campaign.at("id").string();
@@ -300,6 +312,10 @@ void appendHierarchyCatalog(Catalog& catalog, const std::filesystem::path& proje
                         identity->second != campaignId) continue;
                     item.properties["global campaign points"] = std::to_string(
                         campaign.at("points").array().size());
+                    item.properties["campaign type"] = campaignType(campaign);
+                    if (!campaign.at("bifurcation_tail_fraction").isNull())
+                        item.properties["bifurcation tail fraction"] =
+                            json::dump(campaign.at("bifurcation_tail_fraction"));
                     for (const auto& axis : campaign.at("axes").array()) {
                         std::string values;
                         for (const auto& value : axis.at("values").array()) {

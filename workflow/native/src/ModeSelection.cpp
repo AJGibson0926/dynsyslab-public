@@ -50,27 +50,26 @@ std::filesystem::path writeKrom(const std::filesystem::path& kromPath, const std
     std::vector<std::size_t> modes;
     for (auto u : chosen) for (auto m : units[u].modes) modes.push_back(m);
     const std::size_t n = modes.size(), d = score.readouts.stateStd.size();
-    const auto directory = objectFolder(root, "koopman-mode-selection");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::krom);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(kromPath.stem().u8string() + "__mode-selection-krom__" + timestamp()) + ".npz");
     std::map<std::string, c::NpyArray> extra;
-    const auto parent = c::readNpz(kromPath);
-    for (const char* name : {"training_coordinates", "training_time", "training_states"})
-        if (parent.contains(name)) extra[name] = parent.at(name);
     // 1. The subset, with each pair's lower mode made exactly conj(upper). H-DMD normalizes each
     //    mode separately (lower = c conj(upper), arbitrary c); conj(upper) is equally valid for
-    //    conj(lambda) and is what the conjugate readouts and B_psi below assume. Scattered pools
-    //    store values, polynomial pools coefficients. Done before any map is attached, because
-    //    maps record the identity of the eigenfunctions they belong to.
-    c::saveKoopmanModel(path, c::loadKoopmanModel(kromPath, modes), "{}", extra);
-    auto record = c::readNpz(path);
-    for (const char* name : {"eigenfunction_values", "training_eigenfunction_values", "coefficients"}) {
+    //    conj(lambda) and is what the conjugate readouts and B_psi below assume. These are new
+    //    eigenfunctions, so the K-ROM is a whole krom, not a child (interpolations store values,
+    //    expansions coefficients), rebuilt before any map is attached, because maps record the
+    //    identity of the eigenfunctions they belong to.
+    auto subset = c::loadKoopmanModel(kromPath, modes);
+    subset.clearParent();
+    auto record = c::makeKoopmanArchive(subset);
+    for (const char* name : {"eigenfunction_values", "expansion_coefficients"}) {
         if (!record.contains(name)) continue;
         auto& array = record.arrays[name];
         auto values = array.complexDoubles();
-        const bool modesInColumns = std::string(name) != "coefficients";
+        const bool modesInColumns = std::string(name) != "expansion_coefficients";
         const std::size_t rows = array.shape.at(0), cols = array.shape.size() > 1 ? array.shape[1] : 1;
-        if ((modesInColumns ? cols : rows) != n) continue;
+        if ((modesInColumns ? cols : rows) != n || values.empty()) continue;
         std::size_t at = 0;
         for (auto u : chosen) {
             if (units[u].pair) {
@@ -81,9 +80,12 @@ std::filesystem::path writeKrom(const std::filesystem::path& kromPath, const std
         }
         array = c::NpyArray::fromComplex(array.shape, values);
     }
-    c::writeNpzAtomic(path, record);
-    // 2. Readouts and the constant map on the conjugate-consistent model.
-    auto model = c::loadKoopmanModel(path);
+    // 2. Readouts and the constant map on the conjugate-consistent model. A rewritten lower mode takes
+    //    its upper partner's residual: for real data a residual of (conj psi, conj lambda) equals that of
+    //    (psi, lambda), under any definition.
+    auto model = c::readKoopmanModel(record);
+    for (std::size_t at = 0, u = 0; u < chosen.size(); at += units[chosen[u]].pair ? 2 : 1, ++u)
+        if (units[chosen[u]].pair) model.setResidual(at + 1, model.spectrum().residual(at));
     c::ReconstructionResult echo{std::vector<Complex>(n), 1, n}, state{std::vector<Complex>(d * n), d, n};
     echo.offset = {score.readouts.echoOffset}; state.offset = score.readouts.stateOffset;
     echo.relativeResidual = score.readouts.echoError;
@@ -110,11 +112,11 @@ std::filesystem::path writeKrom(const std::filesystem::path& kromPath, const std
     model.setReconstruction(options.measurement, echo);
     model.setReconstruction("state", state);
     model.setControlMap("constant", map);
-    provenance["format"] = "dynsyslab.derived/v1"; provenance["method"] = "mode-selection-krom";
+    provenance["schema"] = "dynsyslab.derived/v1"; provenance["method"] = "mode-selection-krom";
     provenance["label"] = label; provenance["source_krom"] = kromPath.generic_u8string();
     provenance["source_archive"] = kromPath.generic_u8string(); provenance["independent_archive"] = true;
     provenance["conjugate_pairs"] = "lower mode of each pair rewritten as conj(upper)";
-    c::saveKoopmanModel(path, model, json::dump(json::Value(std::move(provenance))), std::move(extra));
+    c::saveKoopmanModel(path, model, withDataObject(json::dump(json::Value(std::move(provenance))), dynsyslab::core::object_kind::krom, {kromPath}), std::move(extra));
     return path;
 }
 }  // namespace
@@ -227,7 +229,7 @@ std::filesystem::path runModeSelection(const std::vector<std::filesystem::path>&
     json::Value::Object bestJson{{"units", chosen}, {"echo_error", scores[best].readouts.echoError},
         {"predicted_state_error", scores[best].predictedStateError}, {"input_map_residual", scores[best].inputMapResidual},
         {"state_reach", scores[best].stateReach}, {"rank_sum", rankSum[best]}};
-    json::Value::Object meta{{"format", "dynsyslab.derived/v1"}, {"method", "mode-selection"},
+    json::Value::Object meta{{"method", "mode-selection"},
         {"schema", "dynsyslab.mode-selection/v1"}, {"label", label}, {"source_krom", kromPath.generic_u8string()},
         {"source_archive", kromPath.generic_u8string()}, {"independent_archive", true},
         {"measurement", options.measurement}, {"sensor_noise", options.sensorNoise},
@@ -267,9 +269,10 @@ std::filesystem::path runModeSelection(const std::vector<std::filesystem::path>&
                                           std::move(krom)).generic_u8string();
     }
     out.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(json::Value(std::move(meta))));
-    const auto directory = objectFolder(root, "mode-selection");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::report);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(kromPath.stem().u8string() + "__mode-selection__" + timestamp()) + ".npz");
+    stampDataObject(out, dynsyslab::core::object_kind::report, "mode-selection", {});
     c::writeNpzAtomic(path, out);
     return path;
 }

@@ -2,7 +2,7 @@
 
 #include <dynsyslab/workflow/Campaign.hpp>
 #include <dynsyslab/workflow/KromControlSearch.hpp>
-#include <dynsyslab/workflow/Pipeline.hpp>
+#include <dynsyslab/workflow/Experiment.hpp>
 #include <dynsyslab/workflow/Plan.hpp>
 #include <dynsyslab/workflow/Postprocess.hpp>
 
@@ -10,6 +10,8 @@
 #include <dynsyslab/core/BuildInfo.hpp>
 #include <dynsyslab/workflow/JobGroup.hpp>
 
+#include "CampaignDesign.hpp"
+#include "PostprocessGeometry.hpp"
 #include "SolveDispatch.hpp"
 #include "SolveSet.hpp"
 #include "ViewerFigureJob.hpp"
@@ -35,22 +37,25 @@ void validateJob(const json::Value& job) {
     if (job.at("schema").string() != "dynsyslab.compute-job/v1")
         throw std::invalid_argument("job must use dynsyslab.compute-job/v1");
     const std::string kind = job.at("kind").string();
+    if (kind == "pipeline")  // renamed in 0.9.1: the pipeline is the suite; a staged study is an experiment
+        throw std::invalid_argument("job kind \"pipeline\" is now \"experiment\"; rename the kind in the job file");
     if (kind != "solve" && kind != "solve_set" && kind != "postprocess"
-        && kind != "krom_control_search" && kind != "pipeline"
+        && kind != "krom_control_search" && kind != "experiment"
         && kind != "job_group" && kind != "viewer_figure")
         throw std::invalid_argument(
-            "job kind must be solve, solve_set, postprocess, krom_control_search, pipeline, job_group, or viewer_figure");
+            "job kind must be solve, solve_set, postprocess, krom_control_search, experiment, job_group, or viewer_figure");
 }
 
-RunResult executeJob(const json::Value& job,
+RunResult executeJob(const json::Value& submitted,
                      const std::filesystem::path& requestedArchiveRoot,
                      const std::filesystem::path& progressPath,
                      const dynsyslab::core::ExecutionContext* execution) {
+    const auto job=detail::resolveJobDesign(submitted);  // campaign axes, profiles, cycle time
     // Resolve once for writers and indexers: relative published paths must not
     // be interpreted a second time beneath the archive root.
     const auto archiveRoot=std::filesystem::absolute(requestedArchiveRoot).lexically_normal();
-    if(job.at("kind").string()=="pipeline")  // stages index their own outputs
-        return executePipeline(job,archiveRoot,progressPath,execution);
+    if(job.at("kind").string()=="experiment")  // stages index their own outputs
+        return executeExperiment(job,archiveRoot,progressPath,execution);
     if(job.at("kind").string()=="job_group")  // its leaf jobs index and record themselves
         return executeJobGroup(job,archiveRoot,progressPath,execution);
     (void)planJob(job);
@@ -67,6 +72,8 @@ RunResult executeJob(const json::Value& job,
         return indexed(executeKromControlSearch(job,archiveRoot,progressPath,execution),
                        archiveRoot);
     if (job.at("kind").string() == "postprocess") {
+        detail::requirePostprocessMemory(job, execution ? execution->limits
+                                                        : dynsyslab::core::ExecutionLimits{});
         auto result = executePostprocess(job, archiveRoot, progressPath, execution);
         return indexed({"postprocess", result.summary(), std::move(result.archives), {},
                         std::move(result.methods)}, archiveRoot);

@@ -41,7 +41,7 @@ public:
         std::size_t k=0;
         if (std::holds_alternative<double>(selector.storage())) {
             k=integer(selector,"observable",0);
-            if (k>=source.dimension) throw std::invalid_argument("Hankel column index exceeds the time-series width");
+            if (k>=source.dimension()) throw std::invalid_argument("Hankel column index exceeds the time-series width");
         } else {
             const auto name=selector.string();
             const auto found=std::find(names.begin(),names.end(),name);
@@ -51,8 +51,8 @@ public:
         // otherwise a channel carries its column name (state_0 -> position).
         const bool numeric=std::holds_alternative<double>(selector.storage());
         Signal result{numeric&&!named?"state_"+std::to_string(k):names[k],names[k],"none",{},{}};
-        result.values.reserve(source.samples);
-        for (std::size_t i=0;i<source.samples;++i) result.values.push_back(source.values[i*source.dimension+k]);
+        result.values.reserve(source.samples());
+        for (std::size_t i=0;i<source.samples();++i) result.values.push_back(source.values()[i*source.dimension()+k]);
         return result;
     }
 private:
@@ -72,18 +72,17 @@ SourceData hankelTimeWindow(const SourceData& full,const J& settings,std::size_t
     const double start=window.array()[0].number(), stop=window.array()[1].number();
     if (!(stop>start)) throw std::invalid_argument("Hankel time_window needs stop > start");
     std::size_t last=0; bool any=false;
-    for (std::size_t i=0;i<full.samples;++i) if (full.time[i]>=start && full.time[i]<=stop) {
+    for (std::size_t i=0;i<full.samples();++i) if (full.time()[i]>=start && full.time()[i]<=stop) {
         if (!any) first=i; last=i; any=true; }
     if (!any || last-first<2) throw std::invalid_argument("Hankel time_window leaves fewer than three samples");
-    SourceData rows=full;
-    const auto n=last-first+1;
-    rows.time.assign(full.time.begin()+std::ptrdiff_t(first),full.time.begin()+std::ptrdiff_t(last+1));
-    rows.values.assign(full.values.begin()+std::ptrdiff_t(first*full.dimension),
-                       full.values.begin()+std::ptrdiff_t((last+1)*full.dimension));
-    if (!full.inputs.empty())
-        rows.inputs.assign(full.inputs.begin()+std::ptrdiff_t(first*full.inputDimension),
-                           full.inputs.begin()+std::ptrdiff_t((last+1)*full.inputDimension));
-    rows.samples=n;
+    std::vector<double> time(full.time().begin()+std::ptrdiff_t(first),full.time().begin()+std::ptrdiff_t(last+1));
+    auto rows=withSeries(full,time,std::vector<double>(full.values().begin()+std::ptrdiff_t(first*full.dimension()),
+                       full.values().begin()+std::ptrdiff_t((last+1)*full.dimension())),full.dimension());
+    if (full.record.inputs) {  // the inputs of the kept samples, or of the intervals between them
+        const auto m=full.inputDimension(), end=full.record.inputsOnIntervals?last:last+1;
+        rows.record.inputs=inputSeries(time,std::vector<double>(full.inputs().begin()+std::ptrdiff_t(first*m),
+            full.inputs().begin()+std::ptrdiff_t(end*m)),m,full.record.inputsOnIntervals);
+    }
     return rows;
 }
 
@@ -125,7 +124,7 @@ HankelAnalysis prepareHankel(const SourceData& source,const J& settings,bool pai
         spec.delayStride=integer(settings.at("delay_stride"),"delay_stride",1,1);
     }
     HankelAnalysis out;
-    const auto alignment=settings.at("window_alignment").string(modern?"end":"start");
+    const auto alignment=settings.at("window_alignment").string("end");
     if (alignment!="end" && alignment!="start") throw std::invalid_argument("invalid Hankel window_alignment");
     out.alignEnd=alignment=="end";
     J::Array requested;
@@ -139,7 +138,7 @@ HankelAnalysis prepareHankel(const SourceData& source,const J& settings,bool pai
             throw std::invalid_argument("specify a nonempty observables list or one observable");
     } else if (!single.isNull() && !(std::holds_alternative<std::string>(single.storage()) && single.string().empty()))
         requested.push_back(single);
-    else for (std::size_t k=0;k<(paired?1:source.dimension);++k) requested.emplace_back(double(k));
+    else for (std::size_t k=0;k<(paired?1:source.dimension());++k) requested.emplace_back(double(k));
     Columns resolver(source);
     std::map<std::pair<std::string,std::size_t>,std::size_t> cache;
     std::vector<Signal> signals;
@@ -187,15 +186,15 @@ HankelAnalysis prepareHankel(const SourceData& source,const J& settings,bool pai
         throw std::invalid_argument("one scale is required per expanded Hankel channel");
     // Legacy H-DMD fixes the number of pairs and shortens the history when needed.
     if (!modern && paired)
-        spec=c::fixedPairHankelWindow(source.samples,maxLag,spec.delays,spec.columns,spec.sampleStride,spec.snapshotStride);
+        spec=c::fixedPairHankelWindow(source.samples(),maxLag,spec.delays,spec.columns,spec.sampleStride,spec.snapshotStride);
     std::vector<double> values;
     if (signals.size()==1) values=std::move(signals.front().values);
     else {
-        values.resize(source.samples*signals.size());
+        values.resize(source.samples()*signals.size());
         for (std::size_t k=0;k<signals.size();++k)
-            for (std::size_t i=0;i<source.samples;++i) values[i*signals.size()+k]=signals[k].values[i];
+            for (std::size_t i=0;i<source.samples();++i) values[i*signals.size()+k]=signals[k].values[i];
     }
-    out.matrix=c::buildHankelMatrix(values,source.samples,signals.size(),channels,spec,paired);
+    out.matrix=c::buildHankelMatrix(values,source.samples(),signals.size(),channels,spec,paired);
     // Preserve the legacy POD by-index operation on irregular clocks. A
     // physical one-step DMD map and new time-based windows require uniform time.
     J analysisDt;

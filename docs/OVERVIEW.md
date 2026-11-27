@@ -33,7 +33,7 @@ flowchart LR
     end
     subgraph WF["Workflow service"]
         JOBS["Jobs<br/>solve · postprocess · pipeline"]
-        PIPE["Pipelines<br/>staged studies"]
+        PIPE["Experiments<br/>staged studies"]
         QUEUE["Durable queue"]
         HIER["Hierarchy<br/>Batch → System → Cluster → Trajectory"]
     end
@@ -122,7 +122,7 @@ flowchart LR
 
 ---
 
-## 3. Workflow: jobs, pipelines and the hierarchy
+## 3. Workflow: jobs, experiments and the hierarchy
 
 ```mermaid
 flowchart TB
@@ -143,7 +143,7 @@ flowchart TB
 ```
 
 - **Jobs** are deterministic and versioned. `plan` shows exactly what will run.
-- **Pipelines** chain stages (e.g. solve → H-DMD → KROM extraction → mode selection → closed
+- **Experiments** chain stages (e.g. solve → H-DMD → KROM extraction → mode selection → closed
   loop); a stage refers to an earlier stage's archive, parameters can be overridden from the
   command line, and identical stages are reused.
 - **Data roles** (free/forced, training, identification, reference) are metadata on archives,
@@ -229,7 +229,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    PROD["Producers<br/>solves · post-processing · pipelines"] -->|"write once"| AR[("Archives<br/>NPZ arrays + metadata<br/>SQLite index")]
+    PROD["Producers<br/>solves · post-processing · experiments"] -->|"write once"| AR[("Archives<br/>NPZ arrays + metadata<br/>SQLite index")]
     AR -->|"read-only"| V["Viewer<br/>data tree · panels · comparisons"]
     AR -->|"read-only"| VC["Viewer CLI<br/>render · inspect · time-series"]
     V --> FIG["Figures<br/>time series · phase space · spectra<br/>control · estimator · KROM views"]
@@ -256,7 +256,7 @@ flowchart LR
 ```
 
 ```powershell
-dynsyslab-cli run examples\native\pipelines\rpe-echo-mode-selection\range-pool.json --archive-root archives
+dynsyslab-cli run examples\native\experiments\rpe-echo-mode-selection\range-pool.json --archive-root archives
 DynSysLabViewerCli render --source archives\solutions\rpe\<run>.npz --view "r versus time" --output radius.png
 ```
 
@@ -271,7 +271,7 @@ coordinate and history models) live under `examples/native/case-studies/` and
 | Goal | Read |
 |---|---|
 | Install and first solve | [INSTALL.md](INSTALL.md), [START_HERE.md](START_HERE.md) |
-| Write jobs and pipelines | [architecture/PIPELINE_JOBS.md](architecture/PIPELINE_JOBS.md) |
+| Write jobs and experiments | [architecture/EXPERIMENTS.md](architecture/EXPERIMENTS.md) |
 | Koopman models | [architecture/EIGENFUNCTION_MODEL_API.md](architecture/EIGENFUNCTION_MODEL_API.md), [architecture/MODE_SELECTION.md](architecture/MODE_SELECTION.md) |
 | Estimation and control | [architecture/ESTIMATOR_MODULE.md](architecture/ESTIMATOR_MODULE.md), [architecture/INTEGRAL_AND_PID_CONTROL.md](architecture/INTEGRAL_AND_PID_CONTROL.md), [architecture/LINEAR_SYSTEMS_TOOLKIT.md](architecture/LINEAR_SYSTEMS_TOOLKIT.md) |
 | Figures | [architecture/VIEWER_CLI.md](architecture/VIEWER_CLI.md) |

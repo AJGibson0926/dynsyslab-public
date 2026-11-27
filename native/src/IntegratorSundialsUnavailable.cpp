@@ -4,10 +4,9 @@
 
 namespace dynsyslab::core::detail {
 
-NativeSolution integrateBDF(ODESystem&, const std::vector<double>&, std::size_t,
-                            const IntegrationOptions&, ScalarControlPolicy,
-                            ProgressCallback, const ExecutionContext*) {
-    throw std::runtime_error("BDF integration is unavailable in this native build");
+std::unique_ptr<Stepper> makeCvodeStepper(const IntegrationOptions& options, std::size_t) {
+    throw std::runtime_error(integrationMethodName(options.method)
+        + " integration needs SUNDIALS CVODE, which is not in this native build");
 }
 
 }  // namespace dynsyslab::core::detail

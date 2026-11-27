@@ -22,6 +22,7 @@
 //   "multistep_output"     state/observable KROMs, constant only: existing multistep output regression.
 //   "exact_map"            least-squares fit of the constant/bilinear family to the exact map
 //                          sampled on the sources' states (state/observable KROMs).
+//   "symmetric_pulse"      paired +-u first responses (symmetric_pulse input; InputMapPulses.cpp).
 //   measured-coordinate KROMs (coordinate_transform measured_derivatives): "controlled_residual" on
 //                          the forced records' measured coordinates. psi from the coordinates,
 //                          psi' from the "derivative" differentiator (default central), and the input
@@ -34,6 +35,7 @@
 #include "KromDatasetSupport.hpp"
 #include "DerivativeSettings.hpp"
 #include "HeldInputRecords.hpp"
+#include "InputMapPulses.hpp"
 
 #include <dynsyslab/core/HistoryObservation.hpp>
 #include <dynsyslab/core/HistoryObservationArchive.hpp>
@@ -184,16 +186,16 @@ json::Value::Object coordinateRegression(c::KoopmanModel& model, const std::vect
     std::vector<std::vector<Complex>> residuals(m); std::vector<double> inputsUsed;
     for (const auto& path : sources) {
         const auto source = loadSource(path);
-        if (source.inputs.empty() || datasetDynamics(source) != "forced" || source.inputDimension != 1)
+        if (source.inputs().empty() || datasetDynamics(source) != "forced" || source.inputDimension() != 1)
             throw std::invalid_argument("measured-coordinate input_map needs forced coordinate records with one input: " + path.generic_u8string());
-        if (source.dimension != q) throw std::invalid_argument("forced record coordinates differ from the KROM coordinates");
-        const std::size_t n = source.samples; const double dt = source.time[1] - source.time[0];
+        if (source.dimension() != q) throw std::invalid_argument("forced record coordinates differ from the KROM coordinates");
+        const std::size_t n = source.samples(); const double dt = source.time()[1] - source.time()[0];
         std::vector<std::vector<double>> re(m, std::vector<double>(n)), im(m, std::vector<double>(n));
         for (std::size_t i = 0; i < n; ++i) {
-            const auto psi = model.evaluateCoordinates(&source.values[i * q]);
+            const auto psi = model.evaluateCoordinates(&source.values()[i * q]);
             for (std::size_t j = 0; j < m; ++j) { re[j][i] = psi[j].real(); im[j][i] = psi[j].imag(); }
         }
-        const auto u = c::differentiate(source.inputs, dt, derivative).values;  // same smoothing as psi
+        const auto u = c::differentiate(source.inputs(), dt, derivative).values;  // same smoothing as psi
         const std::size_t skip = std::max<std::size_t>(2, n / 50);
         for (std::size_t j = 0; j < m; ++j) {
             const auto dre = c::differentiate(re[j], dt, derivative), dim = c::differentiate(im[j], dt, derivative);
@@ -225,48 +227,54 @@ json::Value::Object coordinateRegression(c::KoopmanModel& model, const std::vect
 json::Value::Object stateRegression(c::KoopmanModel& model, const std::vector<std::filesystem::path>& sources,
                                     const json::Value& settings, const std::string& representation,
                                     const std::string& fit, const std::string& mapName) {
-    std::vector<SourceData> loaded; std::vector<c::ControlledData> data; std::vector<double> states;
+    std::vector<SourceData> loaded; std::vector<c::TimeSeriesRecord> data; std::vector<double> states;
     for (const auto& path : sources) {
         auto source = loadSource(path);
-        if (fit != "exact_map" && (source.inputs.empty() || datasetDynamics(source) != "forced"))
+        if (fit != "exact_map" && (source.inputs().empty() || datasetDynamics(source) != "forced"))
             throw std::invalid_argument("input_map regression needs forced records with a control history: " + path.generic_u8string());
         c::requireCompatibleSystems(model.systemConfiguration(), systemConfiguration(source));
-        states.insert(states.end(), source.values.begin(), source.values.end());
+        states.insert(states.end(), source.values().begin(), source.values().end());
         loaded.push_back(std::move(source));
     }
     const auto& window = settings.at("state_window");
     const double fitStart = settings.at("fit_start").number(0.0);
     const bool wholeRecords = window.isNull() && std::all_of(loaded.begin(), loaded.end(),
-        [&](const SourceData& s) { return s.time.front() >= fitStart; });
+        [&](const SourceData& s) { return s.time().front() >= fitStart; });
     if (wholeRecords) {
-        for (const auto& s : loaded) data.push_back({s.time, s.values, s.inputs, s.samples, s.dimension, s.inputDimension});
+        for (const auto& s : loaded) data.push_back(s.record);
     } else {
         // Restrict the regression to samples at or after fit_start and inside a state box ([[lo, hi], ...]
         // per state component): each maximal run of inside samples is its own record, so no pair spans a gap.
         states.clear();
-        for (const auto& s : loaded) {
-            if (!window.isNull() && window.array().size() != s.dimension)
+        for (const auto& source : loaded) {
+            const auto &time = source.time(), &values = source.values(), &inputs = source.inputs();
+            const std::size_t dimension = source.dimension(), samples = source.samples(), inputDimension = source.inputDimension();
+            if (!window.isNull() && window.array().size() != dimension)
                 throw std::invalid_argument("input_map state_window needs one [low, high] pair per state component");
-            const bool intervals = s.inputs.size() == (s.samples - 1) * s.inputDimension;
+            const bool intervals = source.record.inputsOnIntervals;
             auto inside = [&](std::size_t k) {
-                if (s.time[k] < fitStart) return false;
+                if (time[k] < fitStart) return false;
                 if (window.isNull()) return true;
-                for (std::size_t j = 0; j < s.dimension; ++j) {
-                    const auto& b = window.array().at(j).array(); const double v = s.values[k * s.dimension + j];
+                for (std::size_t j = 0; j < dimension; ++j) {
+                    const auto& b = window.array().at(j).array(); const double v = values[k * dimension + j];
                     if (v < b.at(0).number() || v > b.at(1).number()) return false;
                 }
                 return true;
             };
-            for (std::size_t k = 0; k < s.samples;) {
+            for (std::size_t k = 0; k < samples;) {
                 if (!inside(k)) { ++k; continue; }
-                std::size_t e = k; while (e + 1 < s.samples && inside(e + 1)) ++e;
+                std::size_t e = k; while (e + 1 < samples && inside(e + 1)) ++e;
                 if (e > k) {
-                    c::ControlledData d; d.samples = e - k + 1; d.stateDimension = s.dimension; d.inputDimension = s.inputDimension;
-                    d.time.assign(s.time.begin() + k, s.time.begin() + e + 1);
-                    d.states.assign(s.values.begin() + k * s.dimension, s.values.begin() + (e + 1) * s.dimension);
-                    if (!s.inputs.empty()) d.inputs.assign(s.inputs.begin() + k * s.inputDimension,
-                                    s.inputs.begin() + (intervals ? e : e + 1) * s.inputDimension);
-                    states.insert(states.end(), d.states.begin(), d.states.end());
+                    c::TimeSeriesRecord d;
+                    std::vector<double> runTime(time.begin() + k, time.begin() + e + 1);
+                    std::vector<double> runStates(values.begin() + k * dimension, values.begin() + (e + 1) * dimension);
+                    if (source.record.inputs) {
+                        d.inputs = inputSeries(runTime, std::vector<double>(inputs.begin() + k * inputDimension,
+                            inputs.begin() + (intervals ? e : e + 1) * inputDimension), inputDimension, intervals);
+                        d.inputsOnIntervals = intervals;
+                    }
+                    states.insert(states.end(), runStates.begin(), runStates.end());
+                    d.series = c::TimeSeries(std::move(runTime), std::move(runStates), dimension);
                     data.push_back(std::move(d));
                 }
                 k = e + 1;
@@ -275,7 +283,7 @@ json::Value::Object stateRegression(c::KoopmanModel& model, const std::vector<st
         if (data.empty()) throw std::invalid_argument("input_map fit_start/state_window keeps no forced samples");
     }
     const double ridge = settings.at("ridge").number(0.0);
-    const std::size_t dimension = loaded.front().dimension, count = states.size() / dimension;
+    const std::size_t dimension = loaded.front().dimension(), count = states.size() / dimension;
     double relative = 0;
     if (representation == "constant") {
         auto fitted = [&] {
@@ -334,6 +342,8 @@ std::filesystem::path runInputMap(const std::vector<std::filesystem::path>& sour
             const auto transform = std::move(map.transform);
             diagnostics = heldInputRegression(model, heldInputRecords(model, &transform, sources, settings, strictHold),
                                               settings, representation, mapName);
+        } else if (fit == "symmetric_pulse") {
+            diagnostics = symmetricPulseRegression(model, sources, settings, representation, mapName);
         } else if (fit == "held_input") {
             diagnostics = heldInputRegression(model, heldInputRecords(model, nullptr, sources, settings, strictHold),
                                               settings, representation, mapName);
@@ -347,20 +357,17 @@ std::filesystem::path runInputMap(const std::vector<std::filesystem::path>& sour
         {"forced_sources", json::Value(analytic ? json::Value::Array{} : std::move(sourceList))},
         {"diagnostics", json::Value(std::move(diagnostics))}};
     json::Value::Object meta{
-        {"format", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("input-map")},
+        {"schema", json::Value("dynsyslab.derived/v1")}, {"method", json::Value("input-map")},
         {"label", json::Value(label)}, {"source_krom", json::Value(kromPath.generic_u8string())},
         {"source_archive", json::Value(kromPath.generic_u8string())}, {"input_map", json::Value(std::move(inputMap))},
         {"control_map_time_domain", json::Value("continuous-time")}, {"independent_archive", json::Value(true)}};
     if (!transformPath.empty()) meta["history_transform"] = json::Value(transformPath);
-    const auto directory = objectFolder(root, "koopman-input-map");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::krom);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(kromPath.stem().u8string() + "__input-map-" + representation
         + "__" + timestamp()) + ".npz");
-    std::map<std::string, c::NpyArray> extra;  // keep the KROM's training samples for Viewer
-    const auto parent = c::readNpz(kromPath);
-    for (const char* name : {"training_coordinates", "training_time", "training_states", "source_mode_indices"})
-        if (parent.contains(name)) extra[name] = parent.at(name);
-    c::saveKoopmanModel(path, model, json::dump(json::Value(std::move(meta))), std::move(extra));
+    // A child of the krom: its modes and the input map B fitted here (the parent keeps its training samples).
+    c::saveKoopmanModel(path, model, withDataObject(json::dump(json::Value(std::move(meta))), dynsyslab::core::object_kind::krom, {kromPath}));
     return path;
 }
 

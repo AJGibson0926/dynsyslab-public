@@ -28,6 +28,8 @@ std::unique_ptr<ODESystem> makeRPE(SystemConfiguration configuration) {
         {"pressure_scale_pa", "Pa"}};
     configuration.coordinateScaling = {scaling.timeScale, ambient, true, true,
         "tau", "p_control/p0", "Pa"};
+    configuration.coordinateScaling.physicalStatePerModelState = {scaling.radius, scaling.radius / scaling.timeScale};
+    configuration.coordinateScaling.physicalStateUnits = {"m", "m/s"};
     auto rhs = [medium, gas, vapor, external, capillarity, viscosity, inputSign]
         (double, const double* x, double input, double* out) {
         const double radius = x[0], velocity = x[1];

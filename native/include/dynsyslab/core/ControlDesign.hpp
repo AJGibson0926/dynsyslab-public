@@ -5,6 +5,7 @@
 // KLQR/KLQE (LQR.hpp, Estimation.hpp) remain the Koopman-specific runtime
 // controllers; these routines operate on any StateSpaceModel.
 #include <dynsyslab/core/StateSpace.hpp>
+#include <dynsyslab/numerics/Control.hpp>
 
 #include <complex>
 #include <cstddef>
@@ -22,15 +23,11 @@ namespace dynsyslab::core {
 [[nodiscard]] std::vector<double> placeObserverPoles(const StateSpaceModel& model,
     const std::vector<std::complex<double>>& poles);
 
-struct RegulatorDesign {
-    std::vector<double> riccati;  // states x states
-    std::vector<double> gain;     // inputs x states, u = -K x
-    std::vector<std::complex<double>> closedLoopPoles;
-    double relativeResidual{};
-};
+// The one LQR result: Riccati solution P (states x states), gain K (inputs x states, u = -K x),
+// closed-loop poles and the Riccati residual.
 // Continuous: CARE. Discrete: DARE by the structure-preserving doubling
 // algorithm, K = (R + B^T P B)^-1 B^T P A.
-[[nodiscard]] RegulatorDesign designLQR(const StateSpaceModel& model,
+[[nodiscard]] numerics::ContinuousLqrResult designLQR(const StateSpaceModel& model,
     const std::vector<double>& statePenalty, const std::vector<double>& inputPenalty);
 
 struct EstimatorDesign {
@@ -46,7 +43,7 @@ struct EstimatorDesign {
     const std::vector<double>& processCovariance, const std::vector<double>& measurementCovariance);
 
 struct LqgDesign {
-    RegulatorDesign regulator;
+    numerics::ContinuousLqrResult regulator;
     EstimatorDesign estimator;
     StateSpaceModel compensator; // input y, output u: x_hat' = (A - BK - LC + LDK) x_hat + L y, u = -K x_hat
     StateSpaceModel closedLoop;  // state [x; x_hat], input r added to u, output y

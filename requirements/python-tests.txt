@@ -1,0 +1,4 @@
+# Dependencies of the Python test lane (front door, audit and MCP harness tests).
+# The installable client dynsyslab_client has none.
+tomli>=2; python_version < "3.11"
+mcp>=2,<3

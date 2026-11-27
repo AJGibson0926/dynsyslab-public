@@ -29,29 +29,29 @@ public:
     CoordinateChannel resolve(const J& selector, std::size_t order) {
         if (std::holds_alternative<double>(selector.storage())) {
             const auto k = count(selector, "observable", 0);
-            if (k >= source.dimension || order)
+            if (k >= source.dimension() || order)
                 throw std::invalid_argument("use a named observable for its derivative; check component index");
             CoordinateChannel result{"state_" + std::to_string(k), "state_" + std::to_string(k), "none", {}, {}};
-            result.values.reserve(source.samples);
-            for (std::size_t i = 0; i < source.samples; ++i) result.values.push_back(source.values[i * source.dimension + k]);
+            result.values.reserve(source.samples());
+            for (std::size_t i = 0; i < source.samples(); ++i) result.values.push_back(source.values()[i * source.dimension() + k]);
             return result;
         }
         if (std::holds_alternative<J::Object>(selector.storage())) return krom(selector, order);
         if (!system) {
             system = c::createSystem(systemConfiguration(source));
-            if (system->descriptor().stateDimension != source.dimension)
+            if (system->descriptor().stateDimension != source.dimension())
                 throw std::invalid_argument("Coordinate observable and source state dimensions differ");
             catalog = system->observableCatalog();
         }
         const auto& base = catalog->at(selector.string());
         if (base.outputDimension() != 1 || base.descriptor().complexValued)
             throw std::invalid_argument("Coordinate channels require real scalar observables");
-        const bool missingInput = source.inputs.empty() && datasetDynamics(source) == "forced"
+        const bool missingInput = source.inputs().empty() && datasetDynamics(source) == "forced"
             && system->configuration().driver.amplitude == 0.;
         std::optional<double> constantInput;
-        if (!source.inputs.empty()) {
-            if (source.inputDimension == 1 && std::all_of(source.inputs.begin(), source.inputs.end(),
-                [&](double u) { return u == source.inputs.front(); })) constantInput = source.inputs.front();
+        if (!source.inputs().empty()) {
+            if (source.inputDimension() == 1 && std::all_of(source.inputs().begin(), source.inputs().end(),
+                [&](double u) { return u == source.inputs().front(); })) constantInput = source.inputs().front();
         } else if (!missingInput && system->configuration().driver.amplitude == 0.) constantInput = 0.;
         auto plan = c::resolveObservableDerivative(*system, *catalog, base.descriptor().name, order, constantInput);
         CoordinateChannel result{plan.name, base.descriptor().name, plan.method,
@@ -59,9 +59,9 @@ public:
         if (plan.pushForward) {
             if (missingInput) throw std::invalid_argument("Observable derivative needs the recorded forcing or a prescribed driver");
             if (!velocities) velocities = exactVelocities(source, true);
-            result.values = plan.map.pushForwardRealBatch(source.values, *velocities, source.samples,
+            result.values = plan.map.pushForwardRealBatch(source.values(), *velocities, source.samples(),
                                                          c::ObservableJacobianBackend::analytic);
-        } else result.values = plan.map.evaluateRealBatch(source.values, source.samples);
+        } else result.values = plan.map.evaluateRealBatch(source.values(), source.samples());
         return result;
     }
 
@@ -76,7 +76,7 @@ private:
         ref.index = count(selector.at("index"), "index", 0);
         auto observable = c::existingKromObservable(std::filesystem::u8path(ref.artifact), ref,
                                                     selector.at("name").string("krom-observable"));
-        if (observable.stateDimension() != source.dimension)
+        if (observable.stateDimension() != source.dimension())
             throw std::invalid_argument("KROM observable source coordinate dimension differs");
         if (selector.at("coordinate_contract").string() != observable.descriptor().stateCoordinateSystem)
             throw std::invalid_argument("KROM reference requires explicit matching coordinate_contract; dimensions alone do not identify coordinates");
@@ -85,8 +85,8 @@ private:
         const auto part = selector.at("part").string("real");
         if (part != "real" && part != "imag") throw std::invalid_argument("KROM channel part must be real or imag");
         CoordinateChannel result{observable.descriptor().name, ref.component, "none", "", {}};
-        for (std::size_t i = 0; i < source.samples; ++i) {
-            const auto value = observable.evaluate(source.values.data() + i * source.dimension)[output];
+        for (std::size_t i = 0; i < source.samples(); ++i) {
+            const auto value = observable.evaluate(source.values().data() + i * source.dimension())[output];
             result.values.push_back(part == "real" ? value.real() : value.imag());
         }
         return result;
@@ -127,7 +127,7 @@ std::vector<CoordinateChannel> evaluateCoordinateChannels(const SourceData& sour
 std::vector<std::string> timeSeriesColumnNames(const SourceData& source) {
     const auto meta = source.metadataJson.empty() ? J{} : json::parse(source.metadataJson);
     const auto& recorded = meta.at("coordinate_names");
-    if (std::holds_alternative<J::Array>(recorded.storage()) && recorded.array().size() == source.dimension) {
+    if (std::holds_alternative<J::Array>(recorded.storage()) && recorded.array().size() == source.dimension()) {
         std::vector<std::string> names;
         for (const auto& name : recorded.array()) names.push_back(name.string());
         return names;
@@ -136,11 +136,11 @@ std::vector<std::string> timeSeriesColumnNames(const SourceData& source) {
         try {
             const auto system = c::createSystem(systemConfiguration(source));
             const auto& names = system->descriptor().stateNames;
-            if (names.size() == source.dimension) return names;
+            if (names.size() == source.dimension()) return names;
         } catch (const std::exception&) {}
     }
     std::vector<std::string> names;
-    for (std::size_t k = 0; k < source.dimension; ++k) names.push_back("state_" + std::to_string(k));
+    for (std::size_t k = 0; k < source.dimension(); ++k) names.push_back("state_" + std::to_string(k));
     return names;
 }
 

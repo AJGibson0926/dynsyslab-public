@@ -1,4 +1,4 @@
-#include <dynsyslab/core/SINDy.hpp>
+#include <dynsyslab/core/EigenfunctionFit.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -7,11 +7,11 @@
 #include <stdexcept>
 
 namespace dynsyslab::core {
-KoopmanSINDyResult KoopmanSINDyResult::fromCoefficients(
+EigenfunctionFitResult polynomialEigenfunctions(
     std::size_t dimension,std::vector<std::size_t> powers,
-    std::vector<std::complex<double>> values,
-    std::vector<std::complex<double>> eigenvalues,
-    std::vector<double> mean,std::vector<double> deviation) {
+    std::vector<std::complex<double>> values,Spectrum spectrum,
+    std::vector<double> mean,std::vector<double> deviation,std::optional<FunctionDomain> domain) {
+    const auto& eigenvalues=spectrum.values();
     if(!dimension||powers.empty()||powers.size()%dimension||eigenvalues.empty())
         throw std::invalid_argument("polynomial eigenfunctions need coordinates, monomials and eigenvalues");
     const auto features=powers.size()/dimension,modes=eigenvalues.size();
@@ -39,11 +39,8 @@ KoopmanSINDyResult KoopmanSINDyResult::fromCoefficients(
             [](auto value){return value==std::complex<double>{};}))
             throw std::invalid_argument("an identically zero polynomial is not an eigenfunction");
     }
-    KoopmanSINDyResult result;
-    result.stateDimension=dimension; result.featureCount=features;
-    result.exponents=std::move(powers); result.coefficients=std::move(values);
-    result.continuousEigenvalues=std::move(eigenvalues);
-    result.center=std::move(mean); result.scale=std::move(deviation);
-    return result;
+    return {FunctionExpansion({dimension,std::move(powers),std::move(mean),std::move(deviation)},std::move(values),
+                              domain?std::move(*domain):FunctionDomain::physicalState(dimension)),
+            std::move(spectrum),{}};
 }
 } // namespace dynsyslab::core

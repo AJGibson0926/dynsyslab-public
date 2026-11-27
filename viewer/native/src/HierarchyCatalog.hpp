@@ -15,12 +15,6 @@ void appendHierarchyCatalog(Catalog& catalog, const std::filesystem::path& proje
                             const std::vector<dynsyslab::core::ArchiveIndexEntry>*
                                 indexEntries = nullptr);
 
-void appendLegacyHierarchyCatalog(Catalog& catalog,
-                                  const std::filesystem::path& projectRoot,
-                                  const std::filesystem::path& archiveRoot,
-                                  std::set<std::string>& ownedSources,
-                                  const std::vector<dynsyslab::core::ArchiveIndexEntry>*
-                                      indexEntries = nullptr);
 
 [[nodiscard]] std::filesystem::path resolveHierarchySource(
     const std::filesystem::path& projectRoot,

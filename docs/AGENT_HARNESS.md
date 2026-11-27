@@ -22,12 +22,13 @@ Then run `dynsyslab-cli doctor`, `dynsyslab-cli capabilities`, and
 
 ## Working boundaries
 
-- Use `archiver.ArchiveGateway` for archive I/O. Do not add direct application
-  package I/O against `archives`.
+- Archive I/O goes through the native archive layer, the workflow, and
+  `dynsyslab-cli archive ...`. Do not add direct file I/O against `archives`.
 - Viewer is read-only relative to the primary archive. Its private artifacts
   live only in `viewer_compute_archive`.
-- Solver executes one solve request. Campaigner designs manifests and
-  JobManager schedules them; neither owns solution arrays.
+- Solver executes one solve request. Campaigns are encoded in job documents
+  and expanded by the compiled workflow; the native queue schedules them.
+  Neither owns solution arrays.
 - Do not delete or overwrite archived numerical results. Extension must use the
   archive extension path and preserve provenance.
 - The original RPE chaos-campaign archive is protected. It may be read for
@@ -52,5 +53,4 @@ file exists; obtain current user authorization.
   features, major for incompatible API changes.
 - Update `CHANGELOG.md`, run `python -m tester --all`, then commit and tag a
   release as `vX.Y.Z`.
-- Conversation snapshots are created with
-  `scripts/snapshot_chat_context.py`; see `docs/CHAT_SNAPSHOT_POLICY.md`.
+- Conversation snapshots follow `docs/CHAT_SNAPSHOT_POLICY.md`.

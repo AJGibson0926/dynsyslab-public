@@ -1,0 +1,39 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "experiment",
+  "label": "receiver sensor design",
+  "description": "Which receivers, pressure terms and readout recover a held-out free RPE ringdown best (docs/architecture/RECEIVER_ARRAYS.md). Training and held-out are two distinct free trajectories of the same bubble; give them with --param training=... --param held_out=...",
+  "parameters": {
+    "training": "<path to a free RPE trajectory archive>",
+    "held_out": "<path to a different free RPE trajectory archive>",
+    "neighbors": 8
+  },
+  "stages": [
+    {"id": "design", "sweep": {
+      "mode": "zip",
+      "variables": {
+        "terms": [["monopole_pressure"], ["monopole_pressure"], ["monopole_pressure", "spherical_near_field_pressure"],
+                  ["monopole_pressure", "spherical_near_field_pressure"], ["monopole_pressure"]],
+        "receivers": [[[0.005, 0, 0]], [[0.005, 0, 0], [0, 0.006, 0]], [[0.005, 0, 0], [0, 0.006, 0]],
+                      [[0.005, 0, 0], [0, 0.006, 0]], [[0.005, 0, 0], [0, 0.006, 0]]],
+        "contrast": [false, false, false, true, false],
+        "mode": ["neighbors", "neighbors", "neighbors", "neighbors", "linear"]
+      },
+      "order": ["terms", "receivers", "contrast", "mode"],
+      "stages": [
+        {"id": "train", "job": {"kind": "postprocess", "sources": ["${params.training}"], "methods": [{"name": "receiver_signals",
+          "settings": {"receivers": "${sweep.receivers}", "sound_speed": 1480, "stride": 40, "terms": "${sweep.terms}",
+                       "range_corrected": true, "contrast": "${sweep.contrast}"}}]}},
+        {"id": "held", "job": {"kind": "postprocess", "sources": ["${params.held_out}"], "methods": [{"name": "receiver_signals",
+          "settings": {"receivers": "${sweep.receivers}", "sound_speed": 1480, "stride": 40, "terms": "${sweep.terms}",
+                       "range_corrected": true, "contrast": "${sweep.contrast}"}}]}},
+        {"id": "readout", "job": {"kind": "postprocess", "sources": ["${held.archive}"], "methods": [{"name": "state_readout",
+          "settings": {"training": ["${train.archive}"], "mode": "${sweep.mode}", "neighbors": "${params.neighbors}",
+                       "scales": "shared", "equilibrium": [1, 0]}}]}},
+        {"id": "score", "job": {"kind": "postprocess", "sources": ["${readout.archive}"], "methods": [{"name": "ring_errors",
+          "settings": {"center": [1, 0], "role": "validation", "windows": {"early": [0, 5], "late": [76, 1e9]}}}]}}
+      ]}},
+    {"id": "best", "select": {"sweep": "design", "stage": "score", "metric": "validation.relative_rms_percent",
+                              "reduce": "mean", "goal": "minimize"}}
+  ]
+}

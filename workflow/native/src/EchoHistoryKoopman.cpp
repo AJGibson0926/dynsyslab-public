@@ -59,8 +59,8 @@ ObservationRun loadObservation(const std::filesystem::path& path,
         settings.at("observation_array").string("echo"),
         settings.at("observable").string("far_field_acoustic_echo"));
     requireUnforced(source, training);
-    if(source.dimension!=1)throw std::invalid_argument("Echo-history observations must be scalar");
-    auto time=source.time,observation=source.values;
+    if(source.dimension()!=1)throw std::invalid_argument("Echo-history observations must be scalar");
+    auto time=source.time(),observation=source.values();
     return {std::move(source),std::move(time),std::move(observation)};
 }
 
@@ -105,7 +105,7 @@ CoordinateRun fittedSuffix(const ObservationRun& run,
 
 
 std::vector<double> validationRow(
-    const dynsyslab::core::KoopmanValidationResult& result) {
+    const dynsyslab::core::EigenfunctionValidationResult& result) {
     const auto& statistics = result.modes.at(0).oneStep;
     return {statistics.absoluteRms, statistics.maximumAbsolute,
         statistics.relativeL2, statistics.medianPointwiseRelative,
@@ -199,15 +199,16 @@ std::filesystem::path runEchoHistoryKoopman(
         throw std::runtime_error("no admissible echo-history Koopman mode was found");
     const auto eigenfunction = dynsyslab::core::selectedPolynomialEigenfunction(
         edmd, candidates.front());
-    auto bank=dynsyslab::core::polynomialEigenfunctionsFromLegacy(eigenfunction);
+    const auto& bank=eigenfunction;
     auto coordinateContract=bank.functions.coordinates();coordinateContract.physicalStateDimension.reset();
     coordinateContract.providerIdentity=transform.identity();
     // Preserve the same coefficients/rates, while retaining their discrete origin.
     const auto functions=bank.functions.withCoordinates(coordinateContract);
-    const auto spectrum=dynsyslab::core::Spectrum::fromStoredRates({candidates.front().continuousEigenvalue},edmd.pairTime,
+    auto spectrum=dynsyslab::core::Spectrum::fromStoredRates({candidates.front().continuousEigenvalue},edmd.pairTime,
             dynsyslab::core::EigenvalueDomain::discreteTime);
+    spectrum.adoptEvidence(eigenfunction.spectrum);  // the pair's residual (one-step-successor-mean)
     dynsyslab::core::EigenfunctionFitDiagnostics diagnostics;
-    diagnostics.algorithm="pooled-polynomial-edmd";diagnostics.sampleCount=eigenfunction.samples;
+    diagnostics.algorithm="pooled-polynomial-edmd";diagnostics.sampleCount=eigenfunction.diagnostics.sampleCount;
     const auto physical=postprocess_detail::observationSystem(training.front().source);
     auto model=physical?dynsyslab::core::KoopmanModel(functions,spectrum,*physical,diagnostics):
         dynsyslab::core::KoopmanModel(functions,spectrum,positiveInteger(settings,"input_dimension",1),diagnostics);
@@ -248,16 +249,15 @@ std::filesystem::path runEchoHistoryKoopman(
     }
 
     dynsyslab::core::NpzRecord archive;
-    archive.arrays["eigenvalues"]=dynsyslab::core::NpyArray::fromComplex({1},model.spectrum().discreteMultipliers());
     archive.arrays["history_decimation"] = dynsyslab::core::NpyArray::fromDoubles(
         {1}, {static_cast<double>(decimation)});
     archive.arrays["history_sample_time"] = dynsyslab::core::NpyArray::fromDoubles(
         {1}, {edmdOptions.sampleTime});
     archive.arrays["edmd_operator"] = dynsyslab::core::NpyArray::fromDoubles(
-        {eigenfunction.featureCount, eigenfunction.featureCount},
+        {edmd.basis.featureCount(), edmd.basis.featureCount()},
         edmd.operatorMatrix);
     archive.arrays["edmd_feature_scale"] = dynsyslab::core::NpyArray::fromDoubles(
-        {eigenfunction.featureCount}, edmd.featureScale);
+        {edmd.basis.featureCount()}, edmd.featureScale);
     archive.arrays["training_states"] = dynsyslab::core::NpyArray::fromDoubles(
         {trainingTime.size(), retainedRank}, trainingCoordinates);
     archive.arrays["training_time"] = dynsyslab::core::NpyArray::fromDoubles(
@@ -300,9 +300,8 @@ std::filesystem::path runEchoHistoryKoopman(
     metadata["selected_mean_pair_residual"]=candidates.front().meanPairResidual;
     metadata["selected_minimum_phase_r_squared"]=candidates.front().minimumPhaseRSquared;
     dynsyslab::core::writeFrozenHistoryTransform(archive,transform);
-    archive=dynsyslab::core::makeKoopmanArchive(model,json::dump(metadata),std::move(archive.arrays));
-    return postprocess_detail::publish(archiveRoot, training.front().source,
-        "echo-history-koopman", label, std::move(archive));
+    return postprocess_detail::publishKrom(archiveRoot, training.front().source, model, "echo-history-koopman",
+        json::dump(metadata), std::move(archive.arrays));
 }
 
 }  // namespace dynsyslab::workflow

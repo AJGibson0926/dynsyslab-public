@@ -13,6 +13,12 @@
 #include <dynsyslab/core/TimeSeriesArchive.hpp>
 
 #include "TrainingPreflight.hpp"
+#include "SolveArchive.hpp"
+#include "SolveCheckpoint.hpp"
+#include "SolveContinuation.hpp"
+#include "SolveHistory.hpp"
+#include "SolveSettings.hpp"
+#include <dynsyslab/core/DimensionalSystem.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -22,6 +28,7 @@
 #include <random>
 #include <sstream>
 #include <stdexcept>
+#include <variant>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -98,42 +105,20 @@ dynsyslab::core::SystemConfiguration systemConfiguration(const json::Value& job)
     result.preset = source.at("preset").string();
     for (const auto& parameter : source.at("parameters").object())
         result.parameters.emplace(parameter.first, parameter.second.number());
-    return result;
-}
-
-dynsyslab::core::IntegrationOptions integrationOptions(const json::Value& job) {
-    const auto& time = job.at("time"); const auto& solver = job.at("solver");
-    dynsyslab::core::IntegrationOptions result;
-    result.initialTime = time.at("start").number();
-    result.finalTime = time.at("stop").number();
-    result.outputStep = time.at("output_step").number();
-    result.relativeTolerance = solver.at("rtol").number(1.0e-8);
-    result.absoluteTolerance = solver.at("atol").number(1.0e-10);
-    result.maximumStep = solver.at("max_step").number(0.0);
-    result.initialStep = solver.at("step_size").number(0.0);
-    const double maximumInternalSteps=solver.at("max_internal_steps").number(10000000.0);
-    if (maximumInternalSteps<1.0||std::floor(maximumInternalSteps)!=maximumInternalSteps)
-        throw std::invalid_argument("max_internal_steps must be a positive integer");
-    result.maximumInternalSteps=static_cast<std::size_t>(maximumInternalSteps);
-    // "on_failure": "error" (default) aborts the solve; "truncate" archives each trajectory up
-    // to its last computed sample and records why it stopped (integration_terminated).
-    const auto onFailure = solver.at("on_failure").string("error");
-    if (onFailure != "error" && onFailure != "truncate")
-        throw std::invalid_argument("solver.on_failure must be error or truncate");
-    result.truncateOnFailure = onFailure == "truncate";
-    std::string method = solver.at("method").string("RK45");
-    std::transform(method.begin(), method.end(), method.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    if (method == "euler") result.method = dynsyslab::core::IntegrationMethod::euler;
-    else if (method == "rk4") result.method = dynsyslab::core::IntegrationMethod::rk4;
-    else if (method == "rk45" || method == "dopri5")
-        result.method = dynsyslab::core::IntegrationMethod::dormandPrince45;
-    else if (method == "bdf" || method == "ode15s")
-        result.method = dynsyslab::core::IntegrationMethod::bdf;
-    else throw std::invalid_argument("native solver supports Euler, RK4, RK45, and BDF");
-    if (!(result.initialTime < result.finalTime) || result.outputStep <= 0.0)
-        throw std::invalid_argument("solve time requires start < stop and positive output step");
+    // system.driver: absent/"none" = no external driver; "preset" = the preset's recommended
+    // driver; {amplitude, frequency_hz, phase_rad} = an explicit sinusoidal driver.
+    const auto& driver = source.at("driver");
+    if (driver.string() == "preset") {
+        for (const auto& descriptor : dynsyslab::core::systemCatalog())
+            if (descriptor.identifier == result.identifier)
+                for (const auto& preset : descriptor.presets)
+                    if (preset.key == result.preset) result.driver = preset.driver;
+    } else if (std::holds_alternative<json::Value::Object>(driver.storage())) {
+        result.driver = {driver.at("amplitude").number(), driver.at("frequency_hz").number(),
+                         driver.at("phase_rad").number()};
+    } else if (!driver.isNull() && driver.string() != "none") {
+        throw std::invalid_argument("system.driver must be none, preset or {amplitude, frequency_hz, phase_rad}");
+    }
     return result;
 }
 
@@ -145,11 +130,11 @@ std::string metadata(const json::Value& job, const dynsyslab::core::ODESystem& s
     const auto& systemSpec = job.at("system");
     const auto coordinates = system.coordinates();
     std::ostringstream out;
-    out << "{\"format\":\"dynsyslab.solution/v1\",\"label\":\"" << escaped(label)
+    out << "{\"schema\":\"dynsyslab.solution/v1\",\"label\":\"" << escaped(label)
         << "\",\"system\":\"" << escaped(system.descriptor().identifier)
         << "\",\"system_label\":\"" << escaped(system.descriptor().label)
         << "\",\"system_preset\":\"" << escaped(systemSpec.at("preset").string())
-        << "\",\"time_series_format\":\"dynsyslab.TimeSeries/v2\""
+        << "\""
         << ",\"system_parameters\":{";
     bool firstParameter = true;
     for (const auto& parameter : systemSpec.at("parameters").object()) {
@@ -269,16 +254,20 @@ SolveResult executeSolve(const json::Value& job,
                                      const dynsyslab::core::ExecutionContext* execution) {
     if (execution) execution->report({"solve", "Preparing native solve", 0.0, 0, 1});
     auto configuration = systemConfiguration(job);
-    auto system = dynsyslab::core::createSystem(configuration);
-    const std::string requestedCoordinates = job.at("time").at("coordinate_system").string("automatic");
-    if (requestedCoordinates != "automatic" && requestedCoordinates != system->descriptor().preferredCoordinates)
-        throw std::invalid_argument("native coordinate conversion for this system is not available");
+    // time.coordinate_system: "automatic" integrates in the system's preferred coordinates;
+    // "dimensional" integrates a dimensionless model in physical units (seconds, SI state)
+    // when the system declares its scaling (DimensionalSystem.hpp).
+    auto system = dynsyslab::core::systemInCoordinates(
+        dynsyslab::core::createSystem(configuration),
+        job.at("time").at("coordinate_system").string("automatic"));
     const std::string controlKind = job.at("controller").at("kind").string("none");
     const bool controlled = controlKind != "none";
     const auto initialSet = resolveOdeInitialConditions(job);
     const std::size_t trajectoryCount = initialSet.trajectoryCount;
     const auto& initials = initialSet.values;
-    const auto options = integrationOptions(job);
+    const auto settings = detail::solveSettings(job);
+    auto options = settings.integration;
+    detail::requireContinuationStart(job, options.initialTime);
     const bool hasPreflight = job.at("preflight").at("enabled").boolean(false);
     const double solveProgressBase = hasPreflight ? 0.1 : 0.0;
     const auto preflight = detail::executeTrainingPreflight(
@@ -318,6 +307,24 @@ SolveResult executeSolve(const json::Value& job,
     }
     progress(progressPath, solveProgressBase, 0, trajectoryCount,
              "running", "Starting native integration");
+    // Checkpoints: the running trajectory's samples so far go to <archive>.partial.npz; an
+    // existing history.pause_file pauses the solve after that checkpoint.
+    std::vector<std::filesystem::path> partials;
+    detail::CheckpointClock checkpointClock(settings.checkpoints);
+    if (settings.checkpoints.enabled) {
+        options.checkpoint = [&](const dynsyslab::core::IntegrationCheckpoint& point) {
+            const auto decision = checkpointClock.at(point.trajectory, point.time);
+            if (!decision.write) return true;
+            const auto partial = detail::partialArchivePath(archivePath(point.trajectory, runTag));
+            json::Value::Object meta{{"schema", std::string("dynsyslab.solution-checkpoint/v1")},
+                {"source_job_label", runLabel}, {"trajectory_index", static_cast<double>(point.trajectory)},
+                {"time", point.time}, {"completed_samples", static_cast<double>(point.sample + 1)}};
+            detail::writePartialArchive(partial, point, json::dump(json::Value(std::move(meta))));
+            if (std::find(partials.begin(), partials.end(), partial) == partials.end())
+                partials.push_back(partial);
+            return !decision.pause;
+        };
+    }
     dynsyslab::core::ExecutionContext solveExecution;
     const dynsyslab::core::ExecutionContext* activeExecution = execution;
     if (execution && hasPreflight) {
@@ -333,7 +340,12 @@ SolveResult executeSolve(const json::Value& job,
         };
         activeExecution = &solveExecution;
     }
-    const auto solution = dynsyslab::core::integrateControlled(
+    dynsyslab::core::ControllerCallLog callLog;
+    detail::applyHistoryOptions(job, options, callLog, system->descriptor().stateDimension,
+                                control.policy ? control.policy.inputDimension : 1);
+    const auto solution = detail::integrateKeepingHistory(runLabel,
+        [&](std::size_t trajectory) { return archivePath(trajectory, runTag); }, [&] {
+        return dynsyslab::core::integrateControlled(
         *system, initials, trajectoryCount, options, control.policy,
         [&](const dynsyslab::core::IntegrationProgress& value) {
             const std::size_t completed = std::min(value.trajectory, trajectoryCount);
@@ -341,18 +353,27 @@ SolveResult executeSolve(const json::Value& job,
                 + (1.0 - solveProgressBase) * value.fraction;
             progress(progressPath, fraction, completed, trajectoryCount, "running",
                      "Integrating trajectory " + std::to_string(value.trajectory + 1));
-        }, activeExecution);
+        }, activeExecution); });
 
     SolveResult result;
     result.label = job.at("label").string("native-solve"); result.system = configuration.identifier;
-    result.trajectories = trajectoryCount; result.samplesPerTrajectory = solution.sampleCount;
+    result.trajectories = trajectoryCount;
+    result.samplesPerTrajectory = settings.resample.enabled ? settings.resample.times.size() : solution.sampleCount;
     result.acceptedSteps = solution.statistics.acceptedSteps;
     result.rejectedSteps = solution.statistics.rejectedSteps;
     const std::size_t dimension = solution.stateDimension;
     const auto& target = control.target;
     // A failure while publishing removes this run's finished archives: no result without a manifest.
+    std::vector<std::size_t> kept;
     try {
     for (std::size_t trajectory = 0; trajectory < trajectoryCount; ++trajectory) {
+        const std::size_t computed = trajectory < solution.completedSamples.size()
+            ? solution.completedSamples[trajectory] : solution.sampleCount;
+        const auto& reason = solution.terminationReasons[trajectory];
+        if (computed == 0 || (settings.failure == detail::FailurePolicy::reject
+                              && computed < solution.sampleCount && reason != "paused")) {
+            continue;  // rejected by a guard, or not started before a pause: see the outcome record
+        }
         const std::string itemLabel = result.label + (trajectoryCount == 1 ? "" :
             "-trajectory-" + std::to_string(trajectory));
         dynsyslab::core::NpzRecord archive;
@@ -392,34 +413,68 @@ SolveResult executeSolve(const json::Value& job,
             metadata(job, *system, itemLabel, initial, trajectory, control, hierarchy,
                      preflight));
         detail::appendAnalyticComparison(archive, *system, states, initial, options.initialTime, job);
-        if (trajectory < solution.completedSamples.size()
-            && solution.completedSamples[trajectory] < solution.sampleCount) {
-            // Truncated on failure: keep the computed rows of every output-grid array.
-            const std::size_t rows = solution.completedSamples[trajectory];
-            for (auto& [name, array] : archive.arrays) {
-                if (array.shape.empty() || array.shape[0] != solution.sampleCount) continue;
-                const std::size_t rowBytes = array.data.size() / array.shape[0];
-                array.data.resize(rows * rowBytes); array.shape[0] = rows;
-            }
-            auto meta = json::parse(archive.at("metadata_json").string());
-            meta.object()["integration_terminated"] = json::Value::Object{
-                {"completed_samples", static_cast<double>(rows)},
-                {"time", rows ? solution.time[rows - 1] : options.initialTime},
-                {"reason", solution.terminationReasons[trajectory]}};
-            archive.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(json::dump(meta));
+        auto meta = json::parse(archive.at("metadata_json").string());
+        auto& metaObject = meta.object();
+        metaObject["integration_method"] = dynsyslab::core::integrationMethodName(options.method);
+        metaObject["integration_failure_policy"] = std::string(detail::failurePolicyName(settings.failure));
+        metaObject["control_input_dimension"] = static_cast<double>(solution.inputDimension);
+        for (const auto& preset : system->descriptor().presets) {
+            if (preset.key != configuration.preset) continue;
+            if (!preset.reference.empty()) metaObject["preset_reference"] = preset.reference;
+            if (preset.processingJson != "{}") metaObject["preset_processing"] = json::parse(preset.processingJson);
         }
+        if (configuration.driver.amplitude != 0.0)
+            metaObject["system_driver"] = json::Value::Object{{"amplitude", configuration.driver.amplitude},
+                {"frequency_hz", configuration.driver.frequencyHz}, {"phase_rad", configuration.driver.phaseRadians}};
+        if (auto continued = detail::continuationMetadata(job, trajectory); !continued.object().empty())
+            metaObject["continuation"] = std::move(continued);
+        if (control.trajectoryMetadata) metaObject["input_design"] = control.trajectoryMetadata(trajectory);
+        if (settings.resample.enabled) {
+            // Post-solve resampling keeps every computed row as raw_<name>.
+            metaObject["interpolation"] = detail::resampleOutputArrays(
+                archive, solution.time, computed, settings.resample);
+            metaObject["interpolated"] = true;
+        } else if (computed < solution.sampleCount) {
+            detail::truncateOutputRows(archive, solution.sampleCount, computed);
+        }
+        if (computed < solution.sampleCount) {
+            const json::Value record = json::Value::Object{
+                {"completed_samples", static_cast<double>(computed)},
+                {"time", solution.time[computed - 1]}, {"reason", reason}};
+            metaObject[reason == "paused" ? "integration_paused" : "integration_terminated"] = record;
+        }
+        detail::appendControllerCalls(archive, metaObject, options, trajectory);
+        archive.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(json::dump(meta));
         const auto path = archivePath(trajectory, runTag);
         dynsyslab::core::writeNpzAtomicNew(path, archive); result.archives.push_back(path);
+        kept.push_back(trajectory);
     }
-    publishHierarchy(hierarchy, job, configuration, system->descriptor(),
-                     system->configuration(), initials, result.archives, controlled,
+    if (kept.empty()) throw std::runtime_error("every trajectory was rejected by the solve's guards");
+    // The manifest lists the archived trajectories; rejected ones are recorded beside it.
+    auto published = hierarchy;
+    std::vector<double> publishedInitials;
+    published.trajectoryIds.clear(); published.trajectoryClusters.clear();
+    for (const auto trajectory : kept) {
+        published.trajectoryIds.push_back(hierarchy.trajectoryIds[trajectory]);
+        published.trajectoryClusters.push_back(hierarchy.trajectoryClusters[trajectory]);
+        publishedInitials.insert(publishedInitials.end(),
+            initials.begin() + static_cast<std::ptrdiff_t>(trajectory * dimension),
+            initials.begin() + static_cast<std::ptrdiff_t>((trajectory + 1) * dimension));
+    }
+    publishHierarchy(published, job, configuration, system->descriptor(),
+                     system->configuration(), publishedInitials, result.archives, controlled,
                      static_cast<bool>(control.target), stamp);
+    detail::writeSolveOutcome(hierarchy.manifestPath, job, solution, result.archives, kept, initials);
     } catch (...) {
         for (const auto& written : result.archives) {
             std::error_code ignored; std::filesystem::remove(dynsyslab::core::extendedLengthPath(written), ignored);
         }
         result.archives.clear();
         throw;
+    }
+    for (const auto& partial : partials) {
+        std::error_code ignored;
+        std::filesystem::remove(dynsyslab::core::extendedLengthPath(partial), ignored);
     }
     result.hierarchyManifest = hierarchy.manifestPath;
     progress(progressPath, 1.0, trajectoryCount, trajectoryCount, "complete", "Native solve archived");

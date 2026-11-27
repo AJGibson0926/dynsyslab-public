@@ -1,0 +1,17 @@
+{
+  "schema": "dynsyslab.krom-training-plan-request/v1",
+  "label": "rpe-krom-training-expansion",
+  "description": "Canonical RPE training-domain expansion: every canonical target's envelope, 33 probes per target, r > 0 guard, and the RPE screening preset (r in [0.05, 15], |dr/dtau| <= 250, tau 0.25, DOP853). Run: dynsyslab-cli krom-training-plan <this file> after setting krom.",
+  "krom": "",
+  "system": {"name": "rpe", "preset": "air_water_20c", "parameters": {}},
+  "preset": "rpe_targets",
+  "probes_per_target": 33,
+  "points_per_axis": [9, 11],
+  "margin_fraction": 0.1,
+  "positive_axes": [0],
+  "time": {"stop": 25.0, "output_step": 0.001},
+  "solver": {"method": "DOP853", "rtol": 1e-9, "atol": 1e-12},
+  "screening": {"time_end": 0.25, "maximum_step": 0.002, "method": "DOP853", "rtol": 1e-9, "atol": 1e-12,
+                "state_minimum": [0.05, -1e300], "state_maximum": [15.0, 1e300],
+                "maximum_absolute_state": [1e300, 250.0], "require_all": true}
+}

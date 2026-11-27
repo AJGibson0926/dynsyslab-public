@@ -115,7 +115,8 @@ J evaluatePeriodicFeedback(const J& q,const math::PeriodicAtlas& atlas,const Per
     solver.initialTime=times.front();solver.finalTime=times.back();solver.truncateOnFailure=true;
     solver.outputStep=std::nextafter((times.back()-times.front())/(std::round(ticks)*substeps),std::numeric_limits<double>::infinity());
     const auto solution=core::integrateControlled(b.plant,b.initializePlant(reals(q.at("initial_parameters"))),1,solver,
-        {policy,core::ControlEvaluationMode::sampled,settings.sampleTime});
+        [&]{core::ControlPolicy held;held.value=policy;held.evaluation=core::ControlEvaluationMode::sampled;
+            held.sampleTime=settings.sampleTime;return held;}());
     const auto completed=solution.completedSamples.front();std::vector<double> truth,truthTime,plantInput;
     for(std::size_t j=0;j<completed;++j){truthTime.push_back(solution.time[j]);append(truth,b.decodePlant(solution.state(0,j)));plantInput.push_back(solution.control(0,j));}
     return O{{"schema","dynsyslab.periodic-result/v1"},{"method","online-shooting-feedback"},{"feedback_source",source},

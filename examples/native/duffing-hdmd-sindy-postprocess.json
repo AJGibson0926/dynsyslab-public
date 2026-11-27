@@ -1,6 +1,6 @@
 {
   "schema": "dynsyslab.compute-job/v1",
-  "kind": "pipeline",
+  "kind": "experiment",
   "label": "duffing-hdmd-sindy-example",
   "description": "H-DMD then SINDy on a Duffing double-well trajectory that the pipeline generates itself ('train').",
   "stages": [

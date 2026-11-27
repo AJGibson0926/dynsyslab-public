@@ -8,11 +8,14 @@ json::Value inspectKoopmanModel(const KoopmanModel &model) {
     for (std::size_t j = 0; j < s.size(); ++j) {
         const auto primary = s.values()[j];
         const auto rate = s.continuousRate(j);
+        const auto& residual = s.residual(j);
         spectrum.emplace_back(json::Value::Object{
             {"index", double(j)},
             {"value", json::Value::Array{primary.real(), primary.imag()}},
             {"continuous_rate",
-             rate ? json::Value(json::Value::Array{rate->real(), rate->imag()}) : json::Value{}}});
+             rate ? json::Value(json::Value::Array{rate->real(), rate->imag()}) : json::Value{}},
+            {"residual", residual ? json::Value(json::Value::Object{{"value", residual->value},
+                {"definition", residual->definition}, {"scope", residual->scope}}) : json::Value{}}});
     }
     for (const auto &entry : model.controlMaps())
         maps.emplace_back(
@@ -37,11 +40,14 @@ json::Value inspectKoopmanModel(const KoopmanModel &model) {
         {"spectrum", spectrum},
         {"input_maps", maps},
         {"dataset_references", koopmanDatasetReferencesJson(model.datasetReferences())},
-        {"spectral_data",spectralDataJson(model.spectralData())},
+        {"pseudospectrum", s.pseudospectrum() ? json::Value(json::Value::Object{
+            {"points", double(s.pseudospectrum()->grid.size())}, {"definition", s.pseudospectrum()->definition},
+            {"scope", s.pseudospectrum()->scope}}) : json::Value{}},
+        {"continuous_components", double(s.continuous().size())},
+        {"spectral_diagnostics", spectralDiagnosticsJson(model.spectralDiagnostics())},
         {"fit_evidence", json::Value::Object{{"algorithm", f.algorithm},
                                              {"sample_count", double(f.sampleCount)},
-                                             {"residual_definition", f.residualDefinition},
-                                             {"residuals_available", !f.residualRms.empty()}}},
+                                             {"residuals_available", s.hasResiduals()}}},
         {"validation", "Dataset pointers do not imply successful validation. Read the separate "
                        "validation result."}};
     if (model.physicalStateDimension())

@@ -57,7 +57,7 @@ int main() {
                 "Invented physical system/dimension");
         require(model.eigenfunctionCount() == 2 && model.realLiftedDimension() == 3,
                 "Wrong dimensions");
-        require(model.fitDiagnostics().residualRms.empty(),
+        require(!model.spectrum().hasResiduals(),
                 "Manual coefficients invented accuracy");
         require(model.evaluateFromCoordinates(q) == bank.evaluate(q),
                 "Runtime not using polynomial contract");
@@ -66,7 +66,6 @@ int main() {
         rejects([&] { (void)model.systemConfiguration(); });
         rejects([&] { (void)model.stateJacobianControlMap(q); });
         rejects([&] { (void)model.continuousGeneratorReal(); });
-        rejects([&] { (void)model.eigenfunctions(); });
         model.setDiscreteInputMap("edmdc", {{1., 2.}, 2, 1, .1, "regression"});
         require(!model.hasControlMap("edmdc"), "Discrete input map masquerades as continuous Bpsi");
         rejects([&] { model.setDiscreteInputMap("bad", {{1., 2.}, 2, 1, .2, {}}); });
@@ -105,21 +104,15 @@ int main() {
         require(validation.modes[0].oneStep.absoluteRms == 0 &&
                     !validation.modes[0].generatorAvailable,
                 "Discrete zero mode defect/generator availability");
-        const auto nonzero = bank.select({0});
-        const auto old = c::legacyPolynomialEigenfunctions(nonzero, fit.spectrum.extract({0}));
-        const auto modern = c::polynomialEigenfunctionsFromLegacy(old).functions;
-        require(modern.evaluate(q) == nonzero.evaluate(q), "Legacy polynomial evaluation changed");
-        require(c::gradientPolynomialEigenfunction(old, 0, q) == modern.gradient(0, q),
-                "Legacy gradient changed");
         // A sampled linear model with a zero eigenvalue exports natively, without log(0).
         c::DmdControlResult dmd;
         dmd.dimension = 2;
         dmd.rank = 2;
         dmd.deltaTime = .1;
         dmd.hasEigenfunctions = true;
-        dmd.discreteEigenvalues = {.8, 0.};
+        dmd.spectrum = c::Spectrum::fromDiscreteMultipliers({.8, 0.}, dmd.deltaTime);
         dmd.eigenfunctionCoefficients = {1., 0., 0., 1.};
-        require(dmd.eigenfunctionSet().spectrum.values() == dmd.discreteEigenvalues,
+        require(dmd.eigenfunctionSet().spectrum.values() == dmd.spectrum.values(),
                 "DMDc spectrum export");
         c::EdmdControlResult edmd;
         edmd.dictionary.dimension = 2;
@@ -129,7 +122,7 @@ int main() {
         edmd.dictionary.center = {0, 0};
         edmd.dictionary.scale = {1, 1};
         edmd.lifted = dmd;
-        require(edmd.eigenfunctionSet().spectrum.values() == dmd.discreteEigenvalues,
+        require(edmd.eigenfunctionSet().spectrum.values() == dmd.spectrum.values(),
                 "EDMDc spectrum export");
         c::FunctionDomain measured;
         measured.dimension = 1;
@@ -147,7 +140,7 @@ int main() {
         require(sindyFit.diagnostics.algorithm == "sindy-generator" &&
                     sindyFit.diagnostics.sampleCount == 100,
                 "SINDy fit evidence separated");
-        require(sindyFit.diagnostics.residualRms[0] < 1e-10, "SINDy wrapper changed mathematics");
+        require(sindyFit.spectrum.residual(0)->value < 1e-10, "SINDy wrapper changed mathematics");
         const auto high=c::Spectrum::fromStoredRates({{-.2,80}},.1,c::EigenvalueDomain::discreteTime);
         require(high.logarithmBranches()[0]==1,"Legacy high-frequency branch was not recovered");
         const auto highCopy=c::Spectrum::fromStoredDiscrete(high.values(),.1,

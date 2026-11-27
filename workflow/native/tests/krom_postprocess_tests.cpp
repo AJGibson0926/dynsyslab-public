@@ -20,12 +20,9 @@ void require(bool condition,const char* message) {
 }
 
 core::KoopmanModel parentModel() {
-    core::KoopmanSINDyResult fit;
-    fit.continuousEigenvalues={{-1.0,0.0},{-2.0,0.0}};
-    fit.coefficients={{1.0,0.0},{0.0,0.0},{0.0,0.0},{1.0,0.0}};
-    fit.exponents={1,0,0,1};
-    fit.center={0.0,0.0}; fit.scale={1.0,1.0};
-    fit.stateDimension=2; fit.dynamicalStateDimension=2; fit.featureCount=2;
+    auto fit=core::polynomialEigenfunctions(2,{1,0,0,1},
+        {{1.0,0.0},{0.0,0.0},{0.0,0.0},{1.0,0.0}},
+        core::Spectrum::fromContinuousRates({{-1.0,0.0},{-2.0,0.0}}),{0.0,0.0},{1.0,1.0});
     core::SystemConfiguration system;
     system.identifier="duffing"; system.preset="double_well_reference";
     core::KoopmanModel model(std::move(fit),std::move(system));
@@ -64,29 +61,32 @@ int main() {
         extra["training_time"]=core::NpyArray::fromDoubles({2},{0.0,0.1});
         extra["training_states"]=core::NpyArray::fromDoubles(
             {2,2},{1.0,0.0,0.9,-0.1});
-        extra["eigenfunction_values"]=core::NpyArray::fromComplex(
-            {2,2},{{1.0,0.0},{2.0,0.0},{0.9,0.0},{1.8,0.0}});
         extra["discrete_eigenvalues"]=core::NpyArray::fromComplex(
             {2},{{std::exp(-0.1),0.0},{std::exp(-0.2),0.0}});
         extra["eigenvalues"]=extra["discrete_eigenvalues"];
         extra["source_mode_indices"]=core::NpyArray::fromDoubles({2},{431.0,433.0});
-        core::savePolynomialKoopmanModel(source,parentModel(),
-            R"({"format":"dynsyslab.derived/v1","label":"Parent KROM","delta_t":0.1})",
+        auto parent=parentModel();
+        parent.setSamples({{0.0,0.1},{0,1},{{1.0,0.0},{2.0,0.0},{0.9,0.0},{1.8,0.0}},2});
+        extra.erase("training_time");  // the samples' own
+        core::saveKoopmanModel(source,parent,
+            R"({"schema":"dynsyslab.derived/v1","label":"Parent KROM","delta_t":0.1})",
             std::move(extra));
         const auto result=dynsyslab::workflow::executeJob(job(source),root/"archives",{});
         require(result.archives.size()==1,"KROM extraction did not publish one archive");
         const auto archive=core::readNpz(result.archives.front());
         require(archive.at("source_mode_indices").doubles()==std::vector<double>{433.0},
             "ancestral source mode identity was not archived");
-        require(archive.contains("training_time") && archive.contains("training_states")
-            && archive.at("eigenfunction_values").shape==std::vector<std::size_t>({2,1})
-            && archive.at("discrete_eigenvalues").shape==std::vector<std::size_t>({1}),
-            "extracted KROM did not retain independent display evidence");
+        const auto reference=core::json::parse(archive.metadataJson()).at("krom").at("parent");
+        require(!archive.contains("training_states") && !archive.contains("eigenfunction_values")
+            && !archive.contains("discrete_eigenvalues") && !archive.contains("expansion_coefficients")
+            && !archive.contains("control_constant_matrix") && reference.at("modes").array().size()==1
+            && std::filesystem::equivalent(std::filesystem::u8path(reference.at("path").string()),source),
+            "extracted KROM must reference its parent, not copy it");
         const auto metadata=json::parse(archive.metadataJson());
         require(metadata.at("independent_archive").boolean()
             && metadata.at("system_configuration").at("identifier").string()=="duffing",
             "extracted KROM is not self-contained");
-        const auto model=core::loadPolynomialKoopmanModel(result.archives.front());
+        const auto model=core::loadKoopmanModel(result.archives.front());
         require(model.liftedDimension()==1 && model.hasControlMap("constant")
             && model.hasControlMap("bilinear") && model.hasReconstruction("state"),
             "extracted KROM lost inherited objects");

@@ -17,7 +17,7 @@ namespace dynsyslab::workflow {
 // A resolved controller plus the target and provenance needed by the archive.
 // State-space LQR/SDRE and Koopman KLQR remain separate controller families.
 struct ControllerSetup {
-    dynsyslab::core::ScalarControlPolicy policy;
+    dynsyslab::core::ControlPolicy policy;
     dynsyslab::core::StateTargetFunction target; // optional state reference for plotting/provenance
     dynsyslab::core::StateTargetFunction observableTarget;
     std::vector<std::string> targetObservableNames;
@@ -30,6 +30,9 @@ struct ControllerSetup {
     json::Value modelBindingEvidence;
     // Optional clock-aligned diagnostics supplied by the composed runtime.
     std::function<void(std::size_t, core::NpzRecord&)> appendDiagnostics;
+    // Optional per-trajectory input-design record archived as metadata.input_design (for
+    // example the pair_id and polarity of a symmetric pulse pair).
+    std::function<json::Value(std::size_t)> trajectoryMetadata;
 
     explicit operator bool() const noexcept {
         return static_cast<bool>(policy);

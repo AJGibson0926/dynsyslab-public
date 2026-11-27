@@ -56,10 +56,10 @@ std::vector<Record> loadRecords(const c::KoopmanModel& model, const std::vector<
         const auto source = loadSource(path);
         const auto raw = c::readNpz(path);
         Record r; r.path = path.generic_u8string();
-        r.forced = datasetDynamics(source) == "forced" || !source.inputs.empty();
+        r.forced = datasetDynamics(source) == "forced" || !source.inputs().empty();
         r.readout = readoutMode == "list" ? readoutIndex[records.size()]
             : readoutMode == "all" || (readoutMode == "forced") == r.forced;
-        if (r.forced && source.inputDimension != 1)
+        if (r.forced && source.inputDimension() != 1)
             throw std::invalid_argument("mode_selection: forced records need one scalar input: " + r.path);
         // "time_window" selects unforced rows (readouts, invariance); "forced_time_window" forced rows (B_psi).
         const auto window = settings.at(r.forced ? "forced_time_window" : "time_window").array();
@@ -69,7 +69,7 @@ std::vector<Record> loadRecords(const c::KoopmanModel& model, const std::vector<
         std::optional<c::Observable> echo;
         const bool coordinatePool = coordinateKind && (raw.contains("source_states") || !analyticKind);
         if (coordinatePool) {
-            if (!raw.contains("source_states") || source.dimension != model.coordinateDimension())
+            if (!raw.contains("source_states") || source.dimension() != model.coordinateDimension())
                 throw std::invalid_argument("mode_selection: a coordinate pool needs coordinate records (coordinate_transform "
                     "archives with source_states) matching its coordinates: " + r.path);
             states = raw.at("source_states").doubles(); d = raw.at("source_states").shape.at(1);
@@ -83,29 +83,29 @@ std::vector<Record> loadRecords(const c::KoopmanModel& model, const std::vector<
             r.derivativeEvidence = meta.at("coordinate_transform_kind").string("") + " / "
                 + meta.at("derivative_evidence").string("none");
         } else {
-            states = source.values; d = source.dimension;
+            states = source.values(); d = source.dimension();
             echo = c::createSystem(systemConfiguration(source))->observableCatalog().at(options.measurement);
             r.derivativeEvidence = coordinateKind
                 ? "analytic coordinates of the recorded true state (offline; no numerical derivative)"
                 : "none (state pool)";
         }
         std::size_t kept = 0;
-        for (std::size_t k = 0; k < source.samples; ++k) if (source.time[k] >= t0 && source.time[k] <= t1) ++kept;
+        for (std::size_t k = 0; k < source.samples(); ++k) if (source.time()[k] >= t0 && source.time()[k] <= t1) ++kept;
         const std::size_t stride = std::max<std::size_t>(1, static_cast<std::size_t>(
             settings.at("sample_stride").number(std::ceil(double(kept) / maxSamples))));
-        const std::size_t inputRows = source.inputDimension ? source.inputs.size() / source.inputDimension : 0;
+        const std::size_t inputRows = source.inputDimension() ? source.inputs().size() / source.inputDimension() : 0;
         r.stateDimension = d; r.modes = model.liftedDimension();
         std::size_t seen = 0;
-        for (std::size_t k = 0; k < source.samples; ++k) {
-            if (source.time[k] < t0 || source.time[k] > t1) continue;
+        for (std::size_t k = 0; k < source.samples(); ++k) {
+            if (source.time()[k] < t0 || source.time()[k] > t1) continue;
             if (seen++ % stride) continue;
             const double* state = states.data() + k * d;
-            const auto psi = coordinatePool ? model.evaluateCoordinates(source.values.data() + k * source.dimension)
+            const auto psi = coordinatePool ? model.evaluateCoordinates(source.values().data() + k * source.dimension())
                                             : model.evaluate(state);
-            r.time.push_back(source.time[k]);
-            r.echo.push_back(coordinatePool ? source.values[k * source.dimension + echoColumn] : echo->evaluateReal(state).front());
+            r.time.push_back(source.time()[k]);
+            r.echo.push_back(coordinatePool ? source.values()[k * source.dimension() + echoColumn] : echo->evaluateReal(state).front());
             r.states.insert(r.states.end(), state, state + d);
-            r.input.push_back(k < inputRows ? source.inputs[k] : 0.0);
+            r.input.push_back(k < inputRows ? source.inputs()[k] : 0.0);
             r.psi.insert(r.psi.end(), psi.begin(), psi.end());
         }
         r.samples = r.time.size();

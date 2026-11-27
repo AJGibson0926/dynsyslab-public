@@ -4,6 +4,7 @@
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <optional>
 
 namespace echo_experiment {
 namespace {
@@ -14,7 +15,7 @@ FreeRun projectFree(const Measurements& m,const Frozen& f) {
     const auto all=core::projectHistory(m.echo,f.basis);
     FreeRun run;
     for(std::size_t k=0;k<all.windows;k+=f.stride) {
-        run.time.push_back(m.time[k+f.basis.delays-1]);
+        run.time.push_back(m.time[k+f.basis.rows-1]);
         run.coordinates.insert(run.coordinates.end(),all.coordinates.begin()+k*f.basis.rank,
             all.coordinates.begin()+(k+1)*f.basis.rank);
     }
@@ -29,14 +30,15 @@ FreeRun subset(const FreeRun& in,std::size_t rank,double start) {
     }
     return out;
 }
-Json validate(const core::KoopmanSINDyResult& p,const core::SystemConfiguration& config,
+Json validate(const core::EigenfunctionFitResult& p,const core::SystemConfiguration& config,
     const std::vector<FreeRun>& runs) {
     const core::KoopmanModel model(p,config);
     double one=0,four=0,pair=0;
     for(const auto& run:runs) {
-        const auto x=subset(run,p.stateDimension,5.0);
+        const auto dimension=p.functions.coordinates().dimension;
+        const auto x=subset(run,dimension,5.0);
         const auto v=core::validateKoopmanSemigroup(model,x.time,x.coordinates,
-            x.time.size(),p.stateDimension,{1.0,4.0});
+            x.time.size(),dimension,{1.0,4.0});
         pair+=v.modes[0].oneStep.relativeL2;
         one+=v.modes[0].horizons[0].statistics.relativeL2;
         four+=v.modes[0].horizons[1].statistics.relativeL2;
@@ -122,7 +124,7 @@ void eigenfunctionSweep(const core::SystemConfiguration& config,const std::files
         :Json("not applicable: a new basis needs its own polynomial");
     std::cout<<"original psi free validation "<<core::json::dump(oldCheck)<<std::endl;
     for(std::size_t rank:{2,4}) {
-        double best=1e300; core::KoopmanSINDyResult bestPolynomial; Json chosen;
+        double best=1e300; std::optional<core::EigenfunctionFitResult> bestPolynomial; Json chosen;
         for(double start:{5.0,15.0,35.0,50.0}) for(std::size_t degree:{1,3,5}) {
             if(rank==4 && degree==5) continue;
             std::vector<std::vector<double>> runs;
@@ -136,29 +138,29 @@ void eigenfunctionSweep(const core::SystemConfiguration& config,const std::files
             search.minimumContinuousImaginary=4.0;search.maximumContinuousImaginary=7.0;
             const auto modes=core::selectPolynomialEDMDModes(edmd,runs,search);
             for(const auto& mode:modes) {
-                auto p=core::selectedPolynomialEigenfunction(edmd,mode);
-                p.dynamicalStateDimension=2;
+                const auto p=core::selectedPolynomialEigenfunction(edmd,mode);
+                const auto rate=p.spectrum.continuousRates()[0];
                 const auto quality=validate(p,config,validation);
                 const double score=quality.at("one_tau").number()+quality.at("four_tau").number();
                 Json row=Json::Object{{"rank",double(rank)},{"degree",double(degree)},{"fit_start",start},
-                    {"lambda_re",p.continuousEigenvalues[0].real()},{"lambda_im",p.continuousEigenvalues[0].imag()},
+                    {"lambda_re",rate.real()},{"lambda_im",rate.imag()},
                     {"heldout_free",quality},{"selection_score",score}};
                 candidates.push_back(row);
                 if(score<best) {best=score;bestPolynomial=p;chosen=row;}
             }
         }
-        if(bestPolynomial.coefficients.empty()) throw std::runtime_error("no eligible free-only eigenfunction");
+        if(!bestPolynomial) throw std::runtime_error("no eligible free-only eigenfunction");
         selected.push_back(chosen);
         std::cout<<"selected "<<core::json::dump(chosen)<<std::endl;
-        Frozen f=original; f.polynomial=bestPolynomial;
-        f.multiplier=std::exp(f.polynomial.continuousEigenvalues[0]*f.controlStep);
+        Frozen f=original; f.polynomial=*bestPolynomial;
+        f.multiplier=std::exp(f.polynomial.spectrum.continuousRates()[0]*f.controlStep);
         const auto name="refit-xi"+std::to_string(rank);
         std::map<std::string,core::NpyArray> extra;
         for(const auto& key:{"history_delay_samples","history_sample_time","singular_values",
             "left_singular_vectors","observation_scale"}) extra[key]=archive.at(key);
         const auto output=folder/(name+".krom.npz");
-        if(!std::filesystem::exists(output)) core::savePolynomialKoopmanModel(output,
-            core::KoopmanModel(bestPolynomial,config),core::json::dump(Json::Object{
+        if(!std::filesystem::exists(output)) core::saveKoopmanModel(output,
+            core::KoopmanModel(*bestPolynomial,config),core::json::dump(Json::Object{
                 {"data_role","reduced_order_model"},{"method","echo-history-koopman"},
                 {"representation_training","unforced echo-only; frozen prior U; see eigenfunction-sweep.json"},
                 {"selection",chosen}}),extra);
@@ -179,7 +181,7 @@ void shortHistoryStudy(const core::SystemConfiguration& config,const std::filesy
     options.delays=101; options.rank=4; options.subspaceIterations=8;
     Frozen f=original; f.basis=core::fitPooledHankelBasis(freeEchoes,options);
     core::NpzRecord basis;
-    basis.arrays["history_delay_samples"]=core::NpyArray::fromDoubles({1},{double(f.basis.delays)});
+    basis.arrays["history_delay_samples"]=core::NpyArray::fromDoubles({1},{double(f.basis.rows)});
     basis.arrays["history_sample_time"]=core::NpyArray::fromDoubles({1},{f.sensorStep});
     basis.arrays["singular_values"]=core::NpyArray::fromDoubles({4},f.basis.singularValues);
     basis.arrays["cumulative_energy"]=core::NpyArray::fromDoubles({4},f.basis.cumulativeEnergy);

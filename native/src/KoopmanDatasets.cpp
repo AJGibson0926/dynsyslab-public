@@ -49,9 +49,9 @@ std::vector<KoopmanDatasetReference> koopmanDatasetReferencesFromMetadata(const 
         }
     }
     const auto method=meta.at("method").string();
-    const bool trainingMethod=method=="hdmd" || method=="hankel-dmd" || method=="hankel_dmd"
-        || method=="koopman-with-sindy" || method=="sindy" || method=="edmdc" || method=="dmdc"
-        || method=="echo-history-koopman" || method=="boundary-eigenfunctions";
+    // Methods that fit on their source series (the "method" an archive records is its step's name).
+    const bool trainingMethod=method=="hdmd" || method=="hankel_dmd" || method=="sindy" || method=="edmdc"
+        || method=="dmdc" || method=="echo_history_koopman" || method=="boundary_eigenfunctions";
     if(trainingMethod && !meta.at("source_archive").string().empty()
         && std::none_of(result.begin(),result.end(),[](const auto& ref){return ref.role=="training";}))
         mergeKoopmanDatasetReference(result,{meta.at("source_archive").string(),"training","unknown",{}});

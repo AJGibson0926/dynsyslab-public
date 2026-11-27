@@ -50,14 +50,14 @@ std::filesystem::path runEmpiricalObservability(const std::filesystem::path& sou
     const auto archive = readNpz(sourcePath);
     const auto system = createSystem(systemConfiguration(source));
     const std::size_t n = system->descriptor().stateDimension;
-    if (source.dimension != n) throw std::invalid_argument("empirical_observability: archive state dimension differs from the system");
+    if (source.dimension() != n) throw std::invalid_argument("empirical_observability: archive state dimension differs from the system");
     const auto name = s.at("observable").string("far_field_acoustic_echo");
     const auto catalog = system->observableCatalog();
     if (!catalog.contains(name)) throw std::invalid_argument("unknown observable for this system: " + name);
     const auto& observable = catalog.at(name);
     const std::size_t p = observable.outputDimension();
 
-    const auto& t = source.time;
+    const auto& t = source.time();
     const double start = s.at("start").number(t.front()), stop = s.at("stop").number(t.back());
     const std::size_t points = static_cast<std::size_t>(s.at("points").number(41));
     EmpiricalObservabilityOptions o;
@@ -76,10 +76,10 @@ std::filesystem::path runEmpiricalObservability(const std::filesystem::path& sou
         scale.assign(n, 0.0);
         std::vector<double> mean(n, 0.0); std::size_t count = 0;
         for (std::size_t k = 0; k < t.size(); ++k) if (t[k] >= start && t[k] <= stop) {
-            for (std::size_t i = 0; i < n; ++i) mean[i] += source.values[k * n + i]; ++count; }
+            for (std::size_t i = 0; i < n; ++i) mean[i] += source.values()[k * n + i]; ++count; }
         for (auto& m : mean) m /= double(std::max<std::size_t>(count, 1));
         for (std::size_t k = 0; k < t.size(); ++k) if (t[k] >= start && t[k] <= stop)
-            for (std::size_t i = 0; i < n; ++i) { const double d = source.values[k * n + i] - mean[i]; scale[i] += d * d; }
+            for (std::size_t i = 0; i < n; ++i) { const double d = source.values()[k * n + i] - mean[i]; scale[i] += d * d; }
         for (auto& v : scale) v = std::max(std::sqrt(v / double(std::max<std::size_t>(count, 1))), 1e-6);
     }
     if (scale.size() != n) throw std::invalid_argument("state_scale needs one value per state");
@@ -93,7 +93,7 @@ std::filesystem::path runEmpiricalObservability(const std::filesystem::path& sou
         const double target = points == 1 ? start : start + (stop - start) * double(m) / double(points - 1);
         const std::size_t k = std::size_t(std::lower_bound(t.begin(), t.end(), target) - t.begin());
         const std::size_t idx = std::min(k, t.size() - 1);
-        std::vector<double> x(source.values.begin() + idx * n, source.values.begin() + (idx + 1) * n);
+        std::vector<double> x(source.values().begin() + idx * n, source.values().begin() + (idx + 1) * n);
         const auto r = empiricalObservability(*system, observable, x, t[idx], o);
         times.push_back(t[idx]); states.insert(states.end(), x.begin(), x.end());
         gram.insert(gram.end(), r.gramian.begin(), r.gramian.end());
@@ -157,7 +157,7 @@ std::filesystem::path runEmpiricalObservability(const std::filesystem::path& sou
     auto serialized = json::dump(json::Value(details));
     out.arrays["metadata_json"] = NpyArray::fromString(metadata(source, "empirical-observability", label,
         serialized.substr(1, serialized.size() - 2)));
-    return publish(root, source, "empirical-observability", label, std::move(out));
+    return publishObject(root, source, dynsyslab::core::object_kind::report, "empirical-observability", std::move(out));
 }
 
 }  // namespace dynsyslab::workflow::postprocess_detail

@@ -10,7 +10,7 @@ namespace dynsyslab::core {
 EdmdControlResult loadEdmdControlModel(const std::filesystem::path& path) {
     const auto archive=readNpz(path);
     const auto metadata=json::parse(archive.metadataJson());
-    if(metadata.at("model_schema").string()!="dynsyslab.edmdc/v1")
+    if(metadata.at("schema").string()!="dynsyslab.edmdc/v1")
         throw std::invalid_argument("expected a dynsyslab.edmdc/v1 model");
     auto size=[&](const char* name) {
         const double value=metadata.at(name).number(-1);
@@ -40,18 +40,19 @@ EdmdControlResult loadEdmdControlModel(const std::filesystem::path& path) {
     fit.basis=array("projection_basis",{fit.dimension,fit.rank}).doubles();
     fit.operatorMatrix=array("operator",{fit.rank,fit.rank}).doubles();
     fit.controlMatrix=array("control_matrix",{fit.rank,fit.inputDimension}).doubles();
-    fit.discreteEigenvalues=array("eigenvalues",{fit.rank}).complexDoubles();
     fit.modes=array("modes",{fit.dimension,fit.rank}).complexDoubles();
     fit.exactModes=array("exact_modes",{fit.dimension,fit.rank}).complexDoubles();
     fit.deltaTime=metadata.at("delta_t").number();
     if(!std::isfinite(fit.deltaTime)||fit.deltaTime<=0)
         throw std::invalid_argument("EDMDc model requires positive dt");
+    fit.spectrum=Spectrum::fromDiscreteMultipliers(array("discrete_eigenvalues",{fit.rank}).complexDoubles(),fit.deltaTime);
     fit.hasEigenfunctions=metadata.at("eigenfunctions_available").boolean();
     if(fit.hasEigenfunctions) {
         fit.eigenfunctionCoefficients=array("eigenfunction_coefficients",{fit.rank,fit.dimension}).complexDoubles();
         fit.modalInputMatrix=array("modal_input_matrix",{fit.rank,fit.inputDimension}).complexDoubles();
     }
-    for(const auto* values:{&fit.discreteEigenvalues,&fit.modes,&fit.exactModes,
+    using Values=const std::vector<std::complex<double>>*;
+    for(const Values values:std::initializer_list<Values>{&fit.spectrum.values(),&fit.modes,&fit.exactModes,
         &fit.eigenfunctionCoefficients,&fit.modalInputMatrix})
         if(!std::all_of(values->begin(),values->end(),[](auto z){return std::isfinite(z.real())&&std::isfinite(z.imag());}))
             throw std::invalid_argument("nonfinite EDMDc spectrum or coefficients");

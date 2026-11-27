@@ -1,4 +1,5 @@
 #include <optional>
+#include <dynsyslab/core/SpectrumArchive.hpp>
 #include <dynsyslab/numerics/LeastSquares.hpp>
 #include "ExpansionArchive.hpp"
 #include "PostprocessInternal.hpp"
@@ -20,17 +21,13 @@ std::filesystem::path runDmd(
     options.singularValueTolerance = settings.at("svd_tolerance").number();
     options.exactModes = settings.at("exact").boolean(true);
     const auto result = dynsyslab::core::dynamicModeDecomposition(
-        source.values, source.samples, source.dimension, uniformDeltaTime(source), options);
+        source.values(), source.samples(), source.dimension(), uniformDeltaTime(source), options);
     dynsyslab::core::NpzRecord archive;
-    archive.arrays["eigenvalues"] = dynsyslab::core::NpyArray::fromComplex(
-        {result.rank}, result.discreteEigenvalues);
-    archive.arrays["discrete_eigenvalues"] = archive.arrays["eigenvalues"];
-    archive.arrays["continuous_eigenvalues"] = dynsyslab::core::NpyArray::fromComplex(
-        {result.rank}, result.continuousEigenvalues);
+    dynsyslab::core::writeSpectrumArrays(archive, result.spectrum);
     archive.arrays["modes"] = dynsyslab::core::NpyArray::fromComplex(
-        {source.dimension, result.rank}, result.modes);
+        {source.dimension(), result.rank}, result.modes);
     archive.arrays["eigenfunction_values"] = dynsyslab::core::NpyArray::fromComplex(
-        {source.samples, result.rank}, result.coordinates);
+        {source.samples(), result.rank}, result.coordinates);
     archive.arrays["operator"] = dynsyslab::core::NpyArray::fromComplex(
         {result.rank, result.rank}, result.operatorMatrix);
     const auto meta = metadata(source, "dmd", label,
@@ -39,7 +36,7 @@ std::filesystem::path runDmd(
             + std::to_string(result.rank));
     archive.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(meta);
     {   // psi = Phi^+ x: the eigenfunctions as a linear expansion in the state coordinates.
-        const std::size_t n = source.dimension, r = result.rank;
+        const std::size_t n = source.dimension(), r = result.rank;
         std::vector<std::complex<double>> identity(n * n);
         for (std::size_t i = 0; i < n; ++i) identity[i * n + i] = 1.0;
         numerics::LeastSquaresOptions solve;
@@ -53,19 +50,20 @@ std::filesystem::path runDmd(
         try { system = systemConfiguration(source); } catch (const std::exception&) {}
         std::string reason;
         try {
-            dynsyslab::core::EigenfunctionFitResult bank{dynsyslab::core::FunctionExpansion(std::move(linear), inverse, snapshotDomain(source.metadataJson, n, system)), dynsyslab::core::Spectrum::fromStoredRates(result.continuousEigenvalues, result.deltaTime,
-                    dynsyslab::core::EigenvalueDomain::discreteTime), {}};
+            dynsyslab::core::EigenfunctionFitResult bank{dynsyslab::core::FunctionExpansion(std::move(linear), inverse, snapshotDomain(source.metadataJson, n, system)), result.spectrum, {}};
             // DMD (Schmid, J. Fluid Mech. 656, 2010; Tu et al., J. Comput. Dyn. 1, 2014) publishes its
             // eigenfunctions as a data object: psi = Phi^+ x as an expansion; modes and operator are properties.
             const dynsyslab::core::DataOrigin origin{"dmd", settings, {dataReference(source.path, "time_series")}};
-            if (!writeExpansionEigenfunctions(archive, bank, origin, source.time, result.coordinates,
-                                              timeSeriesRecord(source).channels, meta, reason))
-                archive.arrays["expansion_contract_skipped"] = dynsyslab::core::NpyArray::fromString(reason);
+            if (writeExpansionKrom(archive, bank, origin, source.time(), result.coordinates,
+                                   source.record.channels, meta, reason))
+                return publishObject(root, source, dynsyslab::core::object_kind::krom, "koopman-dmd", std::move(archive));
         } catch (const std::exception& error) {
-            archive.arrays["expansion_contract_skipped"] = dynsyslab::core::NpyArray::fromString(error.what());
+            reason = error.what();
         }
+        // No K-ROM (psi = Phi^+ x could not be formed): the spectrum, modes and operator as a report.
+        archive.arrays["expansion_contract_skipped"] = dynsyslab::core::NpyArray::fromString(reason);
     }
-    return publish(root, source, "koopman-dmd", label, std::move(archive));
+    return publishObject(root, source, dynsyslab::core::object_kind::report, "koopman-dmd", std::move(archive));
 }
 
 std::filesystem::path runExtensionPostprocess(

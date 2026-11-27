@@ -61,7 +61,9 @@ struct HankelBasisOptions {
 };
 
 // Leading left singular vectors of X by randomized subspace iteration on X X^T.
-// Signs are fixed so each vector's largest-magnitude entry is positive.
+// Signs are fixed so each vector's largest-magnitude entry is positive. The one Hankel basis type:
+// a pooled history basis (HistoryObservation.hpp) is the same with rows = delays, columns = the
+// training windows, the number of training trajectories and the observation's fitting scale.
 struct HankelLeftBasis {
     std::vector<double> leftSingularVectors; // rows x rank, row-major
     std::vector<double> singularValues;
@@ -70,6 +72,8 @@ struct HankelLeftBasis {
     std::size_t rows{};
     std::size_t rank{};
     std::size_t columns{};
+    std::size_t trajectories{1};              // independent runs the windows came from
+    double observationScale{1.0};             // fitting normalization of the observation (not reapplied)
 };
 
 [[nodiscard]] HankelLeftBasis fitHankelLeftBasis(const HankelOperator& hankel,

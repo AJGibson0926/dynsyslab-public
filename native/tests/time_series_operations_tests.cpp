@@ -75,8 +75,8 @@ int main() {
         require(twice.componentCount() == 2 * 3 * 2 && twice.sampleCount() == 17, "history of histories");
 
         // The FFT history projection is the window history followed by (U^T h)/sigma.
-        c::PooledHankelBasis basis;
-        basis.delays = 4;
+        c::HankelLeftBasis basis;
+        basis.rows = 4;
         basis.rank = 2;
         basis.leftSingularVectors = {0.5, 0.5, 0.5, -0.5, 0.5, 0.5, 0.5, -0.5};  // delay x rank
         basis.singularValues = {2.0, 1.0};

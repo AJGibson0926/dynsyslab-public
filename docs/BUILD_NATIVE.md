@@ -109,9 +109,8 @@ python -m dynsyslab_client run job.json --archive-root C:\data\dynsyslab-archive
 Programmatic use through `dynsyslab_client.NativeWorkflow` loads
 `dynsyslab_workflow_c_api` with `ctypes`; it does not run a second Python solver.
 The adapter exposes progress callbacks, cancellation, thread limits, and memory
-limits. Historical source-reference packages and their NumPy/SciPy dependencies
-are excluded from the wheel; maintainers install
-`requirements/reference-parity.txt` only for an explicit migration comparison.
+limits. The wheel contains only `dynsyslab_client` and has no NumPy or SciPy
+dependency.
 
 `validate`, `plan`, and `run` use the compiled registries by default. Native
 plans report the Batch/System/Cluster/Trajectory counts, sample count, coordinate
@@ -119,8 +118,8 @@ system, and peak/total solution-storage estimates without writing an archive.
 This means new compiled controllers or post-processors are not blocked by an
 older Python-side allow-list.
 
-Source-checkout compatibility imports continue to delegate to that same
-service. They are not part of the distributed Python client.
+The source-checkout `python -m dynsyslab` front door delegates to that same
+service. It is not part of the distributed Python client.
 
 ## Release gates
 

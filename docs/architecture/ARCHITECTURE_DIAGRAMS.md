@@ -69,7 +69,7 @@ use `label` to name the edge.
 |---|---|
 | `library-layers` | The native libraries and what each owns, left to right in dependency order: foundation (functions, domains, time series, systems), eigenfunctions, Koopman and observation, workflow jobs, Viewer. |
 | `object-model` | Observable, Eigenfunction, Eigenvalue and Spectrum; FunctionExpansion and FunctionInterpolation behind FunctionRepresentation; FunctionDomain with its one optional state map. |
-| `pipeline-overview` | The RPE control run on (r, ṙ) eigenfunctions (`examples/native/pipelines/rpe-viscous-klqr-multisine/base-r.json`). |
+| `pipeline-overview` | The RPE control run on (r, ṙ) eigenfunctions (`examples/native/experiments/rpe-viscous-klqr-multisine/base-r.json`). |
 | `module-domain-field` | The `domain_field` and `animation` jobs, the grid-field archive, Viewer and the HTML player. |
 | `module-time-series` | TimeSeries operations and the window history built from crops. |
 | `module-hdmd`, `module-sindy`, `module-krom-extract`, `module-controller`, `module-estimator` | Those modules' internal steps. |

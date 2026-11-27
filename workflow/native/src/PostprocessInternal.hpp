@@ -5,6 +5,8 @@
 #include <dynsyslab/core/Json.hpp>
 #include <dynsyslab/core/System.hpp>
 #include <dynsyslab/core/SINDy.hpp>
+#include <dynsyslab/core/KoopmanModel.hpp>
+#include <dynsyslab/core/TimeSeriesRecord.hpp>
 #include "ObjectPublishing.hpp"
 
 #include <filesystem>
@@ -15,16 +17,35 @@ namespace dynsyslab::workflow::postprocess_detail {
 
 namespace json = dynsyslab::core::json;
 
+// An opened archive: where it is, its metadata, and its samples as a time-series record (series,
+// inputs, channels, origin). The accessors read the record's owned buffers.
 struct SourceData {
     std::filesystem::path path;
-    std::vector<double> time;
-    std::vector<double> values;
-    std::size_t samples{};
-    std::size_t dimension{};
-    std::vector<double> inputs;
-    std::size_t inputDimension{};
     std::string metadataJson;
+    dynsyslab::core::TimeSeriesRecord record;
+
+    [[nodiscard]] const std::vector<double>& time() const { return record.series.timeVector(); }
+    [[nodiscard]] const std::vector<double>& values() const { return record.series.valueVector(); }
+    [[nodiscard]] std::size_t samples() const noexcept { return record.series.sampleCount(); }
+    [[nodiscard]] std::size_t dimension() const noexcept { return record.series.componentCount(); }
+    // Sample x input, or interval x input when record.inputsOnIntervals; empty without inputs.
+    [[nodiscard]] const std::vector<double>& inputs() const {
+        static const std::vector<double> none;
+        return record.inputs ? record.inputs->valueVector() : none;
+    }
+    [[nodiscard]] std::size_t inputDimension() const noexcept {
+        return record.inputs ? record.inputs->componentCount() : 0;
+    }
 };
+
+// A copy of `like` (path, metadata, inputs, origin; channels when the width is unchanged) holding
+// the given samples instead.
+SourceData withSeries(const SourceData& like, std::vector<double> time, std::vector<double> values,
+                      std::size_t dimension);
+// The input-history series for a record with `samples` samples on `time`: one row per sample, or
+// per interval (times of interval starts) when `onIntervals`.
+dynsyslab::core::TimeSeries inputSeries(const std::vector<double>& time, std::vector<double> inputs,
+                                        std::size_t inputDimension, bool onIntervals);
 
 std::string escaped(const std::string& value);
 std::string timestamp();
@@ -33,16 +54,29 @@ std::string safeArrayKey(std::string value);
 void atomicProgress(const std::filesystem::path& path, double fraction,
                     std::size_t complete, std::size_t planned,
                     const std::string& message);
-SourceData loadSource(const std::filesystem::path& path);
+// A record in the integration (dimensionless) coordinates; with `archiveCoordinates`, as stored
+// (dimensional values kept, metadata "analysis_coordinates": "archive"; a step's setting
+// "analysis_coordinates": "archive" asks for it).
+SourceData loadSource(const std::filesystem::path& path, bool archiveCoordinates = false);
 void normalizeSourceCoordinates(SourceData& source);
 // True when the record is stored in dimensional units and loadSource rescales it.
 bool storedInDimensionalUnits(const json::Value& metadata);
 double uniformDeltaTime(const SourceData& source);
 std::string metadata(const SourceData& source, const std::string& method,
                      const std::string& label, const std::string& details);
-std::filesystem::path publish(const std::filesystem::path& root,
-    const SourceData& source, const std::string& method, const std::string& label,
-    dynsyslab::core::NpzRecord archive);
+// Publishes `model` as a krom (core/KoopmanArchive.hpp) under <root>/objects/krom, named after its
+// source and `method`, stamped with the step's provenance; a model loaded from a krom is published as
+// its child (only what the step added). `metadataJson` and `extraArrays` hold the method's properties.
+std::filesystem::path publishKrom(const std::filesystem::path& root, const SourceData& source,
+                                  const dynsyslab::core::KoopmanModel& model, const std::string& method,
+                                  const std::string& metadataJson,
+                                  std::map<std::string, dynsyslab::core::NpyArray> extraArrays = {},
+                                  const std::vector<dynsyslab::core::ChannelDescriptor>& inputChannels = {});
+// Writes `archive` as a data object of `kind` (core::object_kind) under <root>/objects/<kind>, named
+// after its source and `method`, with the data_object envelope.
+std::filesystem::path publishObject(const std::filesystem::path& root, const SourceData& source,
+                                    const std::string& kind, const std::string& method,
+                                    dynsyslab::core::NpzRecord archive);
 std::string jsonArray(const std::vector<double>& values);
 std::string jsonStringArray(const std::vector<std::string>& values);
 dynsyslab::core::SystemConfiguration systemConfiguration(const SourceData& source);
@@ -67,6 +101,9 @@ std::filesystem::path runDynamicsValidation(const SourceData& source,
     const json::Value& settings,const std::filesystem::path& root,const std::string& label);
 std::filesystem::path runObservableReconstruction(const std::filesystem::path& source,
     const json::Value& settings,const std::filesystem::path& root,const std::string& label);
+// H-DMD pooled over the source and settings "additional_sources" (HdmdPooled.cpp).
+std::filesystem::path runPooledHdmd(const SourceData& source, const json::Value& settings,
+                                    const std::filesystem::path& root, const std::string& label);
 std::filesystem::path runHdmd(const SourceData& source, const json::Value& settings,
     const std::filesystem::path& root, const std::string& label);
 std::filesystem::path runDmd(
@@ -135,6 +172,8 @@ DYNSYSLAB_POOLED_METHOD(runReferenceSignal);
 DYNSYSLAB_POOLED_METHOD(runControlScore);
 DYNSYSLAB_POOLED_METHOD(runIoDelayModel);
 DYNSYSLAB_POOLED_METHOD(runFigureDataset);
+DYNSYSLAB_POOLED_METHOD(runBifurcationPoints);  // BifurcationPoints.cpp
+DYNSYSLAB_POOLED_METHOD(runObservableSpectrumComparison);  // ObservableSpectrumComparison.cpp
 #undef DYNSYSLAB_POOLED_METHOD
 std::filesystem::path runKromExtraction(
     const std::filesystem::path& source, const json::Value& settings,

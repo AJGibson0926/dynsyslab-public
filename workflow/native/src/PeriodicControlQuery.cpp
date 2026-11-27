@@ -51,7 +51,7 @@ J evaluatePeriodicControlQuery(const J& q,const math::PeriodicAtlas& atlas){
         const auto b=physical->inputMatrix(x.data());if(b.size()!=2)throw std::invalid_argument("One scalar physical input required");return std::array<double,2>{b[0],b[1]};},settings);
     const auto law=input(q.at("input"));const double sampleTime=option(q,"control_sample_time",0);
     if(sampleTime<0)throw std::invalid_argument("Nonnegative control sample time required");
-    auto policy=[&](core::ScalarControlLaw f){return core::ScalarControlPolicy{std::move(f),sampleTime>0?core::ControlEvaluationMode::sampled:core::ControlEvaluationMode::continuousRhs,sampleTime};};
+    auto policy=[&](core::ScalarControlLaw f){core::ControlPolicy result;result.value=std::move(f);result.evaluation=sampleTime>0?core::ControlEvaluationMode::sampled:core::ControlEvaluationMode::continuousRhs;result.sampleTime=sampleTime;return result;};
     core::IntegrationOptions solver;solver.initialTime=option(q,"initial_time",0);solver.finalTime=num(q.at("final_time"));
     solver.outputStep=num(q.at("output_step"));solver.relativeTolerance=option(q,"relative_tolerance",1e-9);
     solver.absoluteTolerance=option(q,"absolute_tolerance",1e-11);solver.maximumStep=option(q,"maximum_step",0);

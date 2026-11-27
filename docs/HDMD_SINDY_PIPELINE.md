@@ -1,13 +1,14 @@
 # H-DMD to SINDy pipeline contract and performance
 
-## Standard trajectory contract
+**Status:** the canonical pipeline is the native `hdmd` stage followed by a
+`sindy` stage that consumes its spectrum; see
+`examples/native/duffing-hdmd-sindy-postprocess.json` and run it with
+`dynsyslab-cli plan|run`. The Python implementation this document originally
+described has been removed. Its contract and measurements are kept below as a
+reference record; passages naming Python classes, Python CLI flags, SciPy, or
+BLAS environments are not current instructions.
 
-`PostprocessingPipeline.preset("trajectory-hdmd-sindy")` is the standard
-pipeline. The historical `processor` class name remains an alias. It is
-also exposed by `dynsyslab-postprocess describe|plan|run`.
-Its defaults come from the immutable named `TRAJECTORY_HDMD_SINDY_POLICY`;
-each constructed pipeline receives independent setting copies and records the
-canonical policy name in workflow and attachment provenance.
+## Standard trajectory contract
 
 H-DMD uses one scalar observable (state index zero), a direct one-sample-shifted
 pair of 20,000-by-2,000 Hankel matrices, an absolute singular-value cutoff of
@@ -272,14 +273,6 @@ moving only SVD to the GPU and immediately copying its largest factors back to
 the CPU. It remains explicit-only and supports `gesvd` only. The versioned
 benchmark contains comparable `scipy-hdmd-full-3000x256` and
 `torch-cuda-hdmd-full-3000x256` cases when CUDA is available.
-
-The generic `hankel_dmd`, `hankel_dmd_archive`, and GUI H-DMD actions remain
-general-purpose entry points; they do not silently imply the complete scalar
-trajectory H-DMD-to-SINDy contract. Use
-`PostprocessingPipeline.preset("trajectory-hdmd-sindy")` or
-`dynsyslab-postprocess` for the
-standard combined pipeline. Its defaults are executable policy, covered by
-contract tests and visible without computation through `describe` and `plan`.
 
 Primary documentation:
 

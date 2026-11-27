@@ -144,6 +144,8 @@ std::vector<std::string> viewerFigureArguments(const json::Value& job, const std
     textOption(args, figure, "x_label", "--x-label");
     textOption(args, figure, "value_label", "--value-label");
     textOption(args, figure, "time_label", "--time-label");
+    textOption(args, figure, "time_key", "--time-key");
+    textOption(args, figure, "scale", "--scale");
     textOption(args, figure, "title", "--title");
     numberOption(args, figure, "columns", "--columns");
     if (!figure.at("right_axis").isNull()) {  // plotted = offset + scale * right-axis value
@@ -191,7 +193,12 @@ RunResult executeViewerFigure(const json::Value& job, const std::filesystem::pat
         resolved.at("figure").at("x_range") = json::Value(json::Value::Array{axis.at("x_min"), axis.at("x_max")});
         resolved.at("figure").at("y_range") = json::Value(json::Value::Array{axis.at("y_min"), axis.at("y_max")});
     }
-    (void)runViewer(viewerFigureArguments(resolved, output));
+    const auto scratch = directory / std::filesystem::u8path(name + ".curves.npz");
+    if (hasCurveSources(resolved)) resolved = assembleCurveSources(resolved, scratch);
+    resolved = fitOrdinate(resolved);
+    try { (void)runViewer(viewerFigureArguments(resolved, output)); }
+    catch (...) { std::filesystem::remove(scratch, ignored); throw; }
+    std::filesystem::remove(scratch, ignored);
     if (!std::filesystem::is_regular_file(output)) throw std::runtime_error("viewer_figure: no PNG was written");
     return {"viewer_figure", L"Figure written:\r\n" + output.wstring(), {output}, {}, {"viewer_figure"}};
 }

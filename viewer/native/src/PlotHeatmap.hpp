@@ -3,5 +3,6 @@
 #include "dynsyslab_viewer/Theme.hpp"
 namespace dsl {
 void drawScalarHeatmap(Gdiplus::Graphics&, const Trace&, const PlotTransform&, const ValueScale& = {});
-void drawScalarColorbar(Gdiplus::Graphics&, const Figure&, const Gdiplus::RectF&, const theme::Fonts&);
+// The value range a heat map's colours span (fixed limits, else its finite values).
+std::pair<double,double> heatmapColorRange(const Trace&, const ValueScale& = {});
 }

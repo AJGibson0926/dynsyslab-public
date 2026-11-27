@@ -64,8 +64,10 @@ A measure can be associated with an observable but is not a pointwise time signa
 
 For changes, run the focused native spectral test and Python C-ABI/CLI/workflow
 tests documented in `SPECTRAL_KROM.md`, then the affected suite and architecture
-audit. Optional pinned MATLAB parity compares mpEDMD and Rigged DMD without making
-MATLAB a runtime dependency. Source pins, acquisition helper and the reference
-fixture live in `tools/experiments/miscellaneous_computes/references/colbrook`.
+audit. `dynsyslab_colbrook_reference_tests` compares native mpEDMD and Rigged DMD
+with frozen output of the pinned upstream routines and with the exact rotation answer.
+Source pins and the acquisition helper were in
+`docs/provenance/colbrook/`;
+the license notices are in `docs/provenance/`.
 Keep upstream license notices and distinguish downloaded reference code from
 ported, validated native functionality.

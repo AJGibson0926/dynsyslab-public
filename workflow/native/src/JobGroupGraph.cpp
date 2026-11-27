@@ -66,7 +66,7 @@ std::string siblingToken(const Scope& scope, const std::string& id, const std::s
 }
 
 // Replaces ${inputs.X}, ${params.X} and, when siblings are in scope, ${id.outputs.X} and the
-// pipeline-style ${id.archive} forms. A whole-string reference keeps the value's JSON type.
+// experiment-style ${id.archive} forms. A whole-string reference keeps the value's JSON type.
 json::Value bind(const json::Value& value, const Scope& scope, bool keepUnknownParameters) {
     static const std::regex pattern(
         R"(\$\{(?:(inputs|params)\.([A-Za-z0-9_.-]+)|([A-Za-z0-9][A-Za-z0-9_-]*)\.(outputs\.[A-Za-z0-9_-]+|archive|archives\[[0-9]+\]|output:[A-Za-z0-9_]+))\})");
@@ -248,9 +248,9 @@ ChildOutputs loadNode(const json::Value& job, const std::filesystem::path& file,
     if (job.at("schema").string("dynsyslab.compute-job/v1") != "dynsyslab.compute-job/v1")
         throw std::invalid_argument("job group: " + file.u8string() + " is not a dynsyslab.compute-job/v1 job");
     if (job.at("kind").string() == "job_group") return loadGroup(job, file, id, scope, stack, keep, graph);
-    const bool pipeline = job.at("kind").string() == "pipeline";
+    const bool experiment = job.at("kind").string() == "experiment";
     Scope leafScope{scope.inputs, scope.parameters, nullptr};
-    auto bound = bind(job, leafScope, pipeline);
+    auto bound = bind(job, leafScope, experiment);
     if (bound.at("schema").isNull()) bound.at("schema") = json::Value("dynsyslab.compute-job/v1");
     if (bound.at("label").isNull()) bound.at("label") = json::Value(id);
     JobGroupLeaf leaf;

@@ -1,3 +1,4 @@
+#include "LinearAnalysisModal.hpp"
 #include "PostprocessInternal.hpp"
 #include <dynsyslab/core/ModalObservability.hpp>
 #include <dynsyslab/core/EigenfunctionObservability.hpp>
@@ -82,7 +83,7 @@ std::filesystem::path runModalObservabilityMatrix(const std::filesystem::path& s
     auto serialized=json::dump(json::Value(details));
     out.arrays["metadata_json"]=NpyArray::fromString(metadata(source,"linear-analysis",label,
         serialized.substr(1,serialized.size()-2)));
-    return publish(root,source,"linear-analysis",label,std::move(out));
+    return publishObject(root, source, dynsyslab::core::object_kind::report, "linear-analysis",std::move(out));
 }
 
 // analysis_method "eigenfunction-observability": how well each eigenfunction can be determined
@@ -124,7 +125,7 @@ std::filesystem::path runEigenfunctionObservability(const std::filesystem::path&
     auto serialized=json::dump(json::Value(details));
     out.arrays["metadata_json"]=NpyArray::fromString(metadata(source,"linear-analysis",label,
         serialized.substr(1,serialized.size()-2)));
-    return publish(root,source,"linear-analysis",label,std::move(out));
+    return publishObject(root, source, dynsyslab::core::object_kind::report, "linear-analysis",std::move(out));
 }
 
 std::filesystem::path runLinearAnalysis(const std::filesystem::path& sourcePath,
@@ -136,6 +137,10 @@ std::filesystem::path runLinearAnalysis(const std::filesystem::path& sourcePath,
         return runModalObservabilityMatrix(sourcePath,source,settings,root,label);
     if(settings.at("analysis_method").string()=="eigenfunction-observability")
         return runEigenfunctionObservability(sourcePath,source,settings,root,label);
+    if(settings.at("analysis_method").string()=="modal-gramian")  // LinearAnalysisModal.cpp
+        return runModalGramian(sourcePath,source,settings,root,label);
+    if(settings.at("analysis_method").string()=="klqe-assessment")
+        return runKlqeAssessment(sourcePath,source,settings,root,label);
     const auto o=options(settings);
     NpzRecord out;json::Value::Object details;
     details["schema"]="dynsyslab.linear-analysis/v1";
@@ -189,6 +194,6 @@ std::filesystem::path runLinearAnalysis(const std::filesystem::path& sourcePath,
     auto serialized=json::dump(json::Value(details));
     out.arrays["metadata_json"]=NpyArray::fromString(metadata(source,"linear-analysis",label,
         serialized.substr(1,serialized.size()-2)));
-    return publish(root,source,"linear-analysis",label,std::move(out));
+    return publishObject(root, source, dynsyslab::core::object_kind::report, "linear-analysis",std::move(out));
 }
 } // namespace dynsyslab::workflow::postprocess_detail

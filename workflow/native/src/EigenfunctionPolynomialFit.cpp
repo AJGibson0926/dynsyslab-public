@@ -4,8 +4,8 @@
 // interpolates by inverse distance over the nearest neighbours, which is continuous but
 // rough (its slope jumps whenever the neighbour set changes). This fit keeps the same
 // eigenvalues and the same eigenfunctions -- least squares on the training values in the
-// normalized physical state -- and writes a polynomial K-ROM, so estimators and
-// controllers evaluate a smooth surface. Each conjugate partner keeps its own stored
+// normalized physical state -- and writes the K-ROM's child with that polynomial as the
+// representation it evaluates, so estimators and controllers evaluate a smooth surface. Each conjugate partner keeps its own stored
 // normalization; mode_selection's K-ROM writer later makes it exactly conj(upper).
 #include "PostprocessInternal.hpp"
 
@@ -16,6 +16,7 @@
 #include <dynsyslab/core/Text.hpp>
 #include <dynsyslab/numerics/LeastSquares.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <stdexcept>
@@ -26,7 +27,7 @@ namespace c = dynsyslab::core;
 std::filesystem::path fitPolynomialEigenfunctions(const std::filesystem::path& kromPath, std::size_t degree,
                                                   const std::filesystem::path& root, json::Value::Object& report) {
     if (degree < 1 || degree > 12) throw std::invalid_argument("eigenfunction_polynomial_degree must be 1..12");
-    const auto model = c::loadKoopmanModel(kromPath);
+    auto model = c::loadKoopmanModel(kromPath);
     const auto* scattered = model.scatteredEigenfunctions();
     if (!scattered) throw std::invalid_argument("eigenfunction_polynomial_degree needs a K-ROM with scattered (H-DMD) eigenfunctions");
     const std::size_t m = scattered->samples, d = scattered->stateDimension, modes = scattered->outputs();
@@ -66,24 +67,29 @@ std::filesystem::path fitPolynomialEigenfunctions(const std::filesystem::path& k
         }
         errors.emplace_back(std::sqrt(residual / std::max(norm, 1e-300)));
     }
-    const auto smooth = c::KoopmanModel::fromPolynomialCoefficients(model.systemConfiguration(), d, exponents,
+    auto smooth = c::KoopmanModel::fromPolynomialCoefficients(model.systemConfiguration(), d, exponents,
         coefficients, model.continuousEigenvalues(), center, scale);
-    std::map<std::string, c::NpyArray> extra;
-    const auto parent = c::readNpz(kromPath);
-    for (const char* name : {"training_coordinates", "training_time", "training_states"})
-        if (parent.contains(name)) extra[name] = parent.at(name);
-    const auto directory = objectFolder(root, "koopman-polynomial-fit");
+    const auto directory = kindFolder(root, dynsyslab::core::object_kind::krom);
     std::filesystem::create_directories(directory);
     const auto path = directory / c::wide(safeName(kromPath.stem().u8string() + "__polynomial-fit-degree-"
         + std::to_string(degree) + "__" + timestamp()) + ".npz");
     report = {{"source_krom", kromPath.generic_u8string()}, {"degree", double(degree)}, {"terms", double(features)},
               {"training_samples", double(m)}, {"relative_fit_error", std::move(errors)},
               {"representation", "polynomial in (x - center) / scale, least squares on the scattered training values"}};
-    json::Value::Object provenance{{"format", "dynsyslab.derived/v1"}, {"method", "eigenfunction-polynomial-fit"},
+    json::Value::Object provenance{{"schema", "dynsyslab.derived/v1"}, {"method", "eigenfunction-polynomial-fit"},
         {"label", "polynomial fit of " + kromPath.stem().u8string()}, {"source_krom", kromPath.generic_u8string()},
         {"source_archive", kromPath.generic_u8string()}, {"independent_archive", true},
         {"eigenfunction_polynomial_fit", json::Value(report)}};
-    c::saveKoopmanModel(path, smooth, json::dump(json::Value(std::move(provenance))), std::move(extra));
+    // The same eigenfunctions with one more representation, evaluated first: a child of the K-ROM.
+    const auto polynomial = smooth.representation().function;
+    const auto names = model.representationNames();
+    if (std::find(names.begin(), names.end(), c::representationName(*polynomial)) != names.end()) {
+        model.replaceRepresentation(polynomial);
+        model.useRepresentation(c::representationName(*polynomial));
+    } else {
+        model.addRepresentation(polynomial, true);
+    }
+    c::saveKoopmanModel(path, model, withDataObject(json::dump(json::Value(std::move(provenance))), dynsyslab::core::object_kind::krom, {kromPath}));
     return path;
 }
 

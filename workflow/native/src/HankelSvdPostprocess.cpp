@@ -16,11 +16,8 @@ using J = json::Value;
 
 std::filesystem::path runHankelSvd(const std::string& method, const SourceData& full, const J& settings,
                                    const std::filesystem::path& root, const std::string& label) {
-    std::vector<c::TimeSeriesRecord> parts{timeSeriesRecord(full)};
-    for (const auto& path : settings.at("additional_time_series").array())
-        parts.push_back(timeSeriesRecord(loadSource(std::filesystem::u8path(path.string()))));
-    const auto record = c::joinTimeSeriesRecords(parts);
-    const auto view = sourceView(record, full);
+    const auto view = joinedTimeSeries(full, settings);
+    const auto& record = view.record;
     std::size_t first = 0;
     const SourceData source = hankelTimeWindow(view, settings, first);
     auto input = prepareHankel(source, settings, false, true);
@@ -49,7 +46,7 @@ std::filesystem::path runHankelSvd(const std::string& method, const SourceData& 
     std::vector<double> time, labels;
     std::vector<double> coordinates(windows * rank);
     for (std::size_t j = 0; j < windows; ++j) {
-        time.push_back(source.time.at(offsets[j]));
+        time.push_back(source.time().at(offsets[j]));
         labels.push_back(double(first + offsets[j]));
         const double weight = scaling == c::HankelCoordinateScaling::energy ? 1.0 : 0.0;
         for (std::size_t k = 0; k < rank; ++k)  // left column j is V; q = sigma v, xi = v
@@ -100,7 +97,7 @@ std::filesystem::path runHankelSvd(const std::string& method, const SourceData& 
     meta.object()["coordinate_names"] = names;
     meta.object()["state_source_archive"] = record.stateSource ? J(record.stateSource->path) : J();
     archive.arrays["metadata_json"] = c::NpyArray::fromString(json::dump(meta));
-    return publish(root, source, method, label, std::move(archive));
+    return publishObject(root, source, dynsyslab::core::object_kind::timeSeries, method, std::move(archive));  // coordinates (with their basis)
 }
 
 }  // namespace dynsyslab::workflow::postprocess_detail

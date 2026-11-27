@@ -5,8 +5,11 @@
 #include "PostprocessInternal.hpp"
 #include "KromDatasetSupport.hpp"
 #include "ObjectPublishing.hpp"
+#include "TimeSeriesSource.hpp"
 
 #include <dynsyslab/core/Text.hpp>
+#include <dynsyslab/core/FileDigest.hpp>
+#include <dynsyslab/core/KoopmanArchive.hpp>
 
 #include <chrono>
 #include <cmath>
@@ -84,13 +87,32 @@ void atomicProgress(const std::filesystem::path& path, double fraction,
 #endif
 }
 
-SourceData loadSource(const std::filesystem::path& path) {
+dynsyslab::core::TimeSeries inputSeries(const std::vector<double>& time, std::vector<double> inputs,
+                                        std::size_t inputDimension, bool onIntervals) {
+    if (!inputDimension && inputs.empty()) return {};
+    const std::size_t rows = inputDimension ? inputs.size() / inputDimension : 0;
+    if (onIntervals ? rows + 1 != time.size() && !(rows == 0 && time.empty()) : rows != time.size())
+        throw std::invalid_argument("input history does not match its record's samples");
+    return {std::vector<double>(time.begin(), time.begin() + std::ptrdiff_t(rows)), std::move(inputs), inputDimension};
+}
+
+SourceData withSeries(const SourceData& like, std::vector<double> time, std::vector<double> values,
+                      std::size_t dimension) {
+    SourceData result = like;
+    // Channel identities describe the old components; they survive only when the width does.
+    if (dimension != like.dimension()) result.record.channels.clear();
+    result.record.series = dynsyslab::core::TimeSeries(std::move(time), std::move(values), dimension);
+    return result;
+}
+
+SourceData loadSource(const std::filesystem::path& path, bool archiveCoordinates) {
     const auto archive = dynsyslab::core::readNpz(path);
     const auto& states = archive.contains("values") ? archive.at("values") : archive.at("states");
     const auto& time = archive.at("time");
     if (states.shape.size() != 2 || time.shape.size() != 1 || states.shape[0] != time.shape[0])
         throw std::invalid_argument("post-processing source must be one samples-by-state trajectory");
-    std::vector<double> inputs; std::size_t inputDimension = 0;
+    SourceData source{path, archive.metadataJson(), {}};
+    auto times = time.doubles();
     const char* controlName = archive.contains("control_interval_values")
         ? "control_interval_values" : "control_values";
     if (archive.contains(controlName)) {
@@ -99,21 +121,28 @@ SourceData loadSource(const std::filesystem::path& path) {
         if (control.shape.size() != 2
             || control.shape[0] != states.shape[0] - (intervalAligned ? 1 : 0))
             throw std::invalid_argument("controlled source input history has incompatible shape");
-        inputs = control.doubles(); inputDimension = control.shape[1];
+        source.record.inputs = inputSeries(times, control.doubles(), control.shape[1], intervalAligned);
+        source.record.inputsOnIntervals = intervalAligned;
     }
-    SourceData source{path, time.doubles(), states.doubles(), states.shape[0], states.shape[1],
-            std::move(inputs), inputDimension, archive.metadataJson()};
-    normalizeSourceCoordinates(source);
+    source.record.series = dynsyslab::core::TimeSeries(std::move(times), states.doubles(), states.shape[1]);
+    if (archiveCoordinates) {  // analysis on the stored values; nothing is rescaled
+        auto meta = source.metadataJson.empty() ? json::Value(json::Value::Object{}) : json::parse(source.metadataJson);
+        meta.object()["analysis_coordinates"] = "archive";
+        source.metadataJson = json::dump(meta);
+    } else {
+        normalizeSourceCoordinates(source);
+    }
+    describeRecord(source);
     return source;
 }
 
 double uniformDeltaTime(const SourceData& source) {
-    if (source.time.size() < 3) throw std::invalid_argument("post-processing needs at least three samples");
-    const double step = source.time[1] - source.time[0];
+    if (source.time().size() < 3) throw std::invalid_argument("post-processing needs at least three samples");
+    const double step = source.time()[1] - source.time()[0];
     if (!(step>0.) || !std::isfinite(step)) throw std::invalid_argument("post-processing source time must increase");
-    for (std::size_t i=2;i<source.time.size();++i) {
-        const double actual=source.time[i]-source.time[i-1];
-        const double clockScale=std::max(std::abs(source.time[i]),std::abs(source.time[i-1]));
+    for (std::size_t i=2;i<source.time().size();++i) {
+        const double actual=source.time()[i]-source.time()[i-1];
+        const double clockScale=std::max(std::abs(source.time()[i]),std::abs(source.time()[i-1]));
         const double tolerance=1e-8*step+8*std::numeric_limits<double>::epsilon()*clockScale;
         if (!(actual>0.) || !std::isfinite(actual) || std::abs(actual-step)>tolerance)
             throw std::invalid_argument("DMD-family methods require uniform archived output time");
@@ -124,9 +153,12 @@ double uniformDeltaTime(const SourceData& source) {
 std::string metadata(const SourceData& source, const std::string& method,
                      const std::string& label, const std::string& details) {
     auto result=json::parse("{"+details+"}").object();
-    result["format"]="dynsyslab.derived/v1";
+    // A method that names its own contract (e.g. dynsyslab.dmdc/v1) keeps it; others are generic.
+    if (!result.count("schema")) result["schema"]="dynsyslab.derived/v1";
     result["label"]=label;
-    result["method"]=method;
+    // The step's own name (e.g. "hdmd"), the same as data_object.produced_by.method.
+    const auto stage=currentStageMethod();
+    result["method"]=stage.empty()?method:stage;
     result["source_archive"]=std::filesystem::absolute(source.path).lexically_normal().generic_u8string();
     result["execution_backend"]=json::Value::Object{
         {"name","native-cpp"},{"compiled",true},{"python_required",false}};
@@ -136,7 +168,7 @@ std::string metadata(const SourceData& source, const std::string& method,
             "resolved_system_parameters","parameter_units","dimensionless_groups",
             "dimensionless_group_units","equations_version","equations_fingerprint",
             "integration_form","parameter_set_key","archive_coordinate_system",
-            "source_archive_coordinate_system","source_coordinate_transform"};
+            "source_archive_coordinate_system","source_coordinate_transform","analysis_coordinates"};
         for (const auto key : copied)
             if (!sourceMetadata.at(key).isNull()) result[key]=sourceMetadata.at(key);
         if (!sourceMetadata.at("system_configuration").isNull()) {
@@ -155,8 +187,9 @@ std::string metadata(const SourceData& source, const std::string& method,
             result["system_configuration"]=json::Value(std::move(configuration));
         }
     }
-    if(method=="hankel-dmd" || method=="koopman-with-sindy" || method=="edmdc" || method=="dmdc"
-        || method=="boundary-eigenfunctions" || method=="echo-history-koopman") {
+    const auto recorded=result["method"].string();  // the step's name
+    if(recorded=="hdmd" || recorded=="hankel_dmd" || recorded=="sindy" || recorded=="edmdc" || recorded=="dmdc"
+        || recorded=="boundary_eigenfunctions" || recorded=="echo_history_koopman") {
         auto refs=dynsyslab::core::koopmanDatasetReferencesFromMetadata(json::Value(result));
         dynsyslab::core::mergeKoopmanDatasetReference(refs,{
             std::filesystem::absolute(source.path).lexically_normal().generic_u8string(),
@@ -166,11 +199,10 @@ std::string metadata(const SourceData& source, const std::string& method,
     return json::dump(json::Value(std::move(result)));
 }
 
-std::filesystem::path publish(const std::filesystem::path& root, const SourceData& source,
-                              const std::string& method, const std::string&,
-                              dynsyslab::core::NpzRecord archive) {
-    // Filed by what the archive is (core/DataObject.hpp), stamped with how it was made.
-    const auto kind = objectKindFor(method);
+std::filesystem::path publishObject(const std::filesystem::path& root, const SourceData& source,
+                                    const std::string& kind, const std::string& method,
+                                    dynsyslab::core::NpzRecord archive) {
+    // Filed by what the archive is (its declared kind, core/DataObject.hpp), stamped with how it was made.
     stampDataObject(archive, kind, method, {source.path});
     const auto directory = dynsyslab::core::objectDirectory(root, kind);
     const auto stem=safeName(source.path.stem().u8string()+"__"+method+"__"+timestamp());
@@ -182,6 +214,16 @@ std::filesystem::path publish(const std::filesystem::path& root, const SourceDat
         catch(...) { if(!std::filesystem::exists(path))throw; }
     }
     throw std::runtime_error("unable to allocate an unused post-processing archive path");
+}
+
+std::filesystem::path publishKrom(const std::filesystem::path& root, const SourceData& source,
+                                  const dynsyslab::core::KoopmanModel& model, const std::string& method,
+                                  const std::string& metadataJson,
+                                  std::map<std::string, dynsyslab::core::NpyArray> extraArrays,
+                                  const std::vector<dynsyslab::core::ChannelDescriptor>& inputChannels) {
+    const auto stamped=withDataObject(metadataJson,dynsyslab::core::object_kind::krom,{source.path});
+    return publishObject(root,source,dynsyslab::core::object_kind::krom,method,
+                         dynsyslab::core::makeKoopmanArchive(model,stamped,std::move(extraArrays),inputChannels));
 }
 
 }  // namespace dynsyslab::workflow::postprocess_detail

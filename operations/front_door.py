@@ -19,8 +19,6 @@ from project_paths import PROJECT_ROOT
 
 
 _PASSTHROUGH = {
-    "archive": ("archiver.cli", "main"),
-    "krom-training": ("scripts.design_krom_training_campaign", "main"),
 }
 
 
@@ -66,22 +64,17 @@ def parser() -> argparse.ArgumentParser:
     commands = result.add_subparsers(dest="command")
     commands.add_parser("doctor", help="report paths, versions, and capabilities")
     commands.add_parser("systems", help="list registered dynamical systems")
-    ui = commands.add_parser("ui", help="launch the primary Solver/Post-processor")
-    ui.add_argument("--rebuild", action="store_true")
-    ui.add_argument("--refresh-data", action="store_true")
-    viewer = commands.add_parser("viewer", help="launch the native Viewer")
-    viewer.add_argument("--rebuild", action="store_true")
-    legacy = commands.add_parser("legacy-gui", help="launch the compatibility Tk UI")
-    legacy.add_argument("--confirm", action="store_true",
-                        help="acknowledge that the native UI is preferred")
+    commands.add_parser("ui", help="launch the primary Solver/Post-processor")
+    commands.add_parser("viewer", help="launch the native Viewer")
     commands.add_parser("docs", help="print the human/agent start-document path")
     audit = commands.add_parser("audit", help="run the architecture-policy audit")
     audit.add_argument("--format", choices=("json", "markdown"), default="markdown")
     audit.add_argument("--strict", action="store_true")
     commands.add_parser("solve", help="plan or run a versioned Solver workbench job")
     commands.add_parser("postprocess", help="plan or run archive-safe post-processing")
-    commands.add_parser("archive", help="audit or conservatively deduplicate archives")
-    commands.add_parser("jobs", help="inspect or run Campaigner job manifests")
+    commands.add_parser("archive", help="audit, deduplicate, recompress or edit archives (native)")
+    commands.add_parser("storage", help="storage locations, verified copy, campaign relocation (native)")
+    commands.add_parser("jobs", help="inspect or run native queue jobs")
     commands.add_parser("estimate", help="run observability and KLQE workflows")
     commands.add_parser("krom-training", help="plan generic KROM domain-expansion training")
     return result
@@ -129,10 +122,6 @@ def system_registry() -> dict:
     return json.loads(completed.stdout)
 
 
-def _launch_module(module: str, arguments: list[str]) -> int:
-    return subprocess.call([sys.executable, "-m", module, *arguments], cwd=PROJECT_ROOT)
-
-
 def _native_cli(arguments: list[str]) -> int:
     """Run an accepted compiled command from the optional Python front door."""
     executable = _native_executable("dynsyslab-cli.exe")
@@ -143,13 +132,12 @@ def _native_cli(arguments: list[str]) -> int:
     return subprocess.call([str(executable), *arguments], cwd=PROJECT_ROOT)
 
 
-def _require_native_source(application: str, source: Path, executable: Path,
-                           selected: argparse.ArgumentParser) -> None:
-    if not executable.is_file() and not source.is_file():
-        selected.error(
-            f"the native {application} is not bundled in this wheel; "
-            "launch it from a DynSysLab source checkout"
-        )
+def _launch(executable: Path, selected: argparse.ArgumentParser) -> int:
+    if not executable.is_file():
+        selected.error(f"{executable.name} is not built or installed; run install.ps1 "
+                       "or build the native-suite CMake preset")
+    subprocess.Popen([str(executable)], cwd=executable.parent)
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -163,10 +151,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if raw and raw[0] == "jobs":
         from .job_front_door import main as jobs_main
         return jobs_main(raw[1:])
-    if (len(raw) >= 2 and raw[0] == "archive"
-            and raw[1] in {"audit", "deduplicate"}
-            and "--help" not in raw):
+    if raw and raw[0] in {"archive", "storage"}:  # archive management is native only
         return _native_cli(raw)
+    if raw and raw[0] == "krom-training":  # native: dynsyslab-cli krom-training-plan <request.json>
+        return _native_cli(["krom-training-plan", *raw[1:]])
     if raw and raw[0] in _PASSTHROUGH:
         from importlib import import_module
         module, function = _PASSTHROUGH[raw[0]]
@@ -185,38 +173,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(path if path.is_file() else
               "START_HERE.md is not bundled in this installation; use the package README.")
     elif args.command == "ui":
-        executable = _native_executable("DynSysLab.exe")
-        _require_native_source(
-            "Solver/Post-processor",
-            PROJECT_ROOT / "compute_workbench" / "native" / "CMakeLists.txt",
-            executable,
-            selected,
-        )
-        if not args.rebuild and not args.refresh_data and executable.is_file():
-            subprocess.Popen([str(executable)], cwd=executable.parent)
-            return 0
-        options = ["launch"]
-        if args.rebuild:
-            options.append("--rebuild")
-        if args.refresh_data:
-            options.append("--refresh-data")
-        return _launch_module("compute_workbench.cli", options)
+        return _launch(_native_executable("DynSysLab.exe"), selected)
     elif args.command == "viewer":
-        executable = _native_executable("DynSysLabViewer.exe")
-        _require_native_source(
-            "Viewer", PROJECT_ROOT / "viewer" / "native" / "CMakeLists.txt",
-            executable,
-            selected,
-        )
-        if not args.rebuild and executable.is_file():
-            subprocess.Popen([str(executable)], cwd=executable.parent)
-            return 0
-        options = ["launch"] + (["--rebuild"] if args.rebuild else [])
-        return _launch_module("viewer.ui_cli", options)
-    elif args.command == "legacy-gui":
-        if not args.confirm:
-            selected.error("legacy-gui requires --confirm; use `dynsyslab ui` by default")
-        return _launch_module("gui", ["launch"])
+        return _launch(_native_executable("DynSysLabViewer.exe"), selected)
     else:
         from quality.architecture import main as audit_main
         options = ["--format", args.format]

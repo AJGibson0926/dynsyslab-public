@@ -1,0 +1,70 @@
+{
+  "schema": "dynsyslab.compute-job/v1",
+  "kind": "experiment",
+  "label": "rpe-control-identification",
+  "description": "Named RPE input-map identification policy (formerly scripts/generate_rpe_control_identification_data.py). Persistent excitation: zero-mean telegraph-plus-multisine tapes on stratified initial states (Ljung 1999, section 13.3). Symmetric pulses: paired +/- one-sample pulses around multisine target-tube and support-rectangle anchors. B_psi is estimated from the paired first responses, without the analytic map, and fitted constant and bilinear (Korda and Mezic 2018). control_map_audit then gives the representation error against the exact map along a target path, and the rank and condition of the persistent-excitation designs. Give the K-ROM with --param krom=... and the target path, an archive of RPE states, with --param target_path=....",
+  "reuse_identical_stages": true,
+  "parameters": {
+    "krom": "<path to an RPE K-ROM with eigenfunctions on the state>",
+    "target_path": "<path to an archive of target-path states (time, values)>",
+    "delta_tau": 0.001,
+    "transition_count": 6000,
+    "trajectory_count": 24,
+    "seed": 742391,
+    "pulse_magnitude": 1.0
+  },
+  "stages": [
+    {
+      "id": "excitation",
+      "job": {
+        "kind": "solve",
+        "label": "rpe-persistent-excitation",
+        "system": {"name": "rpe", "preset": "air_water_20c", "parameters": {}},
+        "time": {"start": 0, "stop": 6.0, "output_step": "${params.delta_tau}"},
+        "solver": {"method": "RK4", "on_failure": "reject", "state_bounds": [[0.25, 2.0], [-20.0, 20.0]]},
+        "controller": {"kind": "telegraph_multisine", "settings": {
+          "seed": "${params.seed}", "interval": "${params.delta_tau}", "transition_count": "${params.transition_count}",
+          "amplitudes": [0.45, 0.60, 0.75, 0.90], "hold_steps": [10, 20, 40, 80],
+          "multisine_fraction": 0.28, "angular_frequencies": [1.5, 3.0, 4.8, 7.0]}},
+        "initial_conditions": {"mode": "stratified", "count": "${params.trajectory_count}", "seed": "${params.seed}",
+                               "ranges": [[0.78, 1.22], [-0.8, 0.8]]},
+        "campaign": {"enabled": false}, "preflight": {"enabled": false},
+        "archive": {"enabled": true, "data_role": "forced_training"}
+      }
+    },
+    {
+      "id": "pulses",
+      "job": {
+        "kind": "solve",
+        "label": "rpe-symmetric-pulses",
+        "system": {"name": "rpe", "preset": "air_water_20c", "parameters": {}},
+        "time": {"start": 0, "stop": 0.002, "output_step": "${params.delta_tau}"},
+        "solver": {"method": "RK4"},
+        "controller": {"kind": "symmetric_pulse", "settings": {"magnitude": "${params.pulse_magnitude}"}},
+        "initial_conditions": {"mode": "concatenate", "count": 1200, "repeat": 2, "clip": [[0.72, 1.28], null], "parts": [
+          {"mode": "target_tube", "count": 400, "seed": "${params.seed}", "offset": 1.0, "amplitudes": [0.09, 0.12],
+           "angular_frequencies": [4.0, 3.0], "phases": [0.0, 3.141592653589793], "tau_span": [0.0, 20.0], "jitter": [0.025, 0.08]},
+          {"mode": "uniform", "count": 200, "seed": 742392, "ranges": [[0.76, 1.24], [-0.9, 0.9]]}]},
+        "campaign": {"enabled": false}, "preflight": {"enabled": false},
+        "archive": {"enabled": true, "data_role": "forced_training"}
+      }
+    },
+    {
+      "id": "constant",
+      "job": {"kind": "postprocess", "sources": "${pulses.archives}", "methods": [{"name": "input_map", "settings": {
+        "krom": "${params.krom}", "fit": "symmetric_pulse", "representation": "constant", "map_name": "pulse_constant"}}]}
+    },
+    {
+      "id": "bilinear",
+      "job": {"kind": "postprocess", "sources": "${pulses.archives}", "methods": [{"name": "input_map", "settings": {
+        "krom": "${constant.archive}", "fit": "symmetric_pulse", "representation": "bilinear", "ridge": 1e-12,
+        "map_name": "pulse_bilinear"}}]}
+    },
+    {
+      "id": "audit",
+      "job": {"kind": "postprocess", "sources": ["${params.target_path}"], "methods": [{"name": "control_map_audit", "settings": {
+        "krom": "${bilinear.archive}", "maps": ["pulse_constant", "pulse_bilinear"],
+        "training_sources": "${excitation.archives}", "audit_stride": 10}}]}
+    }
+  ]
+}

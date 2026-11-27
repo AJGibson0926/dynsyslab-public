@@ -29,7 +29,6 @@ struct EdmdControlResult {
     // principal log(mu)/dt rates. Throws for zero multipliers or an unusable
     // eigenbasis. This does NOT convert the discrete input map to continuous B.
     [[nodiscard]] EigenfunctionFitResult eigenfunctionSet() const;
-    [[nodiscard]] KoopmanSINDyResult expansion() const;
 };
 
 // Pure measured-data API. No derivatives, EOM, history construction, or sparse

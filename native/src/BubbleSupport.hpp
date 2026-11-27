@@ -73,6 +73,7 @@ inline BubbleScaling bubbleScaling(const BubbleMedium& medium, double radius,
 }
 
 std::unique_ptr<ODESystem> makeRPE(SystemConfiguration configuration);
+std::unique_ptr<ODESystem> makeRPEDimensionalBaseline(const SystemConfiguration& configuration);
 std::unique_ptr<ODESystem> makeMarmottant(const SystemConfiguration& configuration);
 std::unique_ptr<ODESystem> makeReddySzeri(const SystemConfiguration& configuration);
 

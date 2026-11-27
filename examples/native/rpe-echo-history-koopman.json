@@ -1,6 +1,6 @@
 {
   "schema": "dynsyslab.compute-job/v1",
-  "kind": "pipeline",
+  "kind": "experiment",
   "label": "RPE echo-only causal-history Koopman",
   "description": "Echo-only causal-history Koopman model of the viscous RPE. Generates its own data: five free ring-downs for training ('train') and five held-out ones ('validate'), 80 tau each, then fits the history Koopman model on the far-field echo.",
   "reuse_identical_stages": true,

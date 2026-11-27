@@ -9,6 +9,15 @@
 
 namespace dynsyslab::core {
 
+// Membership of one state in an axis-aligned training domain: the axes it leaves (beyond a
+// 64-ulp tolerance) and the excursion per axis relative to the domain width.
+struct DomainReport {
+    bool inside{true};
+    std::vector<std::size_t> violatingAxes;
+    std::vector<double> relativeExcursion;
+    double maximumRelativeExcursion{};
+};
+
 struct AxisAlignedStateDomain {
     std::vector<double> minimum;
     std::vector<double> maximum;
@@ -16,6 +25,7 @@ struct AxisAlignedStateDomain {
 
     [[nodiscard]] std::size_t dimension() const noexcept { return minimum.size(); }
     [[nodiscard]] bool contains(const double* state) const;
+    [[nodiscard]] DomainReport report(const double* state) const;
 };
 
 struct StateDomainExpansionOptions {

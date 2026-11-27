@@ -7,7 +7,7 @@ namespace {
 constexpr const char* kFormat = "dynsyslab.grid-field/v1";
 }
 
-bool isGridFieldArchive(const json::Value& metadata) { return metadata.at("format").string() == kFormat; }
+bool isGridFieldArchive(const json::Value& metadata) { return metadata.at("schema").string() == kFormat; }
 
 NpzRecord gridFieldArchive(const GridFieldSeries& series) {
     if (series.frames.empty() || series.frameTime.size() != series.frames.size())
@@ -44,7 +44,7 @@ NpzRecord gridFieldArchive(const GridFieldSeries& series) {
     if (hasCounts) out.arrays["counts"] = NpyArray::fromDoubles({frames, points}, counts);
     out.arrays["frame_time"] = NpyArray::fromDoubles({frames}, series.frameTime);
     auto meta = series.metadata.isNull() ? json::Value(json::Value::Object{}) : series.metadata;
-    meta.object()["format"] = kFormat;
+    meta.object()["schema"] = kFormat;
     meta.object()["grid"] = json::Value::Object{{"domain", functionDomainJson(grid.domain)}, {"axes", axes},
                                                 {"coordinate_names", names}};
     meta.object()["outputs"] = double(outputs);

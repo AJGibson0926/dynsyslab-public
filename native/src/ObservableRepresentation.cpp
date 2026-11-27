@@ -3,6 +3,7 @@
 #include <dynsyslab/core/FunctionExpansion.hpp>
 #include <dynsyslab/core/FunctionRepresentation.hpp>
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace dynsyslab::core {
@@ -42,8 +43,79 @@ Observable Observable::fromRepresentation(ObservableDescriptor descriptor, std::
             return out;
         };
     Observable out(std::move(descriptor), xDim, outputs, std::move(evaluator), std::move(jacobian));
+    out.representationName_ = ::dynsyslab::core::representationName(*rep);
     out.representation_ = std::move(rep);
     return out;
+}
+
+std::string representationName(const FunctionRepresentation& representation) {
+    if (representation.kind() == "interpolation") return "interpolation";
+    if (representation.coordinates().window) return "time-delay";
+    if (const auto* expansion = dynamic_cast<const FunctionExpansion*>(&representation)) {
+        const auto kinds = expansion->dictionary().kinds();
+        if (kinds.size() == 1) return kinds.front() == "monomial" ? "polynomial" : kinds.front();
+    }
+    return representation.kind();
+}
+
+std::string Observable::representationName() const {
+    return representation_ ? representationName_ : std::string("evaluator");
+}
+
+std::vector<std::string> Observable::representationNames() const {
+    std::vector<std::string> names{representationName()};
+    for (const auto& alternative : alternatives_) names.push_back(alternative.name);
+    return names;
+}
+
+Observable::Alternative Observable::current() const {
+    return {representationName(), stateDimension_, evaluator_, analyticJacobian_, stateComponents_, representation_};
+}
+
+void Observable::use(Alternative alternative) {
+    representationName_ = alternative.representation ? alternative.name : std::string();
+    stateDimension_ = alternative.stateDimension;
+    evaluator_ = std::move(alternative.evaluator);
+    analyticJacobian_ = std::move(alternative.jacobian);
+    stateComponents_ = std::move(alternative.stateComponents);
+    representation_ = std::move(alternative.representation);
+}
+
+Observable Observable::withRepresentation(std::shared_ptr<const FunctionRepresentation> representation,
+                                          const ObservableCatalog* catalog, bool asDefault, std::string name) const {
+    auto descriptor = descriptor_;
+    descriptor.outputNames.clear();
+    const auto built = fromRepresentation(std::move(descriptor), std::move(representation), catalog);
+    if (built.outputDimension_ != outputDimension_)
+        throw std::invalid_argument(descriptor_.name + ": another representation must have the same outputs");
+    auto alternative = built.current();
+    if (!name.empty()) alternative.name = std::move(name);
+    const auto names = representationNames();
+    if (std::find(names.begin(), names.end(), alternative.name) != names.end())
+        throw std::invalid_argument(descriptor_.name + " already has a " + alternative.name + " representation");
+    auto out = *this;
+    if (asDefault) {
+        out.alternatives_.insert(out.alternatives_.begin(), out.current());
+        out.use(std::move(alternative));
+    } else {
+        out.alternatives_.push_back(std::move(alternative));
+    }
+    return out;
+}
+
+Observable Observable::as(const std::string& name) const {
+    if (name == representationName()) return *this;
+    for (std::size_t k = 0; k < alternatives_.size(); ++k)
+        if (alternatives_[k].name == name) {
+            auto out = *this;
+            auto chosen = std::move(out.alternatives_[k]);
+            out.alternatives_[k] = out.current();
+            out.use(std::move(chosen));
+            return out;
+        }
+    std::string known;
+    for (const auto& n : representationNames()) known += (known.empty() ? "" : ", ") + n;
+    throw std::invalid_argument(descriptor_.name + " has no " + name + " representation; it has: " + known);
 }
 
 std::vector<AnalyticExpression> Observable::expressions() const {

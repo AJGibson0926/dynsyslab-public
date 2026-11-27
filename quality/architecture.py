@@ -17,10 +17,7 @@ from project_paths import PROJECT_ROOT, SIDE_RESEARCH_DIRECTORIES, source_files
 
 
 PACKAGES = frozenset({
-    "analysis_data", "archiver", "archives", "campaigner", "codex_harness", "compute_workbench",
-    "control", "dynsyslib", "estimation", "gui", "infrastructure",
-    "job_manager", "operations", "performance", "postprocessing", "quality",
-    "rom", "scripts", "solver", "spectral", "tester", "viewer",
+    "codex_harness", "compute_workbench", "dynsyslab_client", "operations", "quality", "tester",
 })
 LINK = re.compile(r"\[[^]]+\]\(([^)]+)\)")
 
@@ -216,15 +213,12 @@ def _native_metrics(root: Path) -> dict:
 
 
 def _boundary_violations(paths: Iterable[Path], root: Path) -> list[dict]:
+    # Python is a thin client over the compiled suite (AGENTS.md): its packages never carry
+    # numerical runtimes, which belong in the native core.
     rules = (
-        ("viewer dependency from a producer", {"solver", "archives", "archiver", "job_manager"},
-         re.compile(r"(?:from|import)\s+viewer(?:\.|\s)")),
-        ("low-level archive access from an application package",
-         {"campaigner", "compute_workbench", "control", "estimation", "gui",
-          "job_manager", "postprocessing", "rom", "solver", "viewer"},
-         re.compile(r"(?:from|import)\s+archives(?:\.|\s)")),
-        ("ROM dependency inside system definitions", {"dynsyslib"},
-         re.compile(r"(?:from|import)\s+rom(?:\.|\s)")),
+        ("numerical runtime in a Python client package",
+         {"compute_workbench", "dynsyslab_client", "operations", "quality", "tester"},
+         re.compile(r"^\s*(?:from|import)\s+(?:numpy|scipy)", re.MULTILINE)),
     )
     violations: list[dict] = []
     for path in paths:

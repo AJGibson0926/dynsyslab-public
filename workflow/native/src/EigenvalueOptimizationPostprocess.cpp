@@ -1,4 +1,5 @@
 #include "PostprocessInternal.hpp"
+#include <dynsyslab/core/SpectrumArchive.hpp>
 
 #include <dynsyslab/core/EigenvalueOptimization.hpp>
 #include <dynsyslab/core/Text.hpp>
@@ -39,16 +40,10 @@ std::vector<std::vector<std::size_t>> groups(const json::Value& settings,
 
 std::vector<std::complex<double>> discreteSpectrum(
     const dynsyslab::core::NpzRecord& archive,double dt){
-    if(archive.contains("discrete_eigenvalues"))
-        return archive.at("discrete_eigenvalues").complexDoubles();
-    if(archive.contains("eigenvalues"))
-        return archive.at("eigenvalues").complexDoubles();
-    if(!archive.contains("continuous_eigenvalues"))throw std::invalid_argument(
+    if(!dynsyslab::core::hasSpectrumArrays(archive))throw std::invalid_argument(
         "seed archive contains no Koopman spectrum");
-    std::vector<std::complex<double>> result;
-    for(const auto value:archive.at("continuous_eigenvalues").complexDoubles())
-        result.push_back(std::exp(value*dt));
-    return result;
+    if(archive.contains("discrete_eigenvalues"))return archive.at("discrete_eigenvalues").complexDoubles();
+    return dynsyslab::core::readSpectrumArrays(archive).discreteMultipliers(dt);
 }
 
 }  // namespace
@@ -72,16 +67,16 @@ std::filesystem::path runEigenvalueOptimization(
         sources.push_back(loadSource(std::filesystem::u8path(path.string())));
     const auto configuration=systemConfiguration(primary);
     dynsyslab::core::KoopmanTrajectoryEnsemble ensemble;
-    ensemble.time=primary.time;ensemble.samples=primary.samples;
-    ensemble.trajectories=sources.size();ensemble.stateDimension=primary.dimension;
+    ensemble.time=primary.time();ensemble.samples=primary.samples();
+    ensemble.trajectories=sources.size();ensemble.stateDimension=primary.dimension();
     json::Value::Array sourcePaths;
     for(const auto& source:sources){
-        if(source.samples!=ensemble.samples||source.dimension!=ensemble.stateDimension
-            ||source.time!=ensemble.time
+        if(source.samples()!=ensemble.samples||source.dimension()!=ensemble.stateDimension
+            ||source.time()!=ensemble.time
             ||!sameSystem(configuration,systemConfiguration(source)))
             throw std::invalid_argument(
                 "optimization sources must share system and uniform sample grid");
-        ensemble.states.insert(ensemble.states.end(),source.values.begin(),source.values.end());
+        ensemble.states.insert(ensemble.states.end(),source.values().begin(),source.values().end());
         sourcePaths.emplace_back(source.path.generic_u8string());
     }
     auto system=dynsyslab::core::createSystem(configuration);
@@ -120,11 +115,8 @@ std::filesystem::path runEigenvalueOptimization(
     dynsyslab::core::NpzRecord archive;
     archive.arrays["initial_discrete_eigenvalues"]=
         dynsyslab::core::NpyArray::fromComplex({selectedInitial.size()},selectedInitial);
-    archive.arrays["eigenvalues"]=dynsyslab::core::NpyArray::fromComplex(
-        {fit.discreteEigenvalues.size()},fit.discreteEigenvalues);
-    archive.arrays["discrete_eigenvalues"]=archive.arrays["eigenvalues"];
-    archive.arrays["continuous_eigenvalues"]=dynsyslab::core::NpyArray::fromComplex(
-        {fit.continuousEigenvalues.size()},fit.continuousEigenvalues);
+    dynsyslab::core::writeSpectrumArrays(archive,
+        dynsyslab::core::Spectrum::fromDiscreteMultipliers(fit.discreteEigenvalues,dt));
     archive.arrays["optimization_metrics"]=dynsyslab::core::NpyArray::fromDoubles(
         {fit.diagnostics.size(),5},metrics);
     archive.arrays["mode_group_offsets"]=dynsyslab::core::NpyArray::fromDoubles(
@@ -146,7 +138,7 @@ std::filesystem::path runEigenvalueOptimization(
         "\"mode_groups\":"+json::dump(json::Value(std::move(encodedGroups)))+","
         "\"delta_t\":"+std::to_string(dt)+",\"eigenvalue_domain\":\"discrete-time\","
         "\"generator_conversion\":\"lambda=log(mu)/delta_t\""));
-    return publish(root,primary,"koopman-eigenvalue-optimization",label,std::move(archive));
+    return publishObject(root, primary, dynsyslab::core::object_kind::report, "koopman-eigenvalue-optimization",std::move(archive));
 }
 
 }  // namespace dynsyslab::workflow::postprocess_detail

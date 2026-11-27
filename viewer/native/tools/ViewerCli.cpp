@@ -11,6 +11,7 @@
 
 void viewerSessionUsage();
 int viewerSessionCommand(int argc, wchar_t** argv);
+int viewerReportCommand(int argc, wchar_t** argv);
 
 namespace {
 
@@ -152,6 +153,7 @@ void usage() {
               << "  parse-math <TeX-like-label>\n";
     std::cout << "  windows  (read-only status of running Viewer trees)\n";
     std::cout << "  reload <process-id>  (refresh that Viewer without activation)\n";
+    std::cout << "  report SPEC.json --output report.html|report.pdf  (dynsyslab.report/v1 multi-page report)\n";
     viewerSessionUsage();
 }
 
@@ -174,6 +176,7 @@ int wmain(int argc, wchar_t** argv) {
     if (command == L"verify-interactions")
         return verifyInteractions(argc > 2 && std::wstring(argv[2]) == L"--json");
     if (command == L"parse-math") return parseMath(argc, argv);
+    if (command == L"report") return viewerReportCommand(argc, argv);
     if (command == L"time-series" || command == L"tree" || command == L"inspect" || command == L"panels" || command == L"render" || command == L"animate" || command == L"phase-space")
         return viewerSessionCommand(argc, argv);
     usage(); return 2;

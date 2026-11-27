@@ -40,7 +40,7 @@ auto flow = system->analyticSolutions().at(0).instantiate({0.4,-0.2},0);
 auto stateAtOne = flow.evaluate(1);
 ~~~
 
-The bank is the canonical PolynomialEigenfunctionSet in physical coordinates, with four modes and rates 0,a,2a,b. It has no invented fit residuals or training data. derivativeOperators has row-major layout coordinate × output mode × predictor mode and implements \(\partial_jz=D_jz\). stateReadout is state × mode. Higher derivatives use products of these operators.
+The bank is the canonical `EigenfunctionFitResult` (a `FunctionExpansion` and its `Spectrum`) in physical coordinates, with four modes and rates 0,a,2a,b. It has no invented fit residuals or training data. derivativeOperators has row-major layout coordinate × output mode × predictor mode and implements \(\partial_jz=D_jz\). stateReadout is state × mode. Higher derivatives use products of these operators.
 
 At b=2a,c!=0, the API reports why this diagonal family is unavailable. The finite invariant Jordan lift and exact flow still exist. Near resonance the eigenbasis can be poorly conditioned.
 

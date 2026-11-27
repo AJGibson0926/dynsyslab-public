@@ -89,4 +89,7 @@ std::unique_ptr<ODESystem> makeMechanicalSystem(const SystemConfiguration& confi
 std::unique_ptr<ODESystem> makeBiologicalSystem(const SystemConfiguration& configuration);
 std::unique_ptr<ODESystem> makeBubbleSystem(const SystemConfiguration& configuration);
 
+// Fills each preset's driver, reference and processing metadata (PresetMetadata.cpp).
+void attachPresetMetadata(SystemDescriptor& descriptor);
+
 }  // namespace dynsyslab::core::detail

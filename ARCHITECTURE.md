@@ -30,9 +30,6 @@ native UI / compiled CLI / optional language adapters
  compiled linear-algebra ABI (when a plug-in needs SVD/QR/eigensystems)
 ```
 
-`infrastructure` contains only small neutral mechanisms, such as passive
-source-change events, that would otherwise force a producer to import a UI.
-
 ## Package ownership
 
 The independent **dynsyslab_lie** library owns exact polynomial geometric analysis and invariant-module certificates. It depends only on foundation, not on solvers, control, archives or UI; workflow exposes read-only queries.
@@ -47,38 +44,37 @@ defines the optional KLQE/KLQR loop. Estimation and control remain independent
 libraries; workflow coordinates sampled measurements, estimated Koopman values
 and actually applied inputs through the solver's existing control policy.
 
-- **dynsyslib** defines systems, presets, observables, Jacobians, and drivers.
-  It does not solve, schedule, view, or store numerical outputs.
-- **solver** executes one requested numerical solve. It writes completed or
-  checkpointed results only through the Archiver-owned archive contract.
-- **archives** is private storage/index implementation. Its Archiver-owned
-  `management/archive_index.sqlite` is the canonical incremental metadata,
-  content-digest, and relative-pointer summary. Producers update it only after
-  successful publication; Viewer opens it read-only and never rebuilds it.
-  New application code
-  uses **archiver** gateways rather than low-level storage APIs.
-- **archiver** owns archive capabilities, audit, reuse lookup, campaign
-  discovery, storage locations, and durable diagnostics.
-- **campaigner** designs manifests. Numerical screening/execution belongs in a
-  solver or operations service, not in manifest construction.
-- **job_manager** schedules manifests and stores only coordination metadata;
-  it never owns numerical solution arrays.
-- **postprocessing** transforms supplied or archived solution data into derived
-  scientific objects without mutating source trajectories.
-- **rom** owns reduced-model contracts and algorithms, not archive files.
-- **control** and **estimation** are optional solver plug-ins and must not alter
-  an uncontrolled solve.
-- **viewer** is read-only relative to the primary archive. Disposable display
-  payloads live only under `viewer_compute_archive`.
-- **compute_workbench** and native UI code compose the public APIs above through
-  versioned JSON contracts; they do not contain scientific algorithms.
+- **systems** (`native/src/Systems*.cpp`, `DynamicsLibrary`) define models,
+  presets, observables, Jacobians, and drivers. They do not solve, schedule,
+  view, or store numerical outputs.
+- **solvers** execute one requested numerical solve and write completed or
+  checkpointed results only through the archive contract.
+- **archives** own storage, audit, deduplication, and the canonical
+  `management/archive_index.sqlite` metadata, content-digest, and
+  relative-pointer summary. Producers update it only after successful
+  publication; Viewer opens it read-only and never rebuilds it.
+  `dynsyslab-cli archive audit|deduplicate|index` is the CLI gate.
+- **workflow** (`workflow/native/`) plans and runs versioned jobs, campaigns,
+  experiments, and post-processing stages without mutating source trajectories.
+- **queue** schedules job manifests and stores only coordination metadata; it
+  never owns numerical solution arrays (`dynsyslab-cli queue ...`).
+- **Koopman**, **control**, and **estimation** libraries own reduced-model,
+  feedback, and estimator algorithms. Control and estimation are optional
+  solver plug-ins and must not alter an uncontrolled solve.
+- **Viewer** (`viewer/native/`) is read-only relative to the primary archive.
+  Disposable display payloads live only under `viewer_compute_archive`.
+- **Solver/Post-processor** (`compute_workbench/native/`) and other native UI
+  code compose the public APIs above through versioned JSON contracts; they do
+  not contain scientific algorithms.
+- **dynsyslab_client** is the only installable Python package: a
+  dependency-free thin client over the compiled C ABI and `dynsyslab-cli`.
 - **initial-condition generation** belongs to the neutral workflow service.
   `resolveOdeInitialConditions` is the single C++ API used by execution and UI
   previews; `dynsyslab-cli generate-ics` is its machine-readable CLI gate. The
   editable `cluster_specs` array permits independent deterministic generators
   per Cluster while Batch/System/Cluster/Trajectory remains a UI and archive
   hierarchy concern.
-- **quality** measures policy conformance without importing numerical engines.
+- **quality** (Python) measures policy conformance without importing numerical engines.
 - **extensions** add systems, controllers, and post-processors as independently
   compiled DLLs through a versioned C ABI. They do not include private core
   headers or force established scientific modules to rebuild.
@@ -108,9 +104,9 @@ without reimplementing algorithms. Source files must remain under 1,000 lines;
 500 lines is the normal design ceiling. Routine builds compile only public
 applications and affected runtime DLLs; test binaries are a separate gate
 target. Adding an independent system or method should normally compile one
-extension DLL, not rebuild the suite. During migration, run the native CTest
-and isolated-package gates; the legacy Python audit is advisory until it is
-replaced by a compiled quality command.
+extension DLL, not rebuild the suite. Run the native CTest and
+isolated-package gates; the Python audit (`python -m dynsyslab audit`) checks
+policy conformance only.
 
 See [Start here](docs/START_HERE.md),
 [the engineering policy](AGENTS.md), and

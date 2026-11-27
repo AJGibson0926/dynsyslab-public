@@ -57,6 +57,24 @@ bool AxisAlignedStateDomain::contains(const double* state) const {
     return true;
 }
 
+DomainReport AxisAlignedStateDomain::report(const double* state) const {
+    DomainReport result;
+    result.relativeExcursion.assign(dimension(), 0.0);
+    constexpr double eps = std::numeric_limits<double>::epsilon();
+    for (std::size_t axis = 0; axis < dimension(); ++axis) {
+        const double width = std::max(maximum[axis] - minimum[axis], eps);
+        const double tolerance = 64.0 * eps * std::max({1.0, std::abs(minimum[axis]), std::abs(maximum[axis])});
+        const double excursion = std::max({(minimum[axis] - state[axis]) / width,
+                                           (state[axis] - maximum[axis]) / width, 0.0});
+        result.relativeExcursion[axis] = excursion;
+        result.maximumRelativeExcursion = std::max(result.maximumRelativeExcursion, excursion);
+        if (state[axis] < minimum[axis] - tolerance || state[axis] > maximum[axis] + tolerance)
+            result.violatingAxes.push_back(axis);
+    }
+    result.inside = result.violatingAxes.empty();
+    return result;
+}
+
 StateDomainExpansionPlan planStateDomainExpansion(
     const AxisAlignedStateDomain& current,
     const AxisAlignedStateDomain& required,

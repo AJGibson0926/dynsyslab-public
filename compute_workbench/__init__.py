@@ -1,15 +1,9 @@
-"""Solver/Post-processor application boundary for DynSysLab.
+"""Job documents and the native-workflow adapter used by the Python front door.
 
-The package is deliberately a thin orchestration layer.  Numerical work stays
-in :mod:`solver`, :mod:`control`, and :mod:`postprocessing`; this package owns
-versioned job documents, discovery, planning, and archive/UI integration.
+Planning, validation and execution all happen in the compiled workflow library
+(``dynsyslab_client.workflow``); this package only reads job documents.
 """
 
 from .contracts import JOB_SCHEMA, RESULT_SCHEMA, load_job, validate_job
-from .execution import execute_job, plan_job
-from .registry import build_registry
 
-__all__ = [
-    "JOB_SCHEMA", "RESULT_SCHEMA", "build_registry", "execute_job", "load_job",
-    "plan_job", "validate_job",
-]
+__all__ = ["JOB_SCHEMA", "RESULT_SCHEMA", "load_job", "validate_job"]

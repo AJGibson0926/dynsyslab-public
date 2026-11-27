@@ -94,7 +94,7 @@ std::string parameterSetKey(const SystemConfiguration& configuration) {
 
 std::string hierarchyJson(const BatchRecord& batch) {
     std::ostringstream out;
-    out << "{\"format\":\"dynsyslab.hierarchy/v2\",\"tier\":\"batch\",\"id\":"
+    out << "{\"schema\":\"dynsyslab.hierarchy/v2\",\"tier\":\"batch\",\"id\":"
         << quote(batch.id) << ",\"label\":" << quote(batch.label)
         << ",\"created_utc\":" << quote(batch.createdUtc)
         << ",\"data_role\":" << quote(batch.dataRole)

@@ -24,7 +24,7 @@ read together and one KROM archive is written to
 | `state_window` | `[[low, high], ...]` per state component: regress only on forced samples inside this box (each run of consecutive inside samples is its own record). Use the window the eigenfunctions were fitted on, so `B_psi` describes the same operating region. |
 | `map_name` | Name of the stored map (default: the representation). |
 | `measurement_observable` | History measurement (default: the frozen transform's). |
-| `map` | An object whose fields are merged into the settings. A pipeline passes its whole `B_psi` parameter here. |
+| `map` | An object whose fields are merged into the settings. An experiment passes its whole `B_psi` parameter here. |
 
 The sources must be **forced** records with a recorded scalar control
 history when the representation is regressed. Analytic representations ignore
@@ -69,10 +69,10 @@ of the step is refused. `diagnostics.pairs_dropped_at_input_change` reports the 
 - **Certified KLQR** (`bilinear_certificate`) replaces that gain with a checked
   fixed gain. See `CERTIFIED_BILINEAR_CONTROL_TOOLS.md`.
 
-## Selecting B_psi in a pipeline
+## Selecting B_psi in an experiment
 
 The rediscovery pipeline
-(`examples/native/pipelines/rpe-echo-jet-klqr-rediscovery/20kpa.json`) has:
+(`examples/native/experiments/rpe-echo-jet-klqr-rediscovery/20kpa.json`) has:
 
 - `B_psi`: the map, e.g. `{"representation": "exact"}` or
   `{"representation": "bilinear", "drift": "affine", "fit_start": 5}`.

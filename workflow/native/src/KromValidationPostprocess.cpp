@@ -1,4 +1,6 @@
+#include "KromValidationWindows.hpp"
 #include "PostprocessInternal.hpp"
+#include "ObjectPublishing.hpp"
 #include "KromDatasetSupport.hpp"
 
 #include <dynsyslab/core/KoopmanArchive.hpp>
@@ -12,14 +14,14 @@
 namespace dynsyslab::workflow::postprocess_detail {
 namespace {
 
-std::vector<double> metrics(const dynsyslab::core::KoopmanErrorStatistics& value) {
+std::vector<double> metrics(const dynsyslab::core::EigenfunctionErrorStatistics& value) {
     return {static_cast<double>(value.samplePairs),value.absoluteRms,
         value.maximumAbsolute,value.relativeL2,value.medianPointwiseRelative,
         value.p95PointwiseRelative};
 }
 
 void appendMetrics(std::vector<double>& target,
-                   const dynsyslab::core::KoopmanErrorStatistics& value) {
+                   const dynsyslab::core::EigenfunctionErrorStatistics& value) {
     const auto row=metrics(value);target.insert(target.end(),row.begin(),row.end());
 }
 
@@ -61,9 +63,9 @@ std::filesystem::path runKromValidation(
     const auto source=validationSamples(inputSource,model,settings);
     model.addDatasetReference({std::filesystem::absolute(source.path).lexically_normal().generic_u8string(),
         role,"unforced",{}});
-    const auto bounds=trainingBounds(kromArchive,source.dimension);
+    const auto bounds=trainingBounds(kromArchive,source.dimension());
     const auto validation=dynsyslab::core::validateEigenfunctions(
-        model,source.time,source.values,source.samples,source.dimension,
+        model,source.time(),source.values(),source.samples(),source.dimension(),
         dynsyslab::core::EigenfunctionValidationInput::physicalState,horizons,
         bounds.first,bounds.second);
 
@@ -123,9 +125,9 @@ std::filesystem::path runKromValidation(
          "\"median_pointwise_relative\",\"p95_pointwise_relative\"]"));
     validationMeta.object()["validation_dynamics"]="unforced";
     validationMeta.object()["validation_delta_t"]=uniformDeltaTime(source);
-    validationMeta.object()["validation_start"]=source.time.front();
-    validationMeta.object()["validation_stop"]=source.time.back();
-    validationMeta.object()["source_samples"]=double(inputSource.samples);
+    validationMeta.object()["validation_start"]=source.time().front();
+    validationMeta.object()["validation_stop"]=source.time().back();
+    validationMeta.object()["source_samples"]=double(inputSource.samples());
     validationMeta.object()["sample_selection"]="existing samples only; no interpolation, source mutation, or refitting";
     validationMeta.object()["generator_method"]="finite differences of sampled eigenfunction; diagnostic for the stored continuous logarithm branch";
     validationMeta.object()["dataset_references"]=dynsyslab::core::koopmanDatasetReferencesJson(model.datasetReferences());
@@ -144,7 +146,7 @@ std::filesystem::path runKromValidation(
             evidence["training_maximum"]=dynsyslab::core::NpyArray::fromDoubles({bounds.second.size()},bounds.second);
         }
         if(kromArchive.contains("source_mode_indices"))evidence["source_mode_indices"]=kromArchive.at("source_mode_indices");
-        const auto directory=root/"derived"/"koopman-validation";
+        const auto directory=kindFolder(root,dynsyslab::core::object_kind::krom);  // the validated K-ROM is a K-ROM
         std::filesystem::create_directories(directory);
         const auto stem=safeName(source.path.stem().u8string()+"__krom-link__"+timestamp());
         std::filesystem::path linked;
@@ -153,12 +155,15 @@ std::filesystem::path runKromValidation(
             if(!std::filesystem::exists(candidate)){linked=std::move(candidate);break;}
         }
         if(linked.empty())throw std::runtime_error("Cannot allocate validation-linked KROM path");
-        dynsyslab::core::saveKoopmanModel(linked,model,json::dump(linkedMeta),std::move(evidence));
+        dynsyslab::core::saveKoopmanModel(linked,model,withDataObject(json::dump(linkedMeta),dynsyslab::core::object_kind::krom,{}),std::move(evidence));
+        registerAdditionalObject(linked);
         dynsyslab::core::indexArchiveFiles(root,{linked});
         validationMeta.object()["validated_krom"]=std::filesystem::absolute(linked).generic_u8string();
     }
+    appendValidationWindows(archive,validationMeta,model,source.time(),source.values(),source.samples(),
+                            source.dimension(),settings);  // windows, binned defect, psi history
     archive.arrays["metadata_json"]=dynsyslab::core::NpyArray::fromString(json::dump(validationMeta));
-    return publish(root,source,"koopman-validation",label,std::move(archive));
+    return publishObject(root, source, dynsyslab::core::object_kind::report, "koopman-validation",std::move(archive));
 }
 
 }  // namespace dynsyslab::workflow::postprocess_detail

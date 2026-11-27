@@ -23,8 +23,7 @@ struct MeasurementMap {
 };
 
 // The map named by the model's domain (or settings "history_transform"), checked against the
-// domain's identity. A legacy domain without a sha256 identity needs settings
-// "unverified_transform_reason".
+// domain's sha256 identity; a domain without one is refused.
 [[nodiscard]] MeasurementMap loadMeasurementMap(const dynsyslab::core::KoopmanModel& model,
     const std::filesystem::path& kromPath, const json::Value& settings);
 

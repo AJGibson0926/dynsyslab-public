@@ -14,7 +14,10 @@ There are two entry points:
 | Arrays you saved yourself in an `.npz` (one clock, any curves) | `time-series` |
 
 Both write a PNG and print a `dynsyslab.viewer.render/v1` JSON report (page count,
-axis bounds). Errors are `dynsyslab.viewer.error/v1` JSON on stderr with a nonzero exit.
+axis bounds). `render --output plot.svg` writes vector graphics and `--output plot.html` a
+self-contained interactive page of every page; `report SPEC.json` renders multi-page HTML or PDF
+reports and JSON result documents render directly
+([Viewer reports and export](VIEWER_REPORTS_AND_EXPORT.md)). Errors are `dynsyslab.viewer.error/v1` JSON on stderr with a nonzero exit.
 A relative `--output` (including a bare `plot.png`) resolves against the current directory and
 missing folders are created; a path that cannot be created is an error with `option` and `path`.
 
@@ -124,6 +127,17 @@ DynSysLabViewerCli render --source $E --view "Phase space" --output phase.png
 DynSysLabViewerCli render --source $E --view "Phase space" --start 40 --stop 100 --output phase_steady.png
 # what the estimator measured and predicted
 DynSysLabViewerCli render --source $E --view estimator --start 85 --stop 100 --output estimator.png
+```
+
+One eigenfunction along training and test trajectories on one phase plane (`observable_phase`,
+one `coordinate_transform` eigenfunction series per trajectory). Overlaid runs keep their domain
+colouring and grey paths. Brightness uses one modulus scale for all of them, so values compare
+across runs. Each run is named at its initial state, and the legend lists one entry per kind of line:
+
+```powershell
+DynSysLabViewerCli render --source $PsiTrain --view observable_phase --label training `
+  --compare-source $PsiTest1 --label "test (2.1, 0)" --compare-source $PsiTest2 --label "test (1.7, 0)" `
+  --output psi_phase_plane.png
 ```
 
 `inspect` takes the same selection and returns the payload as JSON (`--samples` adds

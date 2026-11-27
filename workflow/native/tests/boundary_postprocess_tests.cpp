@@ -1,4 +1,5 @@
 #include <dynsyslab/core/Archive.hpp>
+#include <dynsyslab/core/DataObject.hpp>
 #include <dynsyslab/core/Json.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
 #include <dynsyslab/workflow/Run.hpp>
@@ -22,7 +23,7 @@ void trajectory(const std::filesystem::path& path,double steady,double transient
     archive.arrays["time"]=core::NpyArray::fromDoubles({samples},{0,.1,.2,.3,.4});
     archive.arrays["values"]=core::NpyArray::fromDoubles({samples,2},values);
     archive.arrays["metadata_json"]=core::NpyArray::fromString(
-        R"({"format":"dynsyslab.trajectory/v1","system":"duffing","system_preset":"double_well_reference","resolved_system_parameters":{},"integration_form":"dimensionless"})");
+        R"({"schema":"dynsyslab.trajectory/v1","system":"duffing","system_preset":"double_well_reference","resolved_system_parameters":{},"integration_form":"dimensionless"})");
     core::writeNpzAtomic(path,archive);
 }
 
@@ -53,19 +54,21 @@ int main(){std::filesystem::path root;
         spectrum.arrays["continuous_eigenvalues"]=core::NpyArray::fromComplex(
             {2},{{0.,0.},{std::log(.5)/.1,0.}});
         spectrum.arrays["metadata_json"]=core::NpyArray::fromString(
-            R"({"format":"dynsyslab.derived/v1","method":"trajectory-eigenvalue-optimization","delta_t":0.1})");
+            R"({"schema":"dynsyslab.derived/v1","method":"trajectory-eigenvalue-optimization","delta_t":0.1})");
         core::writeNpzAtomic(spectrumPath,spectrum);
         const auto result=dynsyslab::workflow::executeJob(
             job(first,second,spectrumPath),root/"archives");
-        require(result.archives.size()==1,"boundary stage did not publish one KROM");
-        const auto model=core::loadKoopmanModel(result.archives.front());
-        const auto archive=core::readNpz(result.archives.front());
+        std::vector<std::filesystem::path> kroms;  // the stage publishes one krom
+        for(const auto& path:result.archives)
+            if(core::dataObjectKind(core::readNpz(path).metadataJson())==core::object_kind::krom)kroms.push_back(path);
+        require(result.archives.size()==1&&kroms.size()==1,"boundary stage did not publish one KROM");
+        const auto model=core::loadKoopmanModel(kroms.front());
+        const auto archive=core::readNpz(kroms.front());
         const auto observable=archive.at("reconstruction_names").string();
         require(model.liftedDimension()==2&&model.hasReconstruction(observable)
             &&model.eigenfunctionRepresentation()=="scattered-interpolation",
             "boundary stage did not publish a usable scattered KROM");
-        require(archive.at("training_states").shape==std::vector<std::size_t>({10,2})
-            &&archive.at("fit_relative_residual_by_output").doubles()[0]<1.0e-11,
+        require(archive.at("fit_relative_residual_by_output").doubles()[0]<1.0e-11,
             "boundary stage lost its ensemble evidence");
         std::filesystem::remove_all(root);
         std::cout<<"dynsyslab_boundary_postprocess_tests: PASS\n";return 0;

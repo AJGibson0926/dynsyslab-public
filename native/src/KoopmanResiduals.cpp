@@ -1,4 +1,5 @@
 #include "KoopmanSpectralInternal.hpp"
+#include <dynsyslab/core/Eigenpair.hpp>
 #include <dynsyslab/numerics/MatrixFunctions.hpp>
 #include <limits>
 namespace dynsyslab::core {
@@ -9,8 +10,12 @@ SpectralResiduals koopmanResiduals(const SpectralKROM& model,const KoopmanSnapsh
     const auto m=data.samples,n=model.dictionary.size(),r=model.rank;
     const auto w=weights(m,data.weights);
     const auto x=weighted(model.dictionary.evaluate(data.x),w,n),y=weighted(model.dictionary.evaluate(data.y),w,n);
-    SpectralResiduals out;out.scope=std::move(scope);out.features=n;out.grid=grid;
-    out.definition="sqrt(sum w |psi(y)-lambda psi(x)|^2 / sum w |psi(x)|^2); finite quadrature evidence, not a global spectral certificate";
+    // One-step residual (Eigenpair.hpp; Colbrook & Townsend, Comm. Pure Appl. Math. 77, 2024):
+    // sqrt(sum w |psi(y)-mu psi(x)|^2 / sum w |psi(x)|^2), finite quadrature evidence over the data, not a
+    // global spectral certificate. The grid minimum is the same residual minimized over the trial space:
+    // the sampled pseudospectrum (Trefethen & Embree 2005).
+    SpectralResiduals out;out.scope=std::move(scope);out.definition=residual_definition::oneStep;
+    auto& pseudo=out.pseudospectrum;pseudo.scope=out.scope;pseudo.definition=out.definition;pseudo.features=n;pseudo.grid=grid;
     for(std::size_t j=0;j<r;++j) {
         double denom=0,numer=0;
         for(std::size_t i=0;i<m;++i) {
@@ -41,11 +46,11 @@ SpectralResiduals koopmanResiduals(const SpectralKROM& model,const KoopmanSnapsh
             for(std::size_t j=0;j<r;++j)for(std::size_t k=0;k<r;++k)h[j*r+k]+=std::conj(row[j])*row[k];
         }
         const auto eig=numerics::hermitianEigensystem(h,r);
-        out.minimum.push_back(std::sqrt(std::max(0.,eig.eigenvalues.front())));
+        pseudo.minimum.push_back(std::sqrt(std::max(0.,eig.eigenvalues.front())));
         for(std::size_t j=0;j<n;++j) {
             std::complex<double> c{};
             for(std::size_t k=0;k<r;++k)c+=b[j*r+k]*eig.eigenvectors[k*r];
-            out.minimizingCoefficients.push_back(c);
+            pseudo.minimizingCoefficients.push_back(c);
         }
     }
     return out;

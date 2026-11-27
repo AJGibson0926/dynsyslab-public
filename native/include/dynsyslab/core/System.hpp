@@ -25,6 +25,12 @@ struct SinusoidalDriver {
 struct PresetDescriptor {
     std::string key;
     std::string description;
+    // Recommended external driver (amplitude 0: free run), the source the preset reproduces,
+    // and per-method processing settings and provenance as a JSON object (PresetMetadata.cpp).
+    // A solve applies the driver only when the job asks for it (system.driver = "preset").
+    SinusoidalDriver driver{};
+    std::string reference;
+    std::string processingJson{"{}"};
 };
 
 struct SystemConfiguration;
@@ -57,6 +63,11 @@ struct CoordinateScaling {
     std::string modelTimeUnits{"system time"};
     std::string modelInputUnits{"system input"};
     std::string physicalInputUnits{"system input"};
+    // Physical value of one model unit of each state (for example R0 and R0/T for a bubble's
+    // radius and wall velocity) and its unit. Empty: the state has no declared physical
+    // scale and the system cannot be integrated in dimensional coordinates.
+    std::vector<double> physicalStatePerModelState;
+    std::vector<std::string> physicalStateUnits;
 
     [[nodiscard]] double physicalTime(double modelTime) const;
     [[nodiscard]] double modelTime(double physicalTime) const;

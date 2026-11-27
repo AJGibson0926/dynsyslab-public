@@ -48,7 +48,7 @@ int main(){try{
     for(std::size_t k=0;k<101;++k){tt.push_back(.01*k);u.push_back(std::pow(tt.back(),4));}
     const auto derivative=core::differentiateTimeSeries(core::TimeSeries(tt,u,1));
     check(derivative.sampleCount()==97&&std::abs(derivative.value(50,0)-4*std::pow(derivative.time(50),3))<1e-12,"fourth order finite difference");
-    core::PooledHankelBasis basis;basis.delays=3;basis.rank=2;
+    core::HankelLeftBasis basis;basis.rows=3;basis.rank=2;
     basis.leftSingularVectors={1,0,0,0,0,1};basis.singularValues={2,4};
     core::FrozenHistoryTransform history(basis,.01,{0,1},"test");
     const core::TimeSeries series(tt,u,1);const auto latent=core::transformHistoryCoordinates(series,history,&series);
@@ -103,6 +103,13 @@ int main(){try{
     const auto fitted=core::readNpz(outputs.archives.back());const auto meta=core::json::parse(fitted.metadataJson());
     check(meta.at("training").at("against_numerical").at("relative_rms").array()[0].number()<1e-7,"workflow numerical fit");
     check(meta.at("training").at("rollouts").array()[0].at("status").string()=="complete","workflow rollout");
+    {   // 8th-order central differences as the rate labels (central_high_order).
+        auto fd8=core::json::parse(R"({"kind":"postprocess","methods":[{"name":"coordinate_transform","settings":{"kind":"identity"}},{"name":"sindy_dynamics","settings":{"use_previous_output":true,"monomials":[[1,0],[0,1]],"threshold":0.001,"derivatives":"central_high_order"}}]})");
+        fd8.at("sources")=core::json::Value::Array{source.generic_u8string()};
+        const auto fit=core::json::parse(core::readNpz(workflow::executePostprocess(fd8,root,{}).archives.back()).metadataJson());
+        check(fit.at("derivative_method").string()=="central_high_order"
+            &&fit.at("training").at("against_numerical").at("relative_rms").array()[0].number()<1e-5,"eighth-order labels with a monomial library");
+    }
     auto validateJob=core::json::parse(R"({"kind":"postprocess","methods":[{"name":"dynamics_validation","settings":{}}]})");
     validateJob.at("sources")=core::json::Value::Array{outputs.archives.front().generic_u8string()};
     auto& validationSettings=validateJob.at("methods").array()[0].at("settings");

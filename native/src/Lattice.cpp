@@ -131,6 +131,15 @@ std::array<double, 2> potts2DObservation(const std::vector<std::int64_t>& spins,
 
 }  // namespace
 
+namespace {
+template <class Result>
+void checkpoint(const LatticeCheckpoint& point, std::size_t sweep, std::size_t sweeps, const Result& result) {
+    if (!point.callback || !point.interval || (sweep + 1) % point.interval || sweep + 1 >= sweeps) return;
+    point.callback(sweep + 1, std::vector<double>(result.observations.begin(),
+        result.observations.begin() + static_cast<std::ptrdiff_t>((sweep + 1) * 2)), result.spins);
+}
+}  // namespace
+
 IsingResult runIsing2D(const IsingRequest& request,
                        const ExecutionContext* execution) {
     if (request.dimensions != 2)
@@ -184,6 +193,7 @@ IsingResult runIsing2D(const IsingRequest& request,
         result.observations[sweep * 2] = observation[0];
         result.observations[sweep * 2 + 1] = observation[1];
         report(execution, "2-D Ising lattice", sweep, request.sweeps);
+        checkpoint(request.checkpoint, sweep, request.sweeps, result);
     }
     return result;
 }
@@ -244,6 +254,7 @@ IsingResult runIsing3D(const IsingRequest& request,
         result.observations[sweep * 2] = observation[0];
         result.observations[sweep * 2 + 1] = observation[1];
         report(execution, "3-D Ising lattice", sweep, request.sweeps);
+        checkpoint(request.checkpoint, sweep, request.sweeps, result);
     }
     return result;
 }
@@ -318,6 +329,7 @@ PottsResult runPotts2D(const PottsRequest& request,
         result.observations[sweep * 2] = observation[0];
         result.observations[sweep * 2 + 1] = observation[1];
         report(execution, "2-D Potts lattice", sweep, request.sweeps);
+        checkpoint(request.checkpoint, sweep, request.sweeps, result);
     }
     return result;
 }

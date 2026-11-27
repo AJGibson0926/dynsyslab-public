@@ -1,4 +1,5 @@
 #include "PostprocessInternal.hpp"
+#include <dynsyslab/core/SpectrumArchive.hpp>
 #include "KromDatasetSupport.hpp"
 
 #include <dynsyslab/core/BoundaryEigenfunctions.hpp>
@@ -21,15 +22,9 @@ std::vector<std::complex<double>> spectrum(
     const dynsyslab::core::NpzRecord& archive,const json::Value& metadata,
     double& deltaTime) {
     deltaTime=metadata.at("delta_t").number();
-    if(archive.contains("continuous_eigenvalues"))
-        return archive.at("continuous_eigenvalues").complexDoubles();
-    const auto& discrete=archive.contains("discrete_eigenvalues")
-        ?archive.at("discrete_eigenvalues"):archive.at("eigenvalues");
-    if(!(deltaTime>0.0))throw std::invalid_argument(
-        "discrete eigenvalue spectrum requires positive delta_t");
-    std::vector<std::complex<double>> result;
-    for(const auto value:discrete.complexDoubles())result.push_back(std::log(value)/deltaTime);
-    return result;
+    const auto spectrum=dynsyslab::core::readSpectrumArrays(archive);
+    if(!(deltaTime>0.0))deltaTime=spectrum.sampleInterval();
+    return spectrum.continuousRates();
 }
 
 std::vector<std::vector<std::size_t>> modeGroups(const json::Value& settings) {
@@ -70,16 +65,16 @@ std::filesystem::path runBoundaryEigenfunctions(
         sources.push_back(loadSource(std::filesystem::u8path(path.string())));
     const auto configuration=systemConfiguration(primary);
     dynsyslab::core::KoopmanTrajectoryEnsemble ensemble;
-    ensemble.time=primary.time;ensemble.samples=primary.samples;
-    ensemble.trajectories=sources.size();ensemble.stateDimension=primary.dimension;
+    ensemble.time=primary.time();ensemble.samples=primary.samples();
+    ensemble.trajectories=sources.size();ensemble.stateDimension=primary.dimension();
     json::Value::Array sourcePaths;
     for(const auto& source:sources){
-        if(source.samples!=ensemble.samples||source.dimension!=ensemble.stateDimension
-            ||source.time!=ensemble.time
+        if(source.samples()!=ensemble.samples||source.dimension()!=ensemble.stateDimension
+            ||source.time()!=ensemble.time
             ||!sameSystem(configuration,systemConfiguration(source)))
             throw std::invalid_argument(
                 "boundary fitting sources must share system and uniform sample grid");
-        ensemble.states.insert(ensemble.states.end(),source.values.begin(),source.values.end());
+        ensemble.states.insert(ensemble.states.end(),source.values().begin(),source.values().end());
         sourcePaths.emplace_back(source.path.generic_u8string());
     }
     auto system=dynsyslab::core::createSystem(configuration);
@@ -106,20 +101,12 @@ std::filesystem::path runBoundaryEigenfunctions(
         ensemble.samples*ensemble.trajectories);
     for(std::size_t trajectory=0;trajectory<ensemble.trajectories;++trajectory)
         repeatedTime.insert(repeatedTime.end(),ensemble.time.begin(),ensemble.time.end());
-    std::vector<std::complex<double>> discrete;
-    for(const auto value:eigenvalues)discrete.push_back(std::exp(value*deltaTime));
     std::map<std::string,dynsyslab::core::NpyArray> extra;
     extra["training_time"]=dynsyslab::core::NpyArray::fromDoubles(
         {repeatedTime.size()},repeatedTime);
-    extra["discrete_eigenvalues"]=dynsyslab::core::NpyArray::fromComplex(
-        {discrete.size()},discrete);extra["eigenvalues"]=extra["discrete_eigenvalues"];
     extra["fit_relative_residual_by_output"]=
         dynsyslab::core::NpyArray::fromDoubles(
             {fit.relativeResidualByOutput.size()},fit.relativeResidualByOutput);
-    const auto directory=objectFolder(root, "koopman-boundary-eigenfunctions");
-    std::filesystem::create_directories(directory);
-    const auto output=directory/dynsyslab::core::wide(safeName(
-        primary.path.stem().u8string()+"__boundary-eigenfunctions__"+timestamp())+".npz");
     const std::string details="\"source_spectrum\":\""
         +escaped(spectrumPath.generic_u8string())+"\",\"source_archives\":"
         +json::dump(json::Value(std::move(sourcePaths)))
@@ -130,9 +117,8 @@ std::filesystem::path runBoundaryEigenfunctions(
         +escaped(spectralMetadata.at("method").string("provided"))
         +"\",\"eigenfunction_representation\":\"scattered-interpolation\""
         +",\"gradient_backend\":\"finite-difference\"";
-    dynsyslab::core::saveKoopmanModel(output,model,
+    return publishKrom(root,primary,model,"boundary-eigenfunctions",
         metadata(primary,"fitted-boundary-eigenfunctions",label,details),std::move(extra));
-    return output;
 }
 
 }  // namespace dynsyslab::workflow::postprocess_detail

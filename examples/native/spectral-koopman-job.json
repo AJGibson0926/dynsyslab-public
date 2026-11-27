@@ -1,6 +1,6 @@
 {
   "schema": "dynsyslab.compute-job/v1",
-  "kind": "pipeline",
+  "kind": "experiment",
   "label": "Shared Hankel spectral comparison",
   "description": "Shared Hankel spectral comparison on a pure rotation. Generates its own source (an undamped harmonic oscillator), then compares ResDMD and EDMD on one shared Hankel matrix.",
   "stages": [

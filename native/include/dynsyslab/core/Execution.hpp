@@ -21,6 +21,14 @@ struct ExecutionProgress {
     std::size_t planned{};
 };
 
+// Process-wide worker-thread cap set by the queue and CLI (`--max-threads`, job key
+// `execution.max_threads`); zero means no cap. It also sets OMP_NUM_THREADS and the BLAS
+// thread variables for libraries started afterwards. Kernels that spawn threads ask
+// workerThreads (defined in Execution.cpp so every module shares one cap).
+void setProcessThreadLimit(std::size_t threads);
+[[nodiscard]] std::size_t processThreadLimit();
+[[nodiscard]] std::size_t workerThreads(std::size_t wanted);
+
 using CancellationProbe = std::function<bool()>;
 using ExecutionProgressCallback = std::function<void(const ExecutionProgress&)>;
 

@@ -23,19 +23,19 @@ execute_process(COMMAND "${CLI}" run "${work}/fit.json" --archive-root "${work}/
 if(NOT status EQUAL 0)
   message(FATAL_ERROR "Native DMDc CLI failed: ${error}")
 endif()
-file(GLOB derived "${work}/archives/objects/koopman_model/*__koopman-dmdc__*.npz")
+file(GLOB derived "${work}/archives/objects/dynamical_model/*__koopman-dmdc__*.npz")
 list(LENGTH derived count)
 if(NOT count EQUAL 1)
   message(FATAL_ERROR "Native DMDc CLI did not publish its model: ${output}")
 endif()
-file(GLOB lifted "${work}/archives/objects/koopman_model/*__koopman-edmdc__*.npz")
+file(GLOB lifted "${work}/archives/objects/dynamical_model/*__koopman-edmdc__*.npz")
 list(LENGTH lifted count)
 if(NOT count EQUAL 1)
   message(FATAL_ERROR "Native EDMDc CLI did not publish its model: ${output}")
 endif()
 # Windowed EDMDc exported as a K-ROM, principal-mode extraction and a windowed input map (KLQG chain).
 set(window "[[-10,10],[-10,10]]")
-file(WRITE "${work}/chain.json" "{\"schema\":\"dynsyslab.compute-job/v1\",\"kind\":\"pipeline\",\"label\":\"windowed EDMDc K-ROM contract\",\"stages\":[
+file(WRITE "${work}/chain.json" "{\"schema\":\"dynsyslab.compute-job/v1\",\"kind\":\"experiment\",\"label\":\"windowed EDMDc K-ROM contract\",\"stages\":[
  {\"id\":\"fit\",\"job\":{\"kind\":\"postprocess\",\"sources\":[\"${source}\"],\"methods\":[{\"name\":\"edmdc\",\"settings\":{\"polynomial_degree\":1,\"include_constant\":false,\"normalize\":false,\"state_window\":${window},\"export_krom\":true}}],\"archive\":{\"enabled\":true}}},
  {\"id\":\"krom\",\"job\":{\"kind\":\"postprocess\",\"sources\":[\"\${fit.archive}\"],\"methods\":[{\"name\":\"krom_extract\",\"settings\":{\"mode_selection\":{\"rule\":\"principal\",\"target_state\":[0,0]},\"refit_reconstructions\":{\"observables\":[\"state\",\"force\"],\"intercept\":false}}}],\"archive\":{\"enabled\":true}}},
  {\"id\":\"map\",\"job\":{\"kind\":\"postprocess\",\"sources\":[\"${source}\"],\"methods\":[{\"name\":\"input_map\",\"settings\":{\"krom\":\"\${krom.archive}\",\"representation\":\"constant\",\"fit\":\"controlled_residual\",\"state_window\":${window}}}],\"archive\":{\"enabled\":true}}}]}")
@@ -46,7 +46,7 @@ if(NOT status EQUAL 0)
 endif()
 # Archives are filed by object kind; their names still carry the method that produced them.
 foreach(kind koopman-edmdc-krom krom-extract input-map)
-  file(GLOB published "${work}/archives/objects/koopman_model/*${kind}*.npz")
+  file(GLOB published "${work}/archives/objects/krom/*${kind}*.npz")
   list(LENGTH published count)
   if(count LESS 1)
     message(FATAL_ERROR "Windowed EDMDc chain did not publish ${kind}: ${output}")

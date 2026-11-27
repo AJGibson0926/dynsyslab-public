@@ -56,3 +56,16 @@ namespace dynsyslab::workflow::postprocess_detail {
 dynsyslab::core::CoordinateSeries selectedColumns(const SourceData& source, const json::Value& settings,
                                                   const json::Value& original, json::Value& meta);
 } // namespace dynsyslab::workflow::postprocess_detail
+
+namespace dynsyslab::workflow::postprocess_detail {
+// kind "resample": the source on a new clock ("times" or "time_step", optional "start"/"stop")
+// with "method" pchip (default), linear, cubic or nearest (CoordinateResample.cpp).
+dynsyslab::core::CoordinateSeries resampledCoordinates(const SourceData& source, const json::Value& settings,
+                                                       json::Value& meta);
+} // namespace dynsyslab::workflow::postprocess_detail
+
+namespace dynsyslab::workflow::postprocess_detail {
+// kind "delay_taps": delay coordinates at physical-time lags, linear or as quintic delay jets
+// (CoordinateDelayTaps.cpp, core/DelaySampling.hpp).
+dynsyslab::core::CoordinateSeries delayTapCoordinates(const SourceData& source, const json::Value& settings, json::Value& meta);
+} // namespace dynsyslab::workflow::postprocess_detail

@@ -3,6 +3,7 @@
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/Hierarchy.hpp>
 #include <dynsyslab/core/PDE.hpp>
+#include <dynsyslab/core/PDEAdaptivePartition.hpp>
 #include <dynsyslab/core/PDEParallel.hpp>
 #include <dynsyslab/core/Text.hpp>
 #include <dynsyslab/workflow/Hierarchy.hpp>
@@ -14,6 +15,7 @@
 #include <cctype>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <random>
 #include <sstream>
@@ -121,7 +123,16 @@ dynsyslab::core::PDEIntegrationOptions integrationOptions(
     });
     if (method == "euler") result.method = dynsyslab::core::PDEIntegrationMethod::euler;
     else if (method == "rk4") result.method = dynsyslab::core::PDEIntegrationMethod::rk4;
-    else throw std::invalid_argument("native PDE workflow supports Euler and RK4");
+    else {
+        // Adaptive method of lines with any native ODE method (RK23, RK45, DOP853, Radau, BDF,
+        // Adams, LSODA) and its error control.
+        result.method = dynsyslab::core::PDEIntegrationMethod::adaptive;
+        result.adaptiveMethod = dynsyslab::core::integrationMethodFromName(method);
+        result.relativeTolerance = job.at("solver").at("rtol").number(1.0e-6);
+        result.absoluteTolerance = job.at("solver").at("atol").number(1.0e-9);
+        result.maximumStep = job.at("solver").at("max_step").number(0.0);
+        return result;
+    }
     const double stable = dynsyslab::core::heatEquationStableStep(configuration);
     result.internalStep = job.at("solver").at("step_size").number(
         std::min(result.outputStep, stable));
@@ -142,10 +153,27 @@ std::optional<dynsyslab::core::ParallelMeshPlan> parallelPlan(
         shape.push_back(positiveInteger(value, "PDE partition extent"));
     if (shape.empty())
         throw std::invalid_argument("parallel PDE solve requires partition_shape");
-    return dynsyslab::core::buildParallelMeshPlan(
+    auto plan = dynsyslab::core::buildParallelMeshPlan(
         mesh, std::move(shape), positiveInteger(source.at("ghost_width"),
         "PDE ghost width"), positiveInteger(source.at("local_workers"),
         "PDE local worker count"));
+    // communication: shared_memory (default), halo_exchange (rank-local halos in process,
+    // the thread-parallel equivalent of an MPI run), mpi (one rank per partition; refused
+    // in process). adaptive / load_balance "adaptive": measured-load rebalancing
+    // (core/PDEAdaptivePartition.hpp).
+    plan.communication = dynsyslab::core::pdeCommunicationFromName(source.at("communication").string());
+    const auto& adaptive = source.at("adaptive");
+    auto& policy = plan.adaptive;
+    policy.enabled = adaptive.at("enabled").boolean(source.at("load_balance").string("static") == "adaptive");
+    policy.refinementThreshold = adaptive.at("refinement_threshold").number(policy.refinementThreshold);
+    policy.coarseningThreshold = adaptive.at("coarsening_threshold").number(policy.coarseningThreshold);
+    policy.rebalanceImbalance = adaptive.at("rebalance_imbalance").number(policy.rebalanceImbalance);
+    policy.checkpointBeforeRepartition = adaptive.at("checkpoint_before_repartition").boolean(policy.checkpointBeforeRepartition);
+    if (!adaptive.at("rebalance_interval_calls").isNull())
+        policy.rebalanceIntervalCalls = positiveInteger(adaptive.at("rebalance_interval_calls"), "PDE rebalance interval");
+    if (!(policy.rebalanceImbalance >= 1.0))
+        throw std::invalid_argument("PDE adaptive rebalance_imbalance must be at least 1");
+    return plan;
 }
 
 std::string metadata(const json::Value& job,
@@ -154,9 +182,10 @@ std::string metadata(const json::Value& job,
                      const std::vector<double>& coordinates,
                      const dynsyslab::core::PDEIntegrationOptions& options,
                      const dynsyslab::core::ParallelMeshPlan* parallel,
-                     const std::string& created) {
+                     const std::string& created,
+                     const std::vector<dynsyslab::core::RepartitionRecord>& repartitions = {}) {
     json::Value::Object root;
-    root["format"] = "dynsyslab.solution/v2";
+    root["schema"] = "dynsyslab.solution/v2";
     root["label"] = job.at("label").string("pde-solve");
     root["system"] = configuration.identifier;
     root["system_family"] = "pde";
@@ -183,8 +212,9 @@ std::string metadata(const json::Value& job,
     root["data_role"] = hierarchy.dataRole;
     root["trajectory_index"] = static_cast<double>(trajectory);
     root["created_utc"] = created;
-    root["pde_method"] = options.method == dynsyslab::core::PDEIntegrationMethod::rk4
-        ? "RK4" : "Euler";
+    root["pde_method"] = options.method == dynsyslab::core::PDEIntegrationMethod::adaptive
+        ? "MOL-" + dynsyslab::core::integrationMethodName(options.adaptiveMethod)
+        : (options.method == dynsyslab::core::PDEIntegrationMethod::rk4 ? "RK4" : "Euler");
     root["pde_internal_step"] = options.internalStep;
     root["pde_execution_mode"] = parallel ? "local-partitioned" : "serial";
     if (parallel) {
@@ -194,6 +224,16 @@ std::string metadata(const json::Value& job,
         root["pde_partition_shape"] = json::Value(std::move(partitionShape));
         root["pde_ghost_width"] = static_cast<double>(parallel->ghostWidth);
         root["pde_local_workers"] = static_cast<double>(parallel->localWorkers);
+        root["pde_communication"] = dynsyslab::core::pdeCommunicationName(parallel->communication);
+        const auto& policy = parallel->adaptive;
+        root["pde_adaptive_policy"] = json::Value::Object{{"enabled", policy.enabled},
+            {"refinement_threshold", policy.refinementThreshold}, {"coarsening_threshold", policy.coarseningThreshold},
+            {"rebalance_imbalance", policy.rebalanceImbalance},
+            {"checkpoint_before_repartition", policy.checkpointBeforeRepartition},
+            {"rebalance_interval_calls", static_cast<double>(policy.rebalanceIntervalCalls)}};
+        json::Value::Array records;
+        for (const auto& record : repartitions) records.push_back(json::parse(record.json()));
+        root["pde_repartition_records"] = json::Value(std::move(records));
     }
     json::Value::Object parameters;
     for (const auto& item : configuration.parameters) parameters[item.first] = item.second;
@@ -232,7 +272,11 @@ SolveResult executePDESolve(
         throw dynsyslab::core::ExecutionLimitExceeded(
             "parallel PDE local_workers exceeds the execution thread limit");
     auto rhs = dynsyslab::core::heatEquationRightHandSide(resolved);
-    if (parallel) rhs = dynsyslab::core::partitionedPDERightHandSide(
+    const auto repartitions = std::make_shared<dynsyslab::core::RepartitionLog>();
+    if (parallel && parallel->adaptive.enabled)
+        rhs = dynsyslab::core::adaptivePartitionedPDERightHandSide(
+            *parallel, dynsyslab::core::heatEquationSubdomainRightHandSide(resolved), repartitions);
+    else if (parallel) rhs = dynsyslab::core::partitionedPDERightHandSide(
         *parallel, dynsyslab::core::heatEquationSubdomainRightHandSide(resolved));
     const auto coordinates = dynsyslab::core::heatEquationCoordinates(resolved);
     const std::string created = detail::timestamp();
@@ -275,7 +319,7 @@ SolveResult executePDESolve(
             {trajectory.sampleCount, coordinates.size()}, trajectory.values);
         archive.arrays["metadata_json"] = dynsyslab::core::NpyArray::fromString(
             metadata(job, resolved, hierarchy, index, coordinates,
-                     options, parallel ? &*parallel : nullptr, created));
+                     options, parallel ? &*parallel : nullptr, created, repartitions->snapshot()));
         detail::appendAnalyticComparison(archive,
             dynsyslab::core::heatEquationDescriptor(coordinates.size()), resolved,
             dynsyslab::core::heatEquationAnalyticSolutions(resolved), trajectory.time,

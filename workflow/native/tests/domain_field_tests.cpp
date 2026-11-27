@@ -43,7 +43,7 @@ int main() {
         source.arrays["time"] = core::NpyArray::fromDoubles({3}, std::vector<double>{0, 0.1, 0.2});
         source.arrays["values"] = core::NpyArray::fromDoubles({3, 2}, std::vector<double>{1, 0, 0.99, -0.1, 0.98, -0.2});
         source.arrays["metadata_json"] = core::NpyArray::fromString(
-            R"({"format":"dynsyslab.trajectory/v1","label":"source","system":"harmonic_oscillator","system_preset":"undamped","resolved_system_parameters":{"mass_kg":1,"stiffness_n_m":4,"damping_kg_s":0},"integration_form":"dimensional"})");
+            R"({"schema":"dynsyslab.trajectory/v1","label":"source","system":"harmonic_oscillator","system_preset":"undamped","resolved_system_parameters":{"mass_kg":1,"stiffness_n_m":4,"damping_kg_s":0},"integration_form":"dimensional"})");
         core::writeNpzAtomic(sourcePath, source);
         const json::Value box = O{{"lower", A{-1.0, -1.0}}, {"upper", A{1.0, 1.0}}, {"points", 11.0}};
 
@@ -51,7 +51,7 @@ int main() {
         const auto plain = run(sourcePath, root / "evaluate", {{"function", O{{"expression", "position^2 + velocity"}}}, {"domain", box}});
         const auto& field = plain.frames.front();
         require(field.grid.size() == 121 && std::abs(field.value(0).real() - 0.0) < 1e-12, "evaluate on the grid");
-        require(plain.metadata.at("format").string() == "dynsyslab.grid-field/v1", "grid-field archive");
+        require(plain.metadata.at("schema").string() == "dynsyslab.grid-field/v1", "grid-field archive");
 
         // Koopman action: the energy k x^2 + m v^2 is invariant, and x o Phi^t is the exact rotation.
         const auto energy = run(sourcePath, root / "action", {{"function", O{{"expression", "stiffness_n_m*position^2 + mass_kg*velocity^2"}}},
