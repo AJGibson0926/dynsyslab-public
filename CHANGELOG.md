@@ -1,12 +1,23 @@
 # Changelog
 
+## 0.10.2 — 2026-11-27
+
+- **Every shipped example runs from a fresh install.** `receiver-sensor-design` now solves its own
+  training and held-out ringdowns (`training_radius`, `held_out_radius`) instead of reading
+  archives given on the command line. `examples/native/long-running.json` names the renamed
+  `experiments/` paths, so long experiments are validated and planned but not run.
+  `rpe-control-identification`, `rpe-echo-delay-sweep/delay-injectivity` and the
+  `rpe-clean-isolation-klqr` preset, which need a K-ROM, a target path or training trajectories
+  from the user, stay in the private repository until they build their own inputs; their methods
+  ship. 0.10.1 was tagged but never released.
+
 ## 0.10.1 — 2026-11-27
 
 - **Public checkouts pass quickstart.** 0.10.0 removed `archives/`'s Python files, so a fresh
   clone had no `archives/` folder; the CLI did not recognize the checkout and `quickstart` could
   not find its examples. `archives/README.md` is tracked again. The figure test skips its
-  private-only case-study check where those files are absent. 0.10.0 was tagged but never
-  released.
+  private-only case-study check where those files are absent. Tagged but never released; 0.10.0
+  was tagged but never released either.
 
 ## 0.10.0 — 2026-11-26
 

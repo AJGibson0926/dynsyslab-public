@@ -21,6 +21,11 @@ scripts/run_rpe_control_map_comparison.py export-ignore
 tools/analyze_rpe_echo_jet_nonlinear_sine.py export-ignore
 viewer/focus_profiles/rpe-successful-control.json export-ignore
 docs/STUDY_RECORDS.md export-ignore
+# These need archives supplied by the user (a K-ROM, a target path, training trajectories), so they
+# cannot run from a fresh install; private until they build their own inputs.
+examples/native/experiments/rpe-control-identification/** export-ignore
+examples/native/experiments/rpe-echo-delay-sweep/delay-injectivity.json export-ignore
+examples/native/presets/rpe-clean-isolation-klqr.json export-ignore
 
 # Data packs ship only with the release they pin. These 0.8.1 packs stay with tag v0.8.1 and are
 # left out of later public exports.

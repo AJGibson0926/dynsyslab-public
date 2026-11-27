@@ -2,13 +2,27 @@
   "schema": "dynsyslab.compute-job/v1",
   "kind": "experiment",
   "label": "receiver sensor design",
-  "description": "Which receivers, pressure terms and readout recover a held-out free RPE ringdown best (docs/architecture/RECEIVER_ARRAYS.md). Training and held-out are two distinct free trajectories of the same bubble; give them with --param training=... --param held_out=...",
+  "description": "Which receivers, pressure terms and readout recover a held-out free RPE ringdown best (docs/architecture/RECEIVER_ARRAYS.md). Training and held-out are two distinct free ringdowns of the same bubble, solved by the first two stages (initial radius set by --param training_radius=... and --param held_out_radius=...).",
   "parameters": {
-    "training": "<path to a free RPE trajectory archive>",
-    "held_out": "<path to a different free RPE trajectory archive>",
+    "training_radius": 1.3,
+    "held_out_radius": 0.8,
     "neighbors": 8
   },
   "stages": [
+    {"id": "training", "job": {"kind": "solve", "label": "receiver-design-training",
+      "system": {"name": "rpe", "preset": "air_water_20c", "parameters": {}},
+      "time": {"start": 0, "stop": 100, "output_step": 0.01},
+      "solver": {"method": "BDF", "rtol": 1e-9, "atol": 1e-11},
+      "initial_conditions": {"mode": "explicit", "count": 1, "clusters": 1, "seed": 0, "values": [["${params.training_radius}", 0]], "ranges": []},
+      "campaign": {"enabled": false}, "preflight": {"enabled": false},
+      "archive": {"enabled": true, "data_role": "free_training"}}},
+    {"id": "held_out", "job": {"kind": "solve", "label": "receiver-design-held-out",
+      "system": {"name": "rpe", "preset": "air_water_20c", "parameters": {}},
+      "time": {"start": 0, "stop": 100, "output_step": 0.01},
+      "solver": {"method": "BDF", "rtol": 1e-9, "atol": 1e-11},
+      "initial_conditions": {"mode": "explicit", "count": 1, "clusters": 1, "seed": 0, "values": [["${params.held_out_radius}", 0]], "ranges": []},
+      "campaign": {"enabled": false}, "preflight": {"enabled": false},
+      "archive": {"enabled": true, "data_role": "free_training"}}},
     {"id": "design", "sweep": {
       "mode": "zip",
       "variables": {
@@ -21,10 +35,10 @@
       },
       "order": ["terms", "receivers", "contrast", "mode"],
       "stages": [
-        {"id": "train", "job": {"kind": "postprocess", "sources": ["${params.training}"], "methods": [{"name": "receiver_signals",
+        {"id": "train", "job": {"kind": "postprocess", "sources": ["${training.archive}"], "methods": [{"name": "receiver_signals",
           "settings": {"receivers": "${sweep.receivers}", "sound_speed": 1480, "stride": 40, "terms": "${sweep.terms}",
                        "range_corrected": true, "contrast": "${sweep.contrast}"}}]}},
-        {"id": "held", "job": {"kind": "postprocess", "sources": ["${params.held_out}"], "methods": [{"name": "receiver_signals",
+        {"id": "held", "job": {"kind": "postprocess", "sources": ["${held_out.archive}"], "methods": [{"name": "receiver_signals",
           "settings": {"receivers": "${sweep.receivers}", "sound_speed": 1480, "stride": 40, "terms": "${sweep.terms}",
                        "range_corrected": true, "contrast": "${sweep.contrast}"}}]}},
         {"id": "readout", "job": {"kind": "postprocess", "sources": ["${held.archive}"], "methods": [{"name": "state_readout",
