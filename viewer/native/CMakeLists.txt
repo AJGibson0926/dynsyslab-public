@@ -68,6 +68,7 @@ add_library(dynsyslab_viewer_services STATIC
   src/SindyDynamicsPayload.cpp
   src/EigenvalueOptimizationPayload.cpp
   src/SpectralMeasurePayload.cpp
+  src/SpectralBandPayload.cpp
   src/ComplexStemPlot.cpp
   src/ModeWeightPayload.cpp
   src/LinearSystemsPayload.cpp

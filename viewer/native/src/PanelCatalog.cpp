@@ -18,7 +18,7 @@ std::string family(const std::string& route, const Figure& figure) {
     if (route == "fourier" || figure.kind == "fourier") return "Fourier spectra";
     if (figure.kind == "time") return "Time series";
     // Spectral stem plots are 3-D figures but belong with the Koopman panels.
-    if (route == "koopman_spectrum" || route == "mode_weights") return "Koopman";
+    if (route == "koopman_spectrum" || route == "mode_weights" || route == "spectral_measures") return "Koopman";
     if (figure.kind == "phase" || figure.kind == "three_d") return "State space";
     if (route.find("observable") != std::string::npos) return "Observables";
     if (figure.kind.find("koopman") != std::string::npos ||
@@ -43,7 +43,7 @@ std::vector<std::string> panelSourceViews(const CatalogItem& item) {
         "observable_time", "observable_heatmap", "observable_phase", "domain_field", "animation", "field", "lattice",
         "ensemble_control", "ensemble_time", "ensemble_phase",
         "campaign_summary", "campaign_bifurcation",
-        "koopman_spectrum", "mode_weights", "krom_dashboard", "control_map_error",
+        "koopman_spectrum", "mode_weights", "spectral_measures", "krom_dashboard", "control_map_error",
         "observability", "hankel_spectrum", "gramian_spectrum", "frequency_response", "pole_zero",
         "bode", "nyquist", "loop_bode", "sensitivity",
         "koopman_validation", "eigenvalue_optimization",

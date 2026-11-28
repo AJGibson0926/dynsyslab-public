@@ -24,4 +24,12 @@ void writeKromSamples(NpzRecord& archive, const EigenfunctionSamples& samples);
 void writeKromReadouts(NpzRecord& archive, const KoopmanModel& model, bool ownOnly);
 void readKromReadouts(const NpzRecord& archive, KoopmanModel& model);
 
+// The compressed operator (compression_basis, compression_action, compression_readout__<key>) and its
+// description for the krom block (KromSpectralParts.cpp).
+[[nodiscard]] json::Value writeKromCompression(NpzRecord& archive, const KoopmanCompression& compression);
+[[nodiscard]] KoopmanCompression readKromCompression(const json::Value& block, const NpzRecord& archive);
+// The functions on spectral sets the model owns (spectral_function__<key>) and their descriptions.
+[[nodiscard]] json::Value::Array writeKromSpectralFunctions(NpzRecord& archive, const KoopmanModel& model, bool ownOnly);
+void readKromSpectralFunctions(const json::Value& descriptions, const NpzRecord& archive, KoopmanModel& model);
+
 }  // namespace dynsyslab::core::detail

@@ -1,0 +1,29 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "triple_well_duffing",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "dlmf22": "https://dlmf.nist.gov/22.19"
+ },
+ "definitions": [],
+ "eigenfunctions": [
+  {
+   "id": "energy",
+   "title": "Energy",
+   "kind": "exact",
+   "psi": "velocity^2/2 + position^6/6 - (1 + inner_saddle^2)*position^4/4 + inner_saddle^2*position^2/2",
+   "eigenvalue": "0",
+   "conditions": "Zero damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "dlmf22"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  }
+ ]
+}

@@ -120,7 +120,7 @@ int main(int argc,char** argv) {
         {   // Each eigenvalue shows its pair's residual; a lattice pseudospectrum is a heat map beneath them.
             auto evidence=model.spectrum();
             evidence.setResiduals({0.0123,0.0123},"one-step","empirical-training");
-            evidence.setPseudospectrum(Pseudospectrum{"one-step","empirical-training",{{0.9,-0.1},{1.0,-0.1},{0.9,0.1},{1.0,0.1}},{0.1,0.01,0.2,0.02},{},0});
+            evidence.setPseudospectrum(Pseudospectrum{"one-step","empirical-training",{{0.9,-0.1},{1.0,-0.1},{0.9,0.1},{1.0,0.1}},{0.1,0.01,0.2,0.02}});
             auto withEvidence=model; withEvidence.setSpectralEvidence(evidence);
             const auto evidenced=root/"evidenced.npz";
             saveKoopmanModel(evidenced,withEvidence,R"({"label":"Evidence fixture","delta_t":0.1})",

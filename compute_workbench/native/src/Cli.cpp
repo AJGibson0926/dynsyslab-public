@@ -276,10 +276,7 @@ int wmain(int argc, wchar_t** argv) {
         else if (command == L"systems") systems();
         else if (command == L"krom-info") {
             if(args.positional.size()!=2)throw std::invalid_argument("krom-info requires a KROM archive");
-            if(dynsyslab::core::readNpzIndex(args.positional[1]).contains("spectral_krom_contract_json"))
-                std::cout<<json::dump(dynsyslab::workflow::evaluateKoopmanSpectralQuery(json::Value::Object{
-                    {"action","inspect"},{"archive",dynsyslab::core::narrow(args.positional[1])},{"include_model",false}}))<<'\n';
-            else std::cout<<json::dump(dynsyslab::core::inspectKoopmanModel(dynsyslab::core::loadKoopmanModel(args.positional[1])))<<'\n';
+            std::cout<<json::dump(dynsyslab::core::inspectKoopmanModel(dynsyslab::core::loadKoopmanModel(args.positional[1])))<<'\n';
         } else if (command == L"krom-training-plan") {  // non-executing; see KromTrainingPlan.hpp
             if(args.positional.size()!=2)throw std::invalid_argument("krom-training-plan requires a request JSON file");
             std::cout << json::dump(dynsyslab::workflow::designKromTrainingPlan(

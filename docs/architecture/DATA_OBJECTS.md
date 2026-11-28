@@ -57,9 +57,17 @@ a model; they can be fitted later. In memory it is one class, `core::KoopmanMode
 - **Spectrum** (`core/SpectrumArchive.hpp`): the point part, `continuous_eigenvalues`,
   `discrete_eigenvalues`, `sample_interval`, `logarithm_branches`, `eigenvalue_domain`, and each
   eigenpair's residual when the method computed one, `eigenpair_residual` (NaN where a pair has
-  none) with `eigenpair_residual_json` ({definition, scope} per pair); the pseudospectrum,
-  `pseudospectrum_grid`, `pseudospectrum_minimum`, `pseudospectrum_minimizing_coefficients` and
-  `pseudospectrum_json`; the continuous part, `continuous_spectrum_json` (spectral measures). See
+  none) with `eigenpair_residual_json` ({definition, scope} per pair); `mode_ids`, each pair's
+  stable id when they are not 0..n-1; the pseudospectrum, `pseudospectrum_grid`,
+  `pseudospectrum_minimum` and `pseudospectrum_json`; the continuous part, `spectral_bands_json`
+  (bands; `continuous_spectrum_json` in older archives) and `spectral_measures_json` (each observable's
+  measure on a band, as values). The functions on spectral sets (a band's generalized eigenfunctions,
+  keys `band/<band>` and, for the level-set form, `band/<band>/level`; a measure's wave packets, key
+  `measure/<band>/<observable>/<output>`; the pseudospectrum's minimizers, key `pseudospectrum`) are
+  `spectral_function__<key>`, the
+  observables' Koopman modes are the readouts (`reconstruction_*`), and a spectral
+  fit's compressed operator is `compression_basis`, `compression_action` and
+  `compression_readout__<name>`, both described in the krom block. See
   [EIGENFUNCTION_OBJECTS.md](EIGENFUNCTION_OBJECTS.md#eigenpairs-spectrum-and-pseudospectrum).
 - **Samples**: `eigenfunction_values` (samples x modes), `training_time` and
   `training_sample_indices` (rows of the input series the origin points to). A fitted expansion
@@ -74,8 +82,8 @@ a model; they can be fitted later. In memory it is one class, `core::KoopmanMode
   `reconstruction_offset__<key>`, `reconstruction_error__<key>` (rms, max, relative).
 - **Input maps B**: `control_<name>_*`, `discrete_input_map_<i>` and `input_map_manifest_json`; each
   records the identity of the eigenfunctions it acts on (`koopmanModelIdentity`).
-- **Diagnostics and provenance**: `spectral_diagnostics_json` (invariance, wave packets,
-  stochastic residuals, RKHS adjoints of a spectral fit), `dataset_references`, `binding_evidence`,
+- **Diagnostics and provenance**: `spectral_diagnostics_json` (invariance, stochastic residuals and
+  RKHS adjoints of a spectral fit; wave packets belong to their measure in the continuous spectrum), `dataset_references`, `binding_evidence`,
   `metadata_json["krom"]["origin"]` (method, settings, inputs) and `input_channels`.
 
 Arrays a method adds (modes, operators, Hankel singular values) stay beside these as the producing
@@ -153,7 +161,7 @@ publishes:
   eigenpair carries its one-step residual (`one-step`, `empirical-training`) of the frozen-dictionary
   expansion; a `residual_grid` becomes the spectrum's pseudospectrum; measures (mpEDMD, Rigged DMD,
   ResDMD; Colbrook, *SIAM J. Numer. Anal.* 61, 2023; Colbrook, Drysdale & Horning,
-  arXiv:2405.00782) its continuous components; the rest the krom's spectral diagnostics.
+  arXiv:2405.00782) its spectral bands; the rest the krom's spectral diagnostics.
 - **`eigenfunction_expansion`** publishes a **krom** with continuous eigenvalues only. Hand-given
   rates have no sampling interval.
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(DynSysLab VERSION 0.10.3 LANGUAGES CXX)
+project(DynSysLab VERSION 0.11.0 LANGUAGES CXX)
 
 include(CTest)
 include(cmake/DynSysLabExtensions.cmake)

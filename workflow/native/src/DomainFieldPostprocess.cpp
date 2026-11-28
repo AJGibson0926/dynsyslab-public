@@ -5,7 +5,7 @@
 //   {"name": "domain_field", "settings": {
 //      "function": {"observable": "angle"} | {"observables": ["echo", "echo_dot"]}
 //                | {"expression": "x_1*cos(x_2)", "variables": [...]}       (default: state names)
-//                | {"library": "libration_phase", "reference_state": [...]}
+//                | {"library": "libration_phase"}  (a shell entry plots its profile e^{i n phi})
 //                | {"krom": "path.npz", "modes": [0, 1]},
 //      "domain": {"lower": [...], "upper": [...], "points": 101, "axes": [0, 1], "anchor": [...]},
 //                default: the source trajectory's bounds, every coordinate up to three
@@ -70,9 +70,14 @@ Function function(const J& spec, const c::ODESystem& system, const std::vector<s
         return {c::Observable::fromExpressions({label, label, "", "native", {}, false}, std::move(parts)), {}, 0, 0};
     }
     if (!spec.at("library").isNull()) {
-        const auto reference = spec.at("reference_state").isNull() ? std::vector<double>{} : numbers(spec.at("reference_state"));
-        auto psi = c::libraryEigenfunctions(system, strings(spec.at("library")), reference);
-        std::vector<c::Observable> parts(psi.begin(), psi.end());
+        // An entry with a constant eigenvalue is an eigenfunction; a shell entry is a band's generalized
+        // eigenfunctions, plotted as their profile e^{i n phi}.
+        std::vector<c::Observable> parts;
+        for (const auto& id : strings(spec.at("library"))) {
+            const auto bands = c::libraryBands(system, {id});
+            if (bands.empty()) parts.push_back(c::libraryEigenfunctions(system, {id}).front());
+            else parts.push_back(c::Observable::fromRepresentation({id, id + " profile"}, bands.front().eigenfunctions.functions));
+        }
         return {parts.size() == 1 ? parts.front() : c::Observable::stack("library", "Library eigenfunctions", parts), {}, 0, 0};
     }
     if (!spec.at("krom").isNull()) {

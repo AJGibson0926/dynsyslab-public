@@ -1,0 +1,252 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "rpe",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "byrd": "Byrd and Friedman (1971), Handbook of Elliptic Integrals for Engineers and Scientists, 259.00 and 336-341",
+  "dlmf19": "https://dlmf.nist.gov/19.4",
+  "mezic": "Mezic (2020), J. Nonlinear Sci. 30:2091-2145, section 11 (arXiv:1702.07597)",
+  "plesset": "Plesset and Prosperetti (1977), Annu. Rev. Fluid Mech. 9:145-185"
+ },
+ "definitions": [],
+ "eigenfunctions": [
+  {
+   "id": "energy",
+   "title": "Energy E = r^3 v^2/2 + U(r)",
+   "kind": "exact",
+   "psi": "0.5*radius^3*radial_velocity^2 - gas_pressure_ratio*exp((3 - 3*kappa)*log(radius))/(3 - 3*kappa) + (ambient_pressure_ratio - vapor_pressure_ratio)*radius^3/3 + capillarity*radius^2/2",
+   "eigenvalue": "0",
+   "conditions": "Inviscid and unforced; kappa != 1",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "plesset"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "viscosity"
+    ],
+    "positive": [
+     "(kappa - 1)^2"
+    ]
+   }
+  },
+  {
+   "id": "phase",
+   "title": "Bubble oscillation phase exp(i theta)",
+   "kind": "shell",
+   "definitions": [
+    [
+     "G",
+     "gas_pressure_ratio"
+    ],
+    [
+     "Ap",
+     "ambient_pressure_ratio - vapor_pressure_ratio"
+    ],
+    [
+     "S",
+     "capillarity"
+    ],
+    [
+     "Erg",
+     "0.5*radius^3*radial_velocity^2 + G/radius + Ap*radius^3/3 + S*radius^2/2"
+    ],
+    [
+     "c4",
+     "-2*Ap/3"
+    ],
+    [
+     "c3",
+     "-S"
+    ],
+    [
+     "c1",
+     "2*Erg"
+    ],
+    [
+     "c0",
+     "-2*G"
+    ],
+    [
+     "ra",
+     "polyroot(0, c4, c3, 0, c1, c0)"
+    ],
+    [
+     "rb",
+     "polyroot(1, c4, c3, 0, c1, c0)"
+    ],
+    [
+     "b1",
+     "(-c3/c4 - ra - rb)/2"
+    ],
+    [
+     "a1sq",
+     "c0/(c4*ra*rb) - b1^2"
+    ],
+    [
+     "AA",
+     "sqrt((ra - b1)^2 + a1sq)"
+    ],
+    [
+     "BB",
+     "sqrt((rb - b1)^2 + a1sq)"
+    ],
+    [
+     "m",
+     "((ra - rb)^2 - (AA - BB)^2)/(4*AA*BB)"
+    ],
+    [
+     "Cst",
+     "1/sqrt(-c4*AA*BB)"
+    ],
+    [
+     "pp",
+     "ra*BB + rb*AA"
+    ],
+    [
+     "qq",
+     "rb*AA - ra*BB"
+    ],
+    [
+     "ss",
+     "AA + BB"
+    ],
+    [
+     "al",
+     "(AA - BB)/ss"
+    ],
+    [
+     "n",
+     "al^2/(al^2 - 1)"
+    ],
+    [
+     "nuu",
+     "-n"
+    ],
+    [
+     "R",
+     "sqrt(nuu + m)"
+    ],
+    [
+     "k0",
+     "qq^2/al^2"
+    ],
+    [
+     "k1",
+     "2*pp*qq/al - 2*qq^2/al^2"
+    ],
+    [
+     "k2",
+     "pp^2 - 2*pp*qq/al + qq^2/al^2"
+    ],
+    [
+     "den",
+     "(ra - radius)*BB + (radius - rb)*AA"
+    ],
+    [
+     "cn",
+     "((ra - radius)*BB - (radius - rb)*AA)/den"
+    ],
+    [
+     "Q2",
+     "(radius - b1)^2 + a1sq"
+    ],
+    [
+     "sn",
+     "-2*sqrt(AA*BB)*radius^2*radial_velocity/(sqrt(-c4*Q2)*den)"
+    ],
+    [
+     "ph",
+     "atan2(sn, cn)"
+    ],
+    [
+     "D",
+     "sqrt(1 - m*sn^2)"
+    ],
+    [
+     "X",
+     "atan2(sn*R, D)"
+    ],
+    [
+     "I1",
+     "X/R"
+    ],
+    [
+     "dI",
+     "-X/(2*R^3) + sn*D/(2*R^2*(1 + nuu*sn^2))"
+    ],
+    [
+     "Pp",
+     "ellippi(ph, n, m)"
+    ],
+    [
+     "dPn",
+     "(ellipe(ph, m) + (m - n)*ellipf(ph, m)/n + (n^2 - m)*Pp/n - n*D*sn*cn/(1 - n*sn^2))/(2*(m - n)*(n - 1))"
+    ],
+    [
+     "J1",
+     "(Pp - al*I1)/(1 - al^2)"
+    ],
+    [
+     "J2",
+     "2*(Pp + n*dPn)/(1 - al^2)^2 - Pp/(1 - al^2) - 2*al*(I1 + nuu*dI)/(1 - al^2)^2"
+    ],
+    [
+     "Gph",
+     "(k0*ellipf(ph, m) + k1*J1 + k2*J2)/ss^2"
+    ],
+    [
+     "Pc",
+     "ellippi(pi, n, m)"
+    ],
+    [
+     "dPc",
+     "(2*ellipe(m) + 2*(m - n)*ellipk(m)/n + (n^2 - m)*Pc/n)/(2*(m - n)*(n - 1))"
+    ],
+    [
+     "Gpi",
+     "(2*k0*ellipk(m) + k1*Pc/(1 - al^2) + k2*(2*(Pc + n*dPc)/(1 - al^2)^2 - Pc/(1 - al^2)))/ss^2"
+    ],
+    [
+     "Om",
+     "pi/(Cst*Gpi)"
+    ],
+    [
+     "theta",
+     "Om*Cst*(Gpi - Gph)"
+    ]
+   ],
+   "psi": "cos(theta)",
+   "psi_imag": "sin(theta)",
+   "eigenvalue": "0",
+   "eigenvalue_imag": "Om",
+   "conditions": "Inviscid, unforced, kappa = 4/3, G, A > 0: bounded radial oscillations about the equilibrium (two real turning radii and a complex pair of the radius quartic)",
+   "derivation": "E = r^3 v^2/2 + U(r) conserved; r^4 v^2 = 2(E r - G - A r^4/3 - S r^3/2); the time t(r) from the outer turning radius in elliptic integrals of the first and third kind by the substitution cn u = ((a - r) B - (r - b) A)/((a - r) B + (r - b) A); theta = Omega (T/2 - t), Omega = 2 pi / T. Relative precision ~1e-16/alpha^2 near the equilibrium, alpha = (A - B)/(A + B).",
+   "references": [
+    "byrd",
+    "dlmf19",
+    "mezic"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "viscosity"
+    ],
+    "near": [
+     [
+      "kappa - 4/3",
+      1e-12
+     ]
+    ],
+    "positive": [
+     "gas_pressure_ratio",
+     "ambient_pressure_ratio - vapor_pressure_ratio"
+    ],
+    "nonnegative": [
+     "capillarity"
+    ]
+   }
+  }
+ ]
+}

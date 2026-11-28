@@ -22,10 +22,11 @@ struct DynamicalFact {
 // the parameter names; the eigenvalue is the continuous-time rate lambda with psi(x(t)) =
 // exp(lambda t) psi(x(0)). kind "exact" holds on the stated region; "principal" is the linearization
 // w^T (x - x*) of a principal eigenfunction at an equilibrium (accurate near x* only); "shell" is
-// exact on the stated region but its rate text uses the state through an invariant (e.g.
-// i n Omega(H)), so it is an eigenfunction along each orbit, with the eigenvalue of that orbit.
+// a phase whose rate text uses the state through an invariant (e.g. i n Omega(H)): the profile of
+// generalized eigenfunctions on a spectral band, not an eigenfunction (libraryBands).
 // Expressions may use atan2 and the elliptic integrals (AnalyticExpressionText.cpp).
-// Loaded by libraryEigenfunctions (KnownEigenfunctions.hpp) as Eigenfunction objects.
+// Loaded by libraryEigenfunctions (KnownEigenfunctions.hpp) as Eigenfunction objects, shell entries
+// by libraryBands as spectral bands.
 struct EigenfunctionEntry {
     std::string id, title, kind{"exact"};
     std::string real, imag{"0"};               // psi(x) = real + i imag
@@ -33,6 +34,9 @@ struct EigenfunctionEntry {
     std::string conditions, derivation;
     std::vector<std::string> references;
     bool applicable{true};                     // false when the configuration violates `conditions`
+    // A shell entry's generalized eigenfunctions written out, in the state and the band parameter p:
+    // psi_p(x) = delta(level(x) - p) profile(x) unless the catalogue states another form.
+    std::string familyReal, familyImag;
 };
 struct EquilibriumGuide {
     std::string factId;

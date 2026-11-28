@@ -1,7 +1,7 @@
 #include "CoordinateChannels.hpp"
 #include "KromDatasetSupport.hpp"
 #include <dynsyslab/core/ObservableDerivative.hpp>
-#include <dynsyslab/core/SpectralKromArchive.hpp>
+#include <dynsyslab/core/KromSpectralObservables.hpp>
 #include <dynsyslab/core/System.hpp>
 #include <algorithm>
 #include <cmath>

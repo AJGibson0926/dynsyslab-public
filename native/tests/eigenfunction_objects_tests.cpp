@@ -209,7 +209,7 @@ int main() {
                     && extension.contains("expansion_coefficients"), "only the new representation is stored");
             const auto block = c::json::parse(extension.metadataJson()).at("krom");
             require(block.at("default_representation").string() == "polynomial", "its default is the new one");
-            require(block.at("parent").at("modes").array().size() == 2 && block.at("parent").at("modes").array()[1].number() == 2.0,
+            require(block.at("parent").at("mode_ids").array().size() == 2 && block.at("parent").at("mode_ids").array()[1].number() == 2.0,
                     "the parent's modes, in order");
             const auto read = c::readKoopmanModel(extension);
             require(read.representationNames() == std::vector<std::string>{"polynomial", "interpolation", "time-delay"},

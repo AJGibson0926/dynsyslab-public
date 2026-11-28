@@ -1,0 +1,92 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "cosh_oscillator",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "dlmf22": "https://dlmf.nist.gov/22.19",
+  "henrici": "Henrici and Kappeler (2008), arXiv:0802.4252",
+  "mezic": "Mezic (2020), J. Nonlinear Sci. 30:2091-2145, section 11 (arXiv:1702.07597)"
+ },
+ "definitions": [
+  [
+   "H",
+   "momentum^2/2 + strength*(exp(position) + exp(-position))"
+  ]
+ ],
+ "eigenfunctions": [
+  {
+   "id": "energy",
+   "title": "Energy",
+   "kind": "exact",
+   "psi": "H",
+   "eigenvalue": "0",
+   "conditions": "Zero damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "henrici"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  },
+  {
+   "id": "phase",
+   "title": "Orbit phase exp(i phi)",
+   "kind": "shell",
+   "definitions": [
+    [
+     "m",
+     "(H - 2*strength)/(H + 2*strength)"
+    ],
+    [
+     "A",
+     "sqrt((H - 2*strength)/(4*strength))"
+    ],
+    [
+     "nu",
+     "sqrt((H + 2*strength)/2)"
+    ],
+    [
+     "u",
+     "(exp(position/2) - exp(-position/2))/2"
+    ],
+    [
+     "chh",
+     "(exp(position/2) + exp(-position/2))/2"
+    ],
+    [
+     "dn",
+     "sqrt(1 - m + m*(u/A)^2)"
+    ],
+    [
+     "am",
+     "atan2(-chh*momentum/(2*A*nu*dn), u/A)"
+    ],
+    [
+     "phi",
+     "pi*ellipf(am, m)/(2*ellipk(m))"
+    ]
+   ],
+   "psi": "cos(phi)",
+   "psi_imag": "sin(phi)",
+   "eigenvalue": "0",
+   "eigenvalue_imag": "pi*nu/(2*ellipk(m))",
+   "conditions": "Zero damping and driver; H > 2 strength",
+   "derivation": "sinh(position/2) = A cn(nu t|m); phase inverted through atan2(sn, cn)",
+   "references": [
+    "henrici",
+    "dlmf22",
+    "mezic"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  }
+ ]
+}

@@ -49,8 +49,14 @@ distance certificate for a nonnormal operator.
 - Hermitian DMD requires a self-adjoint problem, a different assumption.
 - Correlation measures require stationary/invariant sampling; retain total mass,
   grid convention and smoothing parameters. Frequencies are radians per sample.
-- Rigged wave packets are finite-width approximations. Higher-order smoothing
-  kernels may have negative lobes; do not claim certified distributional limits.
+- Every spectral fit is a krom whose compressed operator is `compression()`; the queries write and
+  read kroms by path. The krom's `Spectrum` holds the whole computed spectrum: eigenpairs with their
+  eigenfunctions, spectral bands with their generalized eigenfunctions when known, and each
+  observable's Koopman modes and spectral measures. Rigged DMD
+  is the `rigged_measure` stage on a krom whose operator is unitary (mpEDMD); it adds a band, the
+  observable's measure on it with its generalized eigenfunctions (wave packets), and the observable's
+  Koopman modes, from which the atoms follow. Wave packets are finite-width approximations. Higher-order smoothing kernels may have
+  negative lobes; do not claim certified distributional limits.
 - SpecRKHS results describe the adjoint acting on kernel sections. Do not relabel
   its eigenvectors as a forward eigenfunction model or feed them into a rollout.
 - Stochastic diagnostics need independent repeated successors at identical source

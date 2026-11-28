@@ -4,29 +4,37 @@
 #include <limits>
 namespace dynsyslab::core {
 using namespace spectral_detail;
-SpectralResiduals koopmanResiduals(const SpectralKROM& model,const KoopmanSnapshotPairs& data,
-    const std::vector<std::complex<double>>& grid,std::string scope) {
+Spectrum koopmanResiduals(const KoopmanModel& krom,const KoopmanSnapshotPairs& data,
+    const std::vector<std::complex<double>>& grid,std::string scope,std::vector<std::complex<double>>* minimizers) {
+    if(!krom.compression())throw std::invalid_argument("Residuals on data need the krom's compressed operator");
+    const auto& model=*krom.compression();
     model.validate();check(data,model.dictionary.dimension);
     const auto m=data.samples,n=model.dictionary.size(),r=model.rank;
+    // The krom's own pairs: its eigenvalues and eigenfunction coefficients on the frozen dictionary.
+    const auto& coefficients=frozenDictionaryExpansion(krom).coefficients();  // pairs x features
+    const auto multipliers=krom.spectrum().discreteMultipliers();
+    const auto pairs=multipliers.size();
     const auto w=weights(m,data.weights);
     const auto x=weighted(model.dictionary.evaluate(data.x),w,n),y=weighted(model.dictionary.evaluate(data.y),w,n);
     // One-step residual (Eigenpair.hpp; Colbrook & Townsend, Comm. Pure Appl. Math. 77, 2024):
     // sqrt(sum w |psi(y)-mu psi(x)|^2 / sum w |psi(x)|^2), finite quadrature evidence over the data, not a
     // global spectral certificate. The grid minimum is the same residual minimized over the trial space:
     // the sampled pseudospectrum (Trefethen & Embree 2005).
-    SpectralResiduals out;out.scope=std::move(scope);out.definition=residual_definition::oneStep;
-    auto& pseudo=out.pseudospectrum;pseudo.scope=out.scope;pseudo.definition=out.definition;pseudo.features=n;pseudo.grid=grid;
-    for(std::size_t j=0;j<r;++j) {
+    std::vector<double> residuals;
+    for(std::size_t j=0;j<pairs;++j) {
         double denom=0,numer=0;
         for(std::size_t i=0;i<m;++i) {
             std::complex<double> a{},b{};
-            for(std::size_t k=0;k<n;++k){a+=x[i*n+k]*model.eigenfunctions[k*r+j];b+=y[i*n+k]*model.eigenfunctions[k*r+j];}
-            denom+=std::norm(a);numer+=std::norm(b-model.multipliers[j]*a);
+            for(std::size_t k=0;k<n;++k){a+=x[i*n+k]*coefficients[j*n+k];b+=y[i*n+k]*coefficients[j*n+k];}
+            denom+=std::norm(a);numer+=std::norm(b-multipliers[j]*a);
         }
         if(denom<=1e-28)throw std::invalid_argument("Eigenfunction vanishes on residual evaluation samples");
-        out.eigenpair.push_back(std::sqrt(numer/denom));
+        residuals.push_back(std::sqrt(numer/denom));
     }
+    auto out=krom.spectrum();
+    out.setResiduals(residuals,residual_definition::oneStep,scope);
     if(grid.empty())return out;
+    Pseudospectrum pseudo;pseudo.scope=scope;pseudo.definition=residual_definition::oneStep;pseudo.grid=grid;
     auto q=product(x,model.basis,m,n,r);
     auto svd=numerics::singularValueDecomposition(q,m,r,0,1e-12);
     if(svd.rank!=r)throw std::invalid_argument("Residual grid cannot certify directions unobserved in validation data");
@@ -47,12 +55,13 @@ SpectralResiduals koopmanResiduals(const SpectralKROM& model,const KoopmanSnapsh
         }
         const auto eig=numerics::hermitianEigensystem(h,r);
         pseudo.minimum.push_back(std::sqrt(std::max(0.,eig.eigenvalues.front())));
-        for(std::size_t j=0;j<n;++j) {
+        if(minimizers)for(std::size_t j=0;j<n;++j) {
             std::complex<double> c{};
             for(std::size_t k=0;k<r;++k)c+=b[j*r+k]*eig.eigenvectors[k*r];
-            pseudo.minimizingCoefficients.push_back(c);
+            minimizers->push_back(c);
         }
     }
+    out.setPseudospectrum(std::move(pseudo));
     return out;
 }
 SpectralInvariance koopmanInvariance(const std::vector<double>& x,const std::vector<double>& y,

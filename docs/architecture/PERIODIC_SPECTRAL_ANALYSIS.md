@@ -219,7 +219,7 @@ vectors need not lie in the retained coefficient subspace even if their
 functions are representable. A `rigged_measures` item can explicitly choose
 `reconstruction: {"name":"coordinates","output":0}` instead of `coefficients`.
 The selected fitted readout already lies in the retained subspace. This choice
-is recorded in measure/packet assumptions. It measures that projected
+is recorded in the measure's assumptions (the packets are part of the measure). It measures that projected
 observable; inspect readout error and held-out projection error separately.
 
 ## Window identification and free prediction

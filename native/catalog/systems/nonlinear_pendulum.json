@@ -1,0 +1,167 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "nonlinear_pendulum",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "brizard": "Brizard, Jacobi zeta function and action-angle coordinates for the pendulum, arXiv:1108.4970",
+  "dlmf22": "https://dlmf.nist.gov/22.19",
+  "jaffe": "Jaffe and Brumer (1984), J. Phys. Chem. 88:4829-4839, section II.F",
+  "mezic": "Mezic (2020), J. Nonlinear Sci. 30:2091-2145, section 11 (arXiv:1702.07597)",
+  "mezic_linear": "Mezic (2005), Nonlinear Dyn. 41:309-325"
+ },
+ "definitions": [
+  [
+   "a",
+   "gravity_m_s2/length_m"
+  ],
+  [
+   "H",
+   "velocity^2/2 + a*(1 - cos(angle))"
+  ],
+  [
+   "a_lin",
+   "a"
+  ],
+  [
+   "b_lin",
+   "damping_n_m_s/(mass_kg*length_m^2)"
+  ]
+ ],
+ "eigenfunctions": [
+  {
+   "id": "energy",
+   "title": "Energy H = v^2/2 + a(1 - cos theta)",
+   "kind": "exact",
+   "psi": "H",
+   "eigenvalue": "0",
+   "conditions": "Zero damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "brizard"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping_n_m_s"
+    ]
+   }
+  },
+  {
+   "id": "libration_phase",
+   "title": "Libration phase exp(i phi)",
+   "kind": "shell",
+   "definitions": [
+    [
+     "m",
+     "H/(2*a)"
+    ],
+    [
+     "k",
+     "sqrt(m)"
+    ],
+    [
+     "alpha",
+     "atan2(sin(angle/2)/k, velocity/(2*k*sqrt(a)))"
+    ],
+    [
+     "phi",
+     "pi*ellipf(alpha, m)/(2*ellipk(m))"
+    ]
+   ],
+   "psi": "cos(phi)",
+   "psi_imag": "sin(phi)",
+   "eigenvalue": "0",
+   "eigenvalue_imag": "pi*sqrt(a)/(2*ellipk(m))",
+   "conditions": "Zero damping and driver; libration 0 < H < 2a, |theta| < pi",
+   "derivation": "theta = 2 asin(k sn(u|k^2)), v = 2 k sqrt(a) cn(u|k^2), phi = pi u/(2K): dphi/dt = Omega(H)",
+   "references": [
+    "brizard",
+    "jaffe",
+    "mezic",
+    "dlmf22"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping_n_m_s"
+    ]
+   }
+  },
+  {
+   "id": "rotation_phase",
+   "title": "Rotation phase exp(i phi_r)",
+   "kind": "shell",
+   "definitions": [
+    [
+     "mr",
+     "2*a/H"
+    ],
+    [
+     "phir",
+     "pi*ellipf(angle/2, mr)/ellipk(mr)"
+    ]
+   ],
+   "psi": "cos(phir)",
+   "psi_imag": "sin(phir)",
+   "eigenvalue": "0",
+   "eigenvalue_imag": "velocity/sqrt(velocity^2)*pi*sqrt(H/2)/ellipk(mr)",
+   "conditions": "Zero damping and driver; rotation H > 2a",
+   "derivation": "|v| = sqrt(2H) sqrt(1 - m sin^2(theta/2)), so dF(theta/2|m)/dt = sign(v) sqrt(H/2)",
+   "references": [
+    "brizard",
+    "dlmf22",
+    "mezic"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping_n_m_s"
+    ]
+   }
+  },
+  {
+   "id": "principal",
+   "title": "Oscillatory mode (lambda = -b/2 + i w)",
+   "psi_imag": "sqrt(a_lin - b_lin^2/4)*angle",
+   "eigenvalue_imag": "sqrt(a_lin - b_lin^2/4)",
+   "kind": "principal",
+   "psi": "b_lin/2*angle + velocity",
+   "eigenvalue": "-b_lin/2",
+   "conditions": "Zero driver; underdamped; near the hanging equilibrium",
+   "derivation": "left eigenvectors of Df(0) = [[0, 1], [-a, -b]], b = damping/(m l^2)",
+   "references": [
+    "mezic_linear"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude"
+    ],
+    "positive": [
+     "a_lin - b_lin^2/4"
+    ]
+   }
+  },
+  {
+   "id": "principal_conjugate",
+   "title": "Conjugate oscillatory mode",
+   "psi_imag": "-sqrt(a_lin - b_lin^2/4)*angle",
+   "eigenvalue_imag": "-sqrt(a_lin - b_lin^2/4)",
+   "kind": "principal",
+   "psi": "b_lin/2*angle + velocity",
+   "eigenvalue": "-b_lin/2",
+   "conditions": "Zero driver; underdamped; near the hanging equilibrium",
+   "derivation": "left eigenvectors of Df(0) = [[0, 1], [-a, -b]], b = damping/(m l^2)",
+   "references": [
+    "mezic_linear"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude"
+    ],
+    "positive": [
+     "a_lin - b_lin^2/4"
+    ]
+   }
+  }
+ ]
+}

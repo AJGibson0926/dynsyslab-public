@@ -43,6 +43,9 @@ struct ComplexStemPlot {
     // heights span three or more decades).
     bool logHeights = false;
     std::vector<StemSeries> overlays;    // drawn after (on top of) the main stems
+    // Curves over the base plane (height as a function of a path of bases, e.g. a density around the
+    // unit circle), drawn as lines in order, after the stems.
+    std::vector<StemSeries> curves;
 };
 
 Figure complexPlaneStemFigure(const ComplexStemPlot& plot);

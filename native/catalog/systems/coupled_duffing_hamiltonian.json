@@ -1,0 +1,76 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "coupled_duffing_hamiltonian",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "arnold": "https://doi.org/10.1007/978-1-4757-2063-1"
+ },
+ "definitions": [
+  [
+   "H1",
+   "p_1^2/2 + omega_1^2*q_1^2/2 + beta_1*q_1^4/4"
+  ],
+  [
+   "H2",
+   "p_2^2/2 + omega_2^2*q_2^2/2 + beta_2*q_2^4/4"
+  ]
+ ],
+ "eigenfunctions": [
+  {
+   "id": "energy",
+   "title": "Energy",
+   "kind": "exact",
+   "psi": "H1 + H2 + coupling*q_1^2*q_2^2",
+   "eigenvalue": "0",
+   "conditions": "Zero damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "arnold"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  },
+  {
+   "id": "energy_1",
+   "title": "First oscillator energy",
+   "kind": "exact",
+   "psi": "H1",
+   "eigenvalue": "0",
+   "conditions": "Zero coupling, damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "arnold"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping",
+     "coupling"
+    ]
+   }
+  },
+  {
+   "id": "energy_2",
+   "title": "Second oscillator energy",
+   "kind": "exact",
+   "psi": "H2",
+   "eigenvalue": "0",
+   "conditions": "Zero coupling, damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "arnold"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping",
+     "coupling"
+    ]
+   }
+  }
+ ]
+}

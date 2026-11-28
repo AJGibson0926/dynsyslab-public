@@ -1,0 +1,74 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "poschl_teller",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "delisle": "Delisle-Doray et al. (2019), arXiv:1812.11582",
+  "mezic": "Mezic (2020), J. Nonlinear Sci. 30:2091-2145, section 11 (arXiv:1702.07597)"
+ },
+ "definitions": [
+  [
+   "ch",
+   "(exp(inverse_length*position) + exp(-inverse_length*position))/2"
+  ],
+  [
+   "sh",
+   "(exp(inverse_length*position) - exp(-inverse_length*position))/2"
+  ],
+  [
+   "H",
+   "momentum^2/2 - depth/ch^2"
+  ]
+ ],
+ "eigenfunctions": [
+  {
+   "id": "energy",
+   "title": "Energy",
+   "kind": "exact",
+   "psi": "H",
+   "eigenvalue": "0",
+   "conditions": "Zero damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "delisle"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  },
+  {
+   "id": "phase",
+   "title": "Bound-orbit phase exp(i phi)",
+   "kind": "shell",
+   "definitions": [
+    [
+     "W",
+     "inverse_length*sqrt(-2*H)"
+    ],
+    [
+     "A",
+     "sqrt((H + depth)/(-H))"
+    ]
+   ],
+   "psi": "inverse_length*momentum*ch/(A*W)",
+   "psi_imag": "sh/A",
+   "eigenvalue": "0",
+   "eigenvalue_imag": "W",
+   "conditions": "Zero damping and driver; bound orbits -depth < H < 0",
+   "derivation": "sinh(a position) = A sin(Omega t) with Omega = a sqrt(-2H)",
+   "references": [
+    "delisle",
+    "mezic"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  }
+ ]
+}

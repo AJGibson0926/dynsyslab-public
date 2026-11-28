@@ -45,13 +45,13 @@ KoopmanSnapshotPairs compressedPairs(const std::vector<math::PeriodicSnapshotOrb
     return out;
 }
 }
-SpectralKROM fitPeriodicDelaySpectrum(const std::vector<math::PeriodicSnapshotOrbit>&bank,
+KoopmanModel fitPeriodicDelaySpectrum(const std::vector<math::PeriodicSnapshotOrbit>&bank,
     const std::vector<std::size_t>&channels,const std::vector<double>&offsets,
     std::size_t phases,const KoopmanSpectralOptions&options,bool requireResolved,const std::string&storage){
     if(options.method!="mpedmd")throw std::invalid_argument("Periodic spectral comparison requires mpEDMD");
     return fitPeriodicDelayModel(bank,channels,offsets,phases,options,requireResolved,storage);
 }
-SpectralKROM fitPeriodicDelayModel(const std::vector<math::PeriodicSnapshotOrbit>&bank,
+KoopmanModel fitPeriodicDelayModel(const std::vector<math::PeriodicSnapshotOrbit>&bank,
     const std::vector<std::size_t>&channels,const std::vector<double>&offsets,
     std::size_t phases,const KoopmanSpectralOptions&options,bool requireResolved,const std::string&storage){
     if(options.method!="edmd"&&options.method!="resdmd"&&options.method!="mpedmd")
@@ -72,15 +72,17 @@ SpectralKROM fitPeriodicDelayModel(const std::vector<math::PeriodicSnapshotOrbit
         data.x=std::move(p.x);data.y=std::move(p.y);data.weights=std::move(p.weights);data.samples=p.samples;data.dimension=p.dimension;}
     SpectralDictionary dictionary;dictionary.dimension=data.dimension;dictionary.constant=false;
     auto model=fitKoopmanSpectral(data,dictionary,options);
-    fitSpectralReconstruction(model,"coordinates",data.x,data.x,data.dimension,data.weights);
-    model.samples=originalSamples;
-    if(streaming)model.assumptions+=" Weighted row-block QR preserves the joint feature products; training residuals use equivalent compressed feature rows, not physical states.";
+    fitFeatureReadout(model,"coordinates",data.x,data.x,data.dimension,data.weights);
+    auto compression=*model.compression();
+    compression.samples=originalSamples;
+    if(streaming)compression.assumptions+=" Weighted row-block QR preserves the joint feature products; training residuals use equivalent compressed feature rows, not physical states.";
     json::Value::Array cs,ts;for(auto c:channels)cs.emplace_back(double(c));for(auto t:offsets)ts.emplace_back(t);
-    model.coordinateContract=json::dump(json::Value::Object{{"schema","dynsyslab.periodic-delay-coordinates/v1"},
+    compression.coordinateContract=json::dump(json::Value::Object{{"schema","dynsyslab.periodic-delay-coordinates/v1"},
         {"channels",cs},{"time_offsets",ts},{"phase_count",double(phases)},{"sample_interval",options.sampleInterval},
         {"resolved_finite_products",phases>=audit.aliasFreePhaseCount},
         {"storage",streaming?"streaming_qr":"dense"},{"original_samples",double(originalSamples)},
         {"fit_rows",double(data.samples)},{"joint_features",double(jointFeatures)}});
+    model.setCompression(std::move(compression));
     return model;
 }
 PeriodicSpectralReference periodicSpectralReference(const std::vector<math::PeriodicSnapshotOrbit>&training,
@@ -98,9 +100,11 @@ PeriodicSpectralReference periodicSpectralReference(const std::vector<math::Peri
         ref.packetRms.push_back(std::sqrt(math::meanSquare(math::spectralPacket(o.channels.at(channel),dt,center,kernel))));
     return ref;
 }
-PeriodicSpectralComparison comparePeriodicDelaySpectrum(const SpectralKROM&frozen,
+PeriodicSpectralComparison comparePeriodicDelaySpectrum(const KoopmanModel&krom,
     const std::vector<std::size_t>&channels,const std::vector<double>&offsets,
     const std::vector<math::PeriodicSnapshotOrbit>&validation,const PeriodicSpectralReference&ref){
+    if(!krom.compression())throw std::invalid_argument("Periodic comparison needs a periodic-delay krom with its compressed operator");
+    const auto&frozen=*krom.compression();
     frozen.validate();const auto selected=select(validation,channels);const auto audit=math::auditPeriodicQuadrature(validation,{});
     json::Value contract;try{contract=json::parse(frozen.coordinateContract);}catch(const std::exception&){throw std::invalid_argument("the K-ROM coordinate contract is unreadable; regenerate it");}
     if(contract.at("schema").string()=="dynsyslab.periodic-delay-coordinates/v1"){
@@ -115,24 +119,25 @@ PeriodicSpectralComparison comparePeriodicDelaySpectrum(const SpectralKROM&froze
     const auto zero=std::find(offsets.begin(),offsets.end(),0.);const auto target=std::find(channels.begin(),channels.end(),ref.channel);
     const auto dimension=offsets.size()*channels.size();
     if(zero==offsets.end()||target==channels.end())throw std::invalid_argument("A current-time reference channel must be present in the delay dictionary");
-    if(frozen.method!="mpedmd"||frozen.dictionary.kind!="linear"||frozen.dictionary.constant||
+    if(!compressionIsUnitary(frozen)||frozen.dictionary.kind!="linear"||frozen.dictionary.constant||
        !frozen.dictionary.center.empty()||!frozen.dictionary.scale.empty()||frozen.dictionary.dimension!=dimension||
        frozen.sampleInterval!=ref.sampleInterval||validation.size()!=ref.validationOrbits)
         throw std::invalid_argument("Frozen periodic model/dictionary/clock mismatch");
-    const auto&readout=frozen.reconstructions.at("coordinates");const auto column=(zero-offsets.begin())*channels.size()+(target-channels.begin());
+    const auto&readout=frozen.readouts.at("coordinates");const auto column=(zero-offsets.begin())*channels.size()+(target-channels.begin());
     if(readout.outputs!=dimension)throw std::invalid_argument("Expected coordinate reconstruction");
     std::vector<double> g(dimension);for(std::size_t i=0;i<dimension;++i)g[i]=readout.coefficients[i*dimension+column];
-    auto model=frozen;auto grid=ref.angles;grid.insert(grid.end(),ref.centers.begin(),ref.centers.end());
-    riggedSpectralMeasure(model,g,"periodic-comparison",grid,ref.bandwidth,ref.order);
-    const auto&m=model.spectral.measures.back();const auto&p=model.spectral.wavePackets.back();
-    PeriodicSpectralComparison out;out.rank=model.rank;out.features=dimension;out.fittedMass=m.totalMass;
+    auto model=krom;auto grid=ref.angles;grid.insert(grid.end(),ref.centers.begin(),ref.centers.end());
+    riggedSpectralMeasure(model,g,"current-channel",0,"periodic-comparison",grid,ref.bandwidth,ref.order);
+    const auto&m=*model.spectrum().measure("periodic-comparison","current-channel");
+    const auto&packets=m.packets->coefficients();
+    PeriodicSpectralComparison out;out.rank=frozen.rank;out.features=dimension;out.fittedMass=m.totalMass;
     out.density.assign(m.density.begin(),m.density.begin()+ref.angles.size());
     for(std::size_t j=0;j<out.density.size();++j){out.densityErrorNorm+=std::pow(out.density[j]-ref.spectrum.density[j],2);out.densityReferenceNorm+=std::pow(ref.spectrum.density[j],2);}
     out.densityErrorNorm=std::sqrt(out.densityErrorNorm);out.densityReferenceNorm=std::sqrt(out.densityReferenceNorm);
     const math::RationalCircleKernel kernel(ref.bandwidth,ref.order);
     for(std::size_t k=0;k<ref.centers.size();++k){
         const auto start=(ref.angles.size()+k)*dimension;
-        const std::vector<std::complex<double>> coefficients(p.coefficients.begin()+start,p.coefficients.begin()+start+dimension);
+        const std::vector<std::complex<double>> coefficients(packets.begin()+start,packets.begin()+start+dimension);
         double amplitudeError=0,complexError=0,referenceNorm=0;
         for(std::size_t j=0;j<validation.size();++j){
             const auto predicted=math::periodicDelayReadout(selected[j].channels,offsets,coefficients);

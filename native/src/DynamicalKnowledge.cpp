@@ -10,7 +10,7 @@ DynamicalKnowledge builtInFacts(const SystemDescriptor &d, const SystemConfigura
 DynamicalKnowledge builtInDynamicalKnowledge(const SystemDescriptor &d,
                                              const SystemConfiguration &c) {
     auto result = builtInFacts(d, c);
-    auto library = builtInEigenfunctions(d, c);
+    auto library = catalogEigenfunctions(d, c);  // native/catalog/systems/<id>.json (SystemCatalog.cpp)
     result.eigenfunctions.insert(result.eigenfunctions.end(), library.begin(), library.end());
     return result;
 }

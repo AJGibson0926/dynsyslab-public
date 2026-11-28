@@ -1,0 +1,28 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "three_leaf_hamiltonian_clover",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "arnold": "https://doi.org/10.1007/978-1-4757-2063-1"
+ },
+ "definitions": [],
+ "eigenfunctions": [
+  {
+   "id": "energy",
+   "title": "Hamiltonian",
+   "kind": "exact",
+   "psi": "(x_1^2 + x_2^2)^2 - x_1^3 + 3*x_1*x_2^2",
+   "eigenvalue": "0",
+   "conditions": "Zero driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "arnold"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude"
+    ]
+   }
+  }
+ ]
+}

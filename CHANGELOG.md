@@ -1,5 +1,111 @@
 # Changelog
 
+## Unreleased
+
+## 0.11.0 — 2026-11-28
+
+- **A system's known spectrum against mpEDMD and Rigged DMD, as standard jobs.** `band_projection`
+  projects orbit records onto a catalogue band's exact phase (weighted Birkhoff averages; Das & Yorke
+  2018) and gives the family's reference spectral measure and wave packets; with a krom it adds the
+  reference as a band beside the fit's own and reports each fitted density's relative L2 error.
+  `packet_validation` evaluates a fit's Rigged DMD wave packets on held-out orbits against the
+  reference. Spectral fits pool records (`"pool": true`, or `additional_sources`) with
+  canonical-area orbit weights (`source_weights`). Data pack `known-spectrum-comparisons-2026-11-28`
+  runs the comparison on the pendulum, Duffing, Morse, Pöschl–Teller, cosh, radial-twist, Kepler and
+  RPE families.
+- **Viewer: spectral measures.** The `spectral_measures` view of a krom draws each observable's atoms
+  |c_j|² as 3-D stems on the unit circle with every band's density around it, and the densities against
+  angle with the atoms as stems. `viewer_figure` jobs render any archive route (`spectral_measures`,
+  `koopman_spectrum` with the pseudospectrum, ...), not only time series. Indexed child kroms are now
+  recognised as kroms.
+- **Distributions in the expression language.** `heaviside`, `sign`, `dirac` and `diracderiv(n, x)` with
+  distributional derivatives; each shell band carries its generalized eigenfunctions written out as one
+  expression in (state, p), `dirac(level - p)*profile` (`band/<name>/family`).
+- **Pipeline.** `${id.archives}` names every archive a job published (spliced into `sources`); a
+  pseudospectrum lattice `residual_grid: {"real": [a, b, n], "imag": [a, b, n]}`; an observable's
+  Koopman modes are solved through the whitened trial basis, so ill-conditioned dictionaries no longer
+  reject observables in their span.
+
+- **Special functions and series in the expression language.** Bessel (cylindrical, modified,
+  spherical) and Airy functions, the gamma family, beta, incomplete gamma, error functions,
+  exponential integrals, Lambert W, zeta, hypergeometric 0F1/1F1/2F1, the Jacobi amplitude with sn,
+  cn, dn and the Jacobi zeta function, Weierstrass p and p', the Jacobi theta functions, orthogonal
+  polynomials, inverse trigonometric and hyperbolic functions, and powers with any exponent; every
+  derivative is exact. Series `sum(k, from, to, term)` (to an integer or `inf`) check their own
+  convergence and differentiate term by term; parameters may run over the summation variable, so
+  Kapteyn and Fourier-Bessel series are expressible.
+
+- **The expression language expresses elliptic phases exactly.** New functions `ellippi(phi, n, m)`,
+  the elliptic integral of the third kind (Carlson's R_C and R_J by duplication; DLMF 19.25.14), and
+  `polyroot(k, c_0, ..., c_d)`, a real root of a polynomial with state-dependent coefficients, both
+  with exact derivatives; named intermediates (`a = ...; b = ...; result`) shared as one node, so
+  evaluation, differentiation and serialization no longer repeat them (JSON `v2` node tables).
+- **Known spectra are system data.** Each system's known Koopman eigenfunctions live in its catalogue
+  file, `native/catalog/systems/<id>.json`, compiled into the library and read by one loader for
+  every system; the C++ entry builders are gone. Expressions name the system's state, parameters,
+  dimensionless groups and driver; applicability is a list of data checks. Every former entry is
+  reproduced exactly. `eigenfunction_expansion` with `"library": true` loads a system's known
+  spectrum as a krom (eigenpairs and bands).
+- **The inviscid RPE has its known spectrum in its catalogue.** The energy E (eigenvalue 0, kappa != 1)
+  and the shell entry `phase`, e^{i theta(r, v)} with frequency Omega(E), written exactly in elliptic
+  integrals (Byrd & Friedman 259.00); it loads as a spectral band whose generalized eigenfunctions
+  are delta(Omega(E(x)) - p) e^{i theta(x)}. Checked against the equations, the analytic orbit's period
+  and an integrated orbit.
+
+- **One model type for spectral fits.** `SpectralKROM` is gone. A spectral fit (EDMD, ResDMD,
+  mpEDMD and the rest of the `koopman_spectral` family) is a krom like any other: its eigenvalues on
+  the Spectrum, its eigenfunctions as an expansion on the frozen dictionary, residuals on the pairs,
+  and the compressed operator it came from as `KoopmanModel::compression()` (`KoopmanCompression`:
+  dictionary, basis, action, feature readouts). Fits, residuals on new data, the stochastic fit,
+  Rigged DMD, rollout and the periodic tools all take or return `KoopmanModel`. `SpectralData`,
+  `SpectralResiduals`, the embedded `spectral_krom_contract_json` and the
+  `dynsyslab.spectral-krom/v1` archive are gone; the koopman-spectral and periodic queries write
+  kroms (`output_archive`) and take their path (`krom` / `archive`) instead of inline models, and
+  return the operator as `compression`. Observable references to a krom's operator use
+  `koopmanCompressionIdentity` (`KromSpectralObservables.hpp`); `krom-info` reports it.
+- **The Spectrum is the whole computed spectrum; a krom is a plant built on one.** By Lebesgue
+  decomposition the `Spectrum` holds the atomic part (eigenpairs: values, mode ids, residuals and now
+  the eigenfunctions, their representations and training samples), the continuous part
+  (`SpectralBand`: a named subset of C parametrized on a support, optionally on a grid, recording
+  whether it is absolutely or singularly continuous only when its source distinguishes them, and
+  holding its generalized eigenfunctions when known, sampled or on level sets), the decomposition of observables over both
+  (each observable's Koopman modes, and its `SpectralMeasure` on each component with its wave
+  packets), the pseudospectrum with its minimizers, and the compressed operator. A `KoopmanModel` is
+  that spectrum plus input maps B_ψ and measurements (observables read out through their Koopman
+  modes), bound to a system. Each fact is stored once: a measure's atoms are derived from the
+  observable's Koopman modes (`Spectrum::atoms`, |c_j|² on unit-norm eigenfunctions), and the views
+  in both directions (`Eigenpair::modes`, `Spectrum::decomposition`, `Spectrum::componentMeasures`)
+  are assembled from one table. `SpectralMeasure` is now one observable's measure on one band
+  (it no longer carries the band's grid or the atoms). Archives write `spectral_bands_json` and
+  `spectral_measures_json`; older `continuous_spectrum_json` single-measure entries are read as one
+  band with one measure. Rigged DMD names its observable and its band (`band`, `observable`; both
+  default to the item's `name`) and stores the observable's Koopman modes when it has none.
+- **Shell library entries are spectral bands.** A phase e^{inφ} with frequency nΩ(H) is not an
+  eigenfunction where the frequency varies: it is the profile of the generalized eigenfunctions
+  δ(nΩ(H(x)) − p) e^{inφ(x)} of a band of the imaginary axis (Mezić 2020, section 11).
+  `libraryBands` loads shell entries so; `libraryEigenfunctionBank` puts them on its spectrum's bands
+  beside the eigenpairs of the other entries; `libraryEigenfunctions` refuses them. The
+  `reference_state` that pinned a shell entry to one orbit is gone from the library functions,
+  `eigenfunction_expansion` and domain-field `library` functions (which plot the profile).
+- **Stable mode ids.** Each pair has an id (`Spectrum::modeId`), 0..n-1 at the fit and kept by every
+  selection. Atoms and a child krom's parent link (`mode_ids`) name pairs by id, so extraction no
+  longer renumbers them; `krom-info` lists `mode_ids`.
+
+- **Rigged DMD is a stage, and a measure carries its generalized eigenfunctions.** The new
+  `rigged_measure` stage adds Rigged DMD measures (Colbrook, Drysdale & Horning 2024) to any krom
+  whose spectral fit is a unitary compression, as mpEDMD's is (Colbrook 2023), and publishes a child
+  krom; a child finds the fit through its parents. The requirement is checked on the operator
+  (`compressionIsUnitary`), not the method's name. Each measure holds its wave packets, the
+  generalized eigenfunctions, as coefficients on the frozen dictionary (`packets`), so they
+  travel with their density, survive `krom_extract` and evaluate as `wave-packet` observables of
+  a child krom. `SpectralWavePackets` and `spectralDiagnostics().wavePackets` are gone, and fitting
+  stages refuse `rigged_measures` with a pointer to the new stage (the `koopman-spectral` query
+  keeps it).
+- **A measure's atoms are its eigenpairs.** For a unitary compression an observable's measure is
+  sum_k |c_k|^2 delta(lambda_k): the atoms sit at the krom's eigenpairs, by mode id, with masses
+  summing to the observable's squared norm, and mode selection keeps the selected pairs' atoms.
+  `atomLocations` is gone.
+
 ## 0.10.3 — 2026-11-27
 
 - **Data pack `rpe-psi-e-vs-xi-klqr-three-targets-2026-11-27`.** Regenerates the echo-only KLQR

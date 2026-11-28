@@ -1,4 +1,4 @@
-#include <dynsyslab/core/SpectralKROM.hpp>
+#include <dynsyslab/core/KoopmanCompression.hpp>
 #include <dynsyslab/core/ExpansionDictionary.hpp>
 #include <dynsyslab/core/FileDigest.hpp>
 #include <algorithm>
@@ -87,35 +87,18 @@ std::vector<double> SpectralDictionary::evaluate(const std::vector<double>& poin
     for(double v:out)if(!std::isfinite(v))throw std::invalid_argument("Dictionary evaluation overflow");
     return out;
 }
-void SpectralKROM::validate() const {
+void KoopmanCompression::validate() const {
     dictionary.validate(); const auto n=dictionary.size();
     if(!rank||rank>n||!samples||!std::isfinite(sampleInterval)||sampleInterval<=0||
-        basis.size()!=n*rank||action.size()!=rank*rank||multipliers.size()!=rank||
-        eigenfunctions.size()!=n*rank)throw std::invalid_argument("Invalid spectral KROM dimensions or clock");
-    for(const auto& r:reconstructions)if(!r.second.outputs||r.second.coefficients.size()!=n*r.second.outputs)
-        throw std::invalid_argument("Invalid spectral reconstruction shape");
-    for(const auto* values:{&action,&basis})for(double v:*values)if(!std::isfinite(v))throw std::invalid_argument("Nonfinite spectral operator/basis");
-    for(const auto* values:{&multipliers,&eigenfunctions})for(auto v:*values)
-        if(!std::isfinite(v.real())||!std::isfinite(v.imag()))throw std::invalid_argument("Nonfinite spectral eigenpair");
-    for(const auto& item:reconstructions)for(double v:item.second.coefficients)
-        if(!std::isfinite(v))throw std::invalid_argument("Nonfinite spectral readout");
-    if(!spectral.residuals.eigenpair.empty()&&spectral.residuals.eigenpair.size()!=rank)
-        throw std::invalid_argument("Spectral residual count differs from retained modes");
-    for(const auto& p:spectral.wavePackets) {
-        if(p.features!=n||p.coefficients.size()!=p.grid.size()*n||
-           p.dictionaryIdentity!=sha256Text(json::dump(spectralDictionaryJson(dictionary))))
-            throw std::invalid_argument("Wave packet dictionary identity or dimensions differ");
-    }
+        basis.size()!=n*rank||action.size()!=rank*rank)throw std::invalid_argument("Invalid Koopman compression dimensions or clock");
+    for(const auto& r:readouts)if(!r.second.outputs||r.second.coefficients.size()!=n*r.second.outputs)
+        throw std::invalid_argument("Invalid feature readout shape");
+    for(const auto* values:{&action,&basis})for(double v:*values)if(!std::isfinite(v))throw std::invalid_argument("Nonfinite compressed operator or basis");
+    for(const auto& item:readouts)for(double v:item.second.coefficients)
+        if(!std::isfinite(v))throw std::invalid_argument("Nonfinite feature readout");
 }
-std::vector<std::complex<double>> SpectralKROM::evaluateEigenfunctions(const std::vector<double>& points) const {
-    validate();const auto p=dictionary.evaluate(points);const auto n=dictionary.size(),m=points.size()/dictionary.dimension;
-    std::vector<std::complex<double>> out(m*rank);
-    for(std::size_t i=0;i<m;++i)for(std::size_t j=0;j<rank;++j)
-        for(std::size_t k=0;k<n;++k)out[i*rank+j]+=p[i*n+k]*eigenfunctions[k*rank+j];
-    return out;
-}
-std::vector<double> SpectralKROM::reconstruct(const std::string& name,const std::vector<double>& points) const {
-    validate();const auto& r=reconstructions.at(name);const auto p=dictionary.evaluate(points);
+std::vector<double> KoopmanCompression::reconstruct(const std::string& name,const std::vector<double>& points) const {
+    validate();const auto& r=readouts.at(name);const auto p=dictionary.evaluate(points);
     const auto n=dictionary.size(),m=points.size()/dictionary.dimension;std::vector<double> out(m*r.outputs);
     for(std::size_t i=0;i<m;++i)for(std::size_t j=0;j<r.outputs;++j)
         for(std::size_t k=0;k<n;++k)out[i*r.outputs+j]+=p[i*n+k]*r.coefficients[k*r.outputs+j];

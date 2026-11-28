@@ -22,6 +22,11 @@ namespace dynsyslab::workflow::detail {
 // in cycles per clock unit x frequency_scale). "axis":"right" curves get their own fitted right
 // ordinate (labelled by right_axis.label); "stack_axes" puts them in a band below the left curves.
 // "legend":"top" sets the legend in one row under the title.
+// Any other "view" is a Viewer archive route rendered from the source itself (DynSysLabViewerCli
+// render --view), for example "koopman_spectrum" (eigenvalues over the pseudospectrum),
+// "spectral_measures" (a krom's atoms and band densities), "mode_weights": "figure":{"view":"...",
+// "page":0 | "figure":0, "panel", "title", "scale", "legend", "coordinates", "modes", "complex_display",
+// "width", "height", "x_range", "y_range"}; it takes no curves.
 [[nodiscard]] std::vector<std::string> viewerFigureArguments(const json::Value& job,
                                                              const std::filesystem::path& output);
 // Curves with their own "source" and "clock", and "figure.clock" (ViewerFigureSources.cpp):

@@ -9,7 +9,8 @@
 #include <dynsyslab/core/FunctionInterpolation.hpp>
 #include <dynsyslab/core/System.hpp>
 #include <dynsyslab/core/KoopmanDatasets.hpp>
-#include <dynsyslab/core/SpectralKROM.hpp>
+#include <dynsyslab/core/KoopmanCompression.hpp>
+#include <dynsyslab/core/Spectrum.hpp>
 #include <dynsyslab/core/TimeSeriesRecord.hpp>
 
 #include <complex>
@@ -48,15 +49,6 @@ struct BilinearControlMap {
 
 using ApproximateControlMap = std::variant<ConstantControlMap, BilinearControlMap>;
 
-// Values of every eigenfunction at the training samples the method produced them on.
-struct EigenfunctionSamples {
-    std::vector<double> time;                  // label time of each sample
-    std::vector<std::size_t> sampleIndices;    // row of the input record each sample is labelled by
-    std::vector<std::complex<double>> values;  // samples x modes, row-major
-    std::size_t modes{};
-    [[nodiscard]] std::size_t samples() const noexcept { return time.size(); }
-};
-
 // The name of a domain: "state" for the full state, "window" for series windows, else its coordinate
 // names joined by commas, else "coordinates".
 [[nodiscard]] std::string domainName(const FunctionDomain& domain);
@@ -74,13 +66,13 @@ struct EigenfunctionErrors {
 // those, see KoopmanSpectralAnalysis.hpp; Colbrook & Townsend, Comm. Pure Appl. Math. 77, 2024).
 [[nodiscard]] std::vector<double> empiricalSpectralWeight(const EigenfunctionSamples& samples);
 
-// The krom a model's inherited parts come from: its archive (path and SHA-256) and which of its
-// modes, in this model's order. A krom written from such a model references it as its parent and
-// stores only what the model added (KoopmanArchive.hpp).
+// The krom a model's inherited parts come from: its archive (path and SHA-256) and which of its pairs,
+// by stable mode id (Spectrum::modeId), in this model's order. A krom written from such a model
+// references it as its parent and stores only what the model added (KoopmanArchive.hpp).
 struct KromParent {
     std::filesystem::path path;
     std::string sha256;
-    std::vector<std::size_t> modes;
+    std::vector<std::size_t> modes;  // mode ids
 };
 
 struct KoopmanEigenfunctionDescriptor {
@@ -91,27 +83,26 @@ struct KoopmanEigenfunctionDescriptor {
     bool continuousEigenvalueAvailable{true};
 };
 
-// A Koopman reduced-order model (K-ROM): a Spectrum (Spectrum.hpp) whose point part are this model's
-// eigenpairs (eigenvalue, eigenfunction, optional residual; eigenpair(j)), optionally with input maps B
-// (how inputs drive the eigenfunctions) and readouts C (observables g ~ C psi). Without B or C it is
-// still a model; they can be fitted later. The spectrum's continuous part and pseudospectrum, and the
-// fit's spectralDiagnostics(), travel with it. The eigenfunctions are their values at the training
-// samples, the method that found them (origin), and one or more named representations (expansion,
-// interpolation, time-delay window map, ...), each one multi-output FunctionRepresentation on its own
-// domain. The first representation is the one the model evaluates (useRepresentation). The archive
-// is the "krom" data object (KoopmanArchive.hpp).
+// A Koopman reduced-order model (K-ROM): a plant for estimation and control. It consists of a
+// Spectrum (Spectrum.hpp: the eigenpairs with their eigenfunctions, the continuous part, the
+// observables' decomposition over both, the pseudospectrum and the operator), input maps B_psi (how
+// inputs drive the eigenfunctions), and measurements: observables g read out through their Koopman
+// modes (g ~ offset + C psi), which the spectrum stores. Without B or g it is still a model; they can be
+// fitted later. The model adds what a plant needs beyond the spectrum: the evaluator of the first
+// eigenfunction representation (useRepresentation), the physical system it is bound to, dataset
+// references, the fit's diagnostics and its parent krom. The archive is the "krom" data object
+// (KoopmanArchive.hpp).
 class KoopmanModel {
 public:
-    struct Representation {
-        std::string name;
-        std::shared_ptr<const FunctionRepresentation> function;  // every eigenfunction: one output per mode
-    };
+    using Representation = EigenfunctionRepresentation;  // every eigenfunction: one output per mode
     // A K-ROM from data: the spectrum, the eigenfunctions' sample values (may hold no samples), their
     // origin and representations (named by representationName; the first is evaluated). No physical
     // system: bindSystem attaches one.
     KoopmanModel(Spectrum spectrum, EigenfunctionSamples samples, DataOrigin origin,
                  std::vector<std::shared_ptr<const FunctionRepresentation>> representations,
                  std::size_t inputDimension = 0);
+    // A K-ROM on a spectrum that already holds its eigenfunctions (at least one representation).
+    explicit KoopmanModel(Spectrum spectrum, std::size_t inputDimension);
     // Coordinate-only models need neither an ODE nor fictitious physical state.
     // The eigenfunctions' shared expansion and, separately, their eigenvalues (one per output).
     KoopmanModel(FunctionExpansion functions, Spectrum spectrum,
@@ -135,12 +126,12 @@ public:
     [[nodiscard]] EigenpairRange pairs(const ObservableCatalog* catalog = nullptr) const;
 
     // The eigenfunctions as data.
-    [[nodiscard]] const EigenfunctionSamples& samples() const noexcept { return samples_; }
-    [[nodiscard]] const DataOrigin& origin() const noexcept { return origin_; }
-    void setOrigin(DataOrigin origin) { origin_ = std::move(origin); }
+    [[nodiscard]] const EigenfunctionSamples& samples() const noexcept { return spectrum_->samples(); }
+    [[nodiscard]] const DataOrigin& origin() const noexcept { return spectrum_->origin(); }
+    void setOrigin(DataOrigin origin) { spectrum_->withOrigin(std::move(origin)); }
     // Sets the values at the training samples (a model fitted without them); an interpolation keeps its own.
     void setSamples(EigenfunctionSamples samples);
-    [[nodiscard]] const std::vector<Representation>& representations() const noexcept { return representations_; }
+    [[nodiscard]] const std::vector<Representation>& representations() const noexcept { return spectrum_->representations(); }
     [[nodiscard]] std::vector<std::string> representationNames() const;
     // By name, else by kind when exactly one representation has it; empty selects the evaluated one.
     // An ambiguous kind is refused with the names to choose from.
@@ -249,6 +240,8 @@ public:
     [[nodiscard]] bool hasControlMap(const std::string& name) const;
     [[nodiscard]] const ApproximateControlMap& storedControlMap(const std::string& name) const;
     [[nodiscard]] const std::map<std::string, ApproximateControlMap>& controlMaps() const noexcept;
+    // Measurements: observables g read out through their Koopman modes C (g ~ offset + C psi), which the
+    // spectrum stores (Spectrum::koopmanModes). Setting one makes it this model's own.
     void setReconstruction(std::string observable, ReconstructionResult reconstruction);
     [[nodiscard]] bool hasReconstruction(const std::string& observable) const;
     [[nodiscard]] const ReconstructionResult& reconstruction(
@@ -264,6 +257,18 @@ public:
     void setSpectralEvidence(const Spectrum& evidence);
     [[nodiscard]] const SpectralDiagnostics& spectralDiagnostics() const noexcept { return spectralDiagnostics_; }
     void setSpectralDiagnostics(SpectralDiagnostics diagnostics) { spectralDiagnostics_ = std::move(diagnostics); ownSpectralEvidence_ = true; }
+    // The spectrum's compressed operator (Spectrum::compression), when the eigenpairs were derived from
+    // one: what Rigged DMD, residuals on new data and operator rollout need. Inherited by child kroms
+    // and kept by extraction (it is the operator, not the selection).
+    [[nodiscard]] const KoopmanCompression* compression() const noexcept { return spectrum_->compression(); }
+    void setCompression(KoopmanCompression compression);
+    [[nodiscard]] bool ownsCompression() const noexcept { return ownCompression_; }
+    // The spectrum's functions on spectral sets (Spectrum::spectralFunction): the pseudospectrum's
+    // minimizers and the measures' wave packets. Setting one makes it this model's own.
+    [[nodiscard]] const FunctionExpansion* spectralFunction(const std::string& key) const { return spectrum_->spectralFunction(key); }
+    void setSpectralFunction(const std::string& key, FunctionExpansion function);
+    [[nodiscard]] std::vector<std::string> spectralFunctionKeys() const { return spectrum_->spectralFunctionKeys(); }
+    [[nodiscard]] bool ownsSpectralFunction(const std::string& key) const { return !inherited_.spectralFunctions.count(key); }
 
     // The krom this model was loaded from (set by the loader; extract keeps it with the chosen modes).
     // Everything the model has when it is set is inherited; parts added or replaced afterwards are its
@@ -292,19 +297,16 @@ private:
     std::shared_ptr<const FunctionInterpolation> scattered_;
     std::map<std::string, ApproximateControlMap> controlMaps_;
     std::map<std::string, DiscreteInputMap> discreteInputMaps_;
-    std::map<std::string, ReconstructionResult> reconstructions_;
     std::vector<KoopmanDatasetReference> datasetReferences_;
     std::string bindingEvidenceJson_{"{}"};
-    struct Inherited { std::set<std::string> representations, readouts, controlMaps, discreteMaps; };
+    struct Inherited { std::set<std::string> representations, readouts, controlMaps, discreteMaps, spectralFunctions; };
     void activate();  // builds the evaluator from representations_.front()
     void restampMaps();
-    EigenfunctionSamples samples_;
-    DataOrigin origin_;
-    std::vector<Representation> representations_;
     std::optional<KromParent> parent_;
     Inherited inherited_;
     bool ownSpectralEvidence_{false};
     SpectralDiagnostics spectralDiagnostics_;
+    bool ownCompression_{false};
 };
 
 class KoopmanModel::EigenpairRange {

@@ -5,8 +5,10 @@
 // Colbrook, Drysdale & Horning, Rigged DMD, arXiv:2405.00782.
 // This exports a causal linear feature map, not an autonomous packet law.
 namespace dynsyslab::core {
-PeriodicDelayPacketFeatures periodicDelayPacketFeatures(const SpectralKROM& frozen,
+PeriodicDelayPacketFeatures periodicDelayPacketFeatures(const KoopmanModel& krom,
     std::size_t channel,const std::vector<double>& centers,double bandwidth,std::size_t order){
+    if(!krom.compression())throw std::invalid_argument("Packet features need a periodic-delay krom with its compressed operator");
+    const auto& frozen=*krom.compression();
     frozen.validate();const auto contract=json::parse(frozen.coordinateContract);
     if(contract.at("schema").string()!="dynsyslab.periodic-delay-coordinates/v1"||
        contract.at("sample_interval").number()!=frozen.sampleInterval||frozen.dictionary.kind!="linear"||
@@ -25,13 +27,14 @@ PeriodicDelayPacketFeatures periodicDelayPacketFeatures(const SpectralKROM& froz
     const auto latest=std::max_element(out.timeOffsets.begin(),out.timeOffsets.end());
     const auto column=std::size_t(latest-out.timeOffsets.begin())*out.channels.size()+std::size_t(target-out.channels.begin());
     const double cutoff=*latest;for(auto& t:out.timeOffsets)t-=cutoff;
-    const auto& readout=frozen.reconstructions.at("coordinates");
+    const auto& readout=frozen.readouts.at("coordinates");
     if(readout.outputs!=n)throw std::invalid_argument("Packet map requires coordinate readout");
     std::vector<double> g(n);for(std::size_t i=0;i<n;++i)g[i]=readout.coefficients[i*n+column];
-    auto model=frozen;riggedSpectralMeasure(model,g,"newest-coordinate-packets",centers,bandwidth,order);
-    const auto& packet=model.spectral.wavePackets.back();out.coefficients.resize(n*out.outputs);
+    auto model=krom;riggedSpectralMeasure(model,g,"newest-coordinate",0,"packet-centers",centers,bandwidth,order);
+    const auto& packets=model.spectrum().measure("packet-centers","newest-coordinate")->packets->coefficients();
+    out.coefficients.resize(n*out.outputs);
     for(std::size_t i=0;i<n;++i)for(std::size_t k=0;k<centers.size();++k){
-        const auto value=packet.coefficients[k*n+i];
+        const auto value=packets[k*n+i];
         if(!std::isfinite(value.real())||!std::isfinite(value.imag()))throw std::runtime_error("Nonfinite packet map");
         out.coefficients[i*out.outputs+2*k]=value.real();out.coefficients[i*out.outputs+2*k+1]=value.imag();}
     return out;

@@ -1,0 +1,85 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "quadratic_triangular",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "brunton": "Brunton, Brunton, Proctor and Kutz (2016), PLoS ONE 11:e0150171, eqs. 25-27",
+  "kaiser": "Kaiser, Kutz and Brunton (2021), Mach. Learn.: Sci. Technol. 2:035023, eqs. 50-52"
+ },
+ "definitions": [],
+ "eigenfunctions": [
+  {
+   "id": "x_1",
+   "title": "Exact eigenfunction x_1",
+   "kind": "exact",
+   "psi": "x_1",
+   "eigenvalue": "a",
+   "conditions": "Zero driver",
+   "derivation": "x_1' = a x_1",
+   "references": [
+    "brunton",
+    "kaiser"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude"
+    ]
+   }
+  },
+  {
+   "id": "eta",
+   "title": "Exact eigenfunction eta",
+   "kind": "exact",
+   "psi": "x_2 + c/(b - 2*a)*x_1^2",
+   "eigenvalue": "b",
+   "conditions": "Zero driver; b != 2a (for c = 0, eta = x_2 = principal_b)",
+   "derivation": "eta' = x_2' + 2c x_1 x_1'/(b-2a) = b eta",
+   "references": [
+    "brunton",
+    "kaiser"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude"
+    ],
+    "positive": [
+     "(b - 2*a)^2"
+    ]
+   }
+  },
+  {
+   "id": "principal_a",
+   "title": "Linearized principal eigenfunction at the origin (rate a)",
+   "kind": "principal",
+   "psi": "x_1",
+   "eigenvalue": "a",
+   "conditions": "Zero driver; near the origin",
+   "derivation": "left eigenvector (1,0) of Df(0)",
+   "references": [
+    "brunton"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude"
+    ]
+   }
+  },
+  {
+   "id": "principal_b",
+   "title": "Linearized principal eigenfunction at the origin (rate b)",
+   "kind": "principal",
+   "psi": "x_2",
+   "eigenvalue": "b",
+   "conditions": "Zero driver; near the origin",
+   "derivation": "left eigenvector (0,1) of Df(0); linearization of eta",
+   "references": [
+    "brunton"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude"
+    ]
+   }
+  }
+ ]
+}

@@ -9,18 +9,22 @@
 // mu = exp(lambda dt)).
 #include <complex>
 #include <cstddef>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace dynsyslab::core {
 
+class FunctionExpansion;
+
 struct Pseudospectrum {
     std::string definition, scope;  // as EigenpairResidual (Eigenpair.hpp)
     std::vector<std::complex<double>> grid;               // the points z
     std::vector<double> minimum;                          // the smallest residual at each point
-    std::vector<std::complex<double>> minimizingCoefficients;  // grid x features: the minimizer g (may be empty)
-    std::size_t features{};
+    // The minimizers g at each z (approximate eigenfunctions), one output per grid point, on the
+    // operator's frozen dictionary; optional.
+    std::shared_ptr<const FunctionExpansion> minimizers;
 
     [[nodiscard]] bool empty() const noexcept { return grid.empty(); }
     // The grid points in the sampled epsilon-pseudospectrum.
@@ -31,9 +35,7 @@ struct Pseudospectrum {
         return inside;
     }
     void validate() const {
-        if (minimum.size() != grid.size()
-            || (!minimizingCoefficients.empty() && minimizingCoefficients.size() != grid.size() * features))
-            throw std::invalid_argument("pseudospectrum grid, minima and minimizers do not match");
+        if (minimum.size() != grid.size()) throw std::invalid_argument("pseudospectrum grid and minima do not match");
     }
 };
 

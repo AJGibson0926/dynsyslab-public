@@ -43,7 +43,14 @@ json::Value inspectKoopmanModel(const KoopmanModel &model) {
         {"pseudospectrum", s.pseudospectrum() ? json::Value(json::Value::Object{
             {"points", double(s.pseudospectrum()->grid.size())}, {"definition", s.pseudospectrum()->definition},
             {"scope", s.pseudospectrum()->scope}}) : json::Value{}},
-        {"continuous_components", double(s.continuous().size())},
+        {"bands", double(s.bands().size())},
+        {"measures", double(s.measures().size())},
+        {"observables", double(s.koopmanModes().size())},
+        {"mode_ids", [&] { json::Value::Array ids; for (auto id : s.modeIds()) ids.emplace_back(double(id)); return json::Value(ids); }()},
+        {"compression", model.compression() ? json::Value(json::Value::Object{
+            {"identity", koopmanCompressionIdentity(*model.compression())}, {"method", model.compression()->method},
+            {"rank", double(model.compression()->rank)}, {"features", double(model.compression()->dictionary.size())},
+            {"sample_interval", model.compression()->sampleInterval}}) : json::Value{}},
         {"spectral_diagnostics", spectralDiagnosticsJson(model.spectralDiagnostics())},
         {"fit_evidence", json::Value::Object{{"algorithm", f.algorithm},
                                              {"sample_count", double(f.sampleCount)},

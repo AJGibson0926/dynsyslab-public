@@ -1,0 +1,133 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "duffing",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "dlmf22": "https://dlmf.nist.gov/22.19",
+  "mezic": "Mezic (2020), J. Nonlinear Sci. 30:2091-2145, section 11 (arXiv:1702.07597)"
+ },
+ "definitions": [
+  [
+   "H",
+   "velocity^2/2 - alpha*position^2/2 + beta*position^4/4"
+  ],
+  [
+   "D",
+   "sqrt(alpha^2 + 4*beta*H)"
+  ],
+  [
+   "A",
+   "sqrt((alpha + D)/beta)"
+  ]
+ ],
+ "eigenfunctions": [
+  {
+   "id": "energy",
+   "title": "Energy H = v^2/2 - alpha x^2/2 + beta x^4/4",
+   "kind": "exact",
+   "psi": "H",
+   "eigenvalue": "0",
+   "conditions": "Zero damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "dlmf22"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "delta"
+    ],
+    "positive": [
+     "alpha",
+     "beta"
+    ]
+   }
+  },
+  {
+   "id": "outer_phase",
+   "title": "Outer-orbit phase exp(i phi)",
+   "kind": "shell",
+   "definitions": [
+    [
+     "m",
+     "(alpha + D)/(2*D)"
+    ],
+    [
+     "d",
+     "sqrt(1 - m + m*(position/A)^2)"
+    ],
+    [
+     "am",
+     "atan2(-velocity/(A*sqrt(D)*d), position/A)"
+    ],
+    [
+     "phi",
+     "pi*ellipf(am, m)/(2*ellipk(m))"
+    ]
+   ],
+   "psi": "cos(phi)",
+   "psi_imag": "sin(phi)",
+   "eigenvalue": "0",
+   "eigenvalue_imag": "pi*sqrt(D)/(2*ellipk(m))",
+   "conditions": "Zero damping and driver; outer orbits H > 0",
+   "derivation": "x = A cn(sqrt(D) t|m) solves x'' = alpha x - beta x^3; phase inverted through atan2(sn, cn)",
+   "references": [
+    "dlmf22",
+    "mezic"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "delta"
+    ],
+    "positive": [
+     "alpha",
+     "beta"
+    ]
+   }
+  },
+  {
+   "id": "well_phase",
+   "title": "Single-well phase exp(i phi)",
+   "kind": "shell",
+   "definitions": [
+    [
+     "mi",
+     "2*D/(alpha + D)"
+    ],
+    [
+     "nu",
+     "A*sqrt(beta/2)"
+    ],
+    [
+     "ami",
+     "atan2(1 - position^2/A^2, -position/sqrt(position^2)*velocity/(A*nu))"
+    ],
+    [
+     "phii",
+     "pi*ellipf(ami, mi)/ellipk(mi)"
+    ]
+   ],
+   "psi": "cos(phii)",
+   "psi_imag": "sin(phii)",
+   "eigenvalue": "0",
+   "eigenvalue_imag": "pi*nu/ellipk(mi)",
+   "conditions": "Zero damping and driver; inner orbits -alpha^2/(4 beta) < H < 0, either well",
+   "derivation": "x = s A dn(nu t|m) solves x'' = alpha x - beta x^3; sn^2 = (1 - x^2/A^2)/m, sn cn = -s v/(A nu m)",
+   "references": [
+    "dlmf22",
+    "mezic"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "delta"
+    ],
+    "positive": [
+     "alpha",
+     "beta"
+    ]
+   }
+  }
+ ]
+}

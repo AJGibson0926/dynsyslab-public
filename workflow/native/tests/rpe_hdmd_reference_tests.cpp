@@ -21,6 +21,9 @@
 #include <dynsyslab/workflow/KoopmanSpectralQuery.hpp>
 
 #include <cmath>
+#include <cstdlib>
+#include <filesystem>
+#include <string>
 #include <complex>
 #include <iostream>
 #include <memory>
@@ -131,8 +134,12 @@ void linearRingdownAndHdmd(){
         x[j*h.rows+d]=h.x[d*h.columns+j];y[j*h.rows+d]=h.y[d*h.columns+j];}
     const cd mu1=std::exp(cd(rate,w)*dtau);
     J::Array grid{J::Array{1.,0.},J::Array{mu1.real(),mu1.imag()},J::Array{mu1.real(),-mu1.imag()},J::Array{.5,.5}};
+    // The fit is a krom, written to a scratch archive that the rollout names.
+    const auto folder=std::filesystem::temp_directory_path()/("dsl-hdmd-"+std::to_string(std::rand()));
+    std::filesystem::create_directories(folder);
+    const auto kromPath=(folder/"hdmd.npz").string();
     const auto result=dynsyslab::workflow::evaluateKoopmanSpectralQuery(J::Object{
-        {"schema","dynsyslab.koopman-spectral-query/v1"},{"action","fit"},
+        {"schema","dynsyslab.koopman-spectral-query/v1"},{"action","fit"},{"output_archive",kromPath},
         {"data",J::Object{{"dimension",double(h.rows)},{"x",array(x)},{"y",array(y)}}},
         {"settings",J::Object{{"method","edmd"},{"rank",3.},{"sample_interval",dtau},
             {"dictionary",J::Object{{"kind","linear"},{"constant",false}}},{"residual_grid",grid}}}});
@@ -144,9 +151,10 @@ void linearRingdownAndHdmd(){
     // Free H-DMD forecast of the delay window from its first column only.
     const std::size_t steps=150;
     const auto rollout=numbers(dynsyslab::workflow::evaluateKoopmanSpectralQuery(J::Object{
-        {"schema","dynsyslab.koopman-spectral-query/v1"},{"action","rollout"},{"model",result.at("model")},
+        {"schema","dynsyslab.koopman-spectral-query/v1"},{"action","rollout"},{"krom",kromPath},
         {"initial",array(std::vector<double>(x.begin(),x.begin()+h.rows))},{"steps",double(steps)}}).at("values"));
     for(std::size_t k=0;k<=steps;++k)close(rollout[k*h.rows],radius[h.starts[0]+k],1e-10,"H-DMD forecast of the radius");
+    std::filesystem::remove_all(folder);
 }
 
 // KLQR solves a continuous LQR on the lifted linear model each time its input map changes. The

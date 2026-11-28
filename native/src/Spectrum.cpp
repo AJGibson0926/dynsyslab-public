@@ -176,8 +176,27 @@ Spectrum Spectrum::extract(const std::vector<std::size_t> &modes) const {
         if (!residuals_.empty())
             result.residuals_.push_back(residuals_.at(j));
     }
-    result.continuous_ = continuous_;
+    for (auto j : modes) result.modeIds_.push_back(modeId(j));
+    // The selected eigenfunctions: each representation's chosen outputs and the samples' columns.
+    for (const auto& rep : representations_) result.representations_.push_back({rep.name, rep.function->selectOutputs(modes)});
+    result.samples_ = {samples_.time, samples_.sampleIndices, {}, modes.size()};
+    result.samples_.values.reserve(samples_.samples() * modes.size());
+    for (std::size_t k = 0; k < samples_.samples(); ++k)
+        for (const auto j : modes) result.samples_.values.push_back(samples_.values[k * samples_.modes + j]);
+    // Each observable's Koopman modes on the selected pairs.
+    for (const auto& [name, all] : koopmanModes_) {
+        auto selected = all;
+        selected.modes = modes.size();
+        selected.matrix.assign(all.outputs * modes.size(), {});
+        for (std::size_t output = 0; output < all.outputs; ++output)
+            for (std::size_t column = 0; column < modes.size(); ++column)
+                selected.matrix[output * modes.size() + column] = all.matrix[output * size() + modes[column]];
+        result.koopmanModes_.emplace(name, std::move(selected));
+    }
+    result.bands_ = bands_;
+    result.measures_ = measures_;
     result.pseudospectrum_ = pseudospectrum_;
+    result.compression_ = compression_;
     result.pairConjugates();
     return result;
 }
@@ -192,8 +211,13 @@ Eigenvalue Spectrum::eigenvalue(std::size_t mode) const {
     if (mode < conjugates_.size()) e.conjugate = conjugates_[mode];
     return e;
 }
-Eigenpair Spectrum::pair(std::size_t mode) const {
-    return {eigenvalue(mode), std::nullopt, residual(mode)};
+Eigenpair Spectrum::pair(std::size_t mode, const ObservableCatalog* catalog) const {
+    Eigenpair out{eigenvalue(mode), std::nullopt, residual(mode), {}};
+    if (!representations_.empty()) out.eigenfunction = eigenfunction(mode, catalog);
+    for (const auto& [name, modes] : koopmanModes_)
+        for (std::size_t output = 0; output < modes.outputs; ++output)
+            out.modes.push_back({name, output, modes.matrix[output * modes.modes + mode]});
+    return out;
 }
 const std::optional<EigenpairResidual>& Spectrum::residual(std::size_t mode) const {
     static const std::optional<EigenpairResidual> none;
@@ -222,11 +246,45 @@ Spectrum& Spectrum::setPseudospectrum(std::optional<Pseudospectrum> pseudospectr
     pseudospectrum_ = std::move(pseudospectrum);
     return *this;
 }
+std::size_t Spectrum::modeId(std::size_t mode) const {
+    if (mode >= size()) throw std::out_of_range("mode index");
+    return modeIds_.empty() ? mode : modeIds_[mode];
+}
+std::vector<std::size_t> Spectrum::modeIds() const {
+    std::vector<std::size_t> ids(size());
+    for (std::size_t j = 0; j < ids.size(); ++j) ids[j] = modeId(j);
+    return ids;
+}
+std::optional<std::size_t> Spectrum::modeIndex(std::size_t id) const {
+    if (modeIds_.empty()) return id < size() ? std::optional<std::size_t>(id) : std::nullopt;
+    for (std::size_t j = 0; j < modeIds_.size(); ++j)
+        if (modeIds_[j] == id) return j;
+    return std::nullopt;
+}
+Spectrum& Spectrum::setModeIds(std::vector<std::size_t> ids) {
+    if (!ids.empty() && (ids.size() != size() || std::set<std::size_t>(ids.begin(), ids.end()).size() != ids.size()))
+        throw std::invalid_argument("mode ids must be one unique id per pair");
+    bool identity = true;
+    for (std::size_t j = 0; j < ids.size(); ++j) identity = identity && ids[j] == j;
+    modeIds_ = identity ? std::vector<std::size_t>{} : std::move(ids);
+    return *this;
+}
 Spectrum& Spectrum::adoptEvidence(const Spectrum& other) {
     if (other.size() != size()) throw std::invalid_argument("spectral evidence belongs to a spectrum of another size");
     residuals_ = other.residuals_;
-    continuous_ = other.continuous_;
-    pseudospectrum_ = other.pseudospectrum_;
+    auto bands = other.bands_;
+    for (auto& b : bands)
+        if (const auto* kept = band(b.name); kept && b.eigenfunctions.empty()) b.eigenfunctions = kept->eigenfunctions;
+    bands_ = std::move(bands);
+    auto measures = other.measures_;
+    for (auto& incoming : measures)
+        if (!incoming.packets)
+            if (const auto* kept = measure(incoming.band, incoming.observable, incoming.output)) incoming.packets = kept->packets;
+    auto pseudospectrum = other.pseudospectrum_;
+    if (pseudospectrum && !pseudospectrum->minimizers && pseudospectrum_ && pseudospectrum_->grid == pseudospectrum->grid)
+        pseudospectrum->minimizers = pseudospectrum_->minimizers;
+    measures_ = std::move(measures);
+    pseudospectrum_ = std::move(pseudospectrum);
     return *this;
 }
 std::vector<Eigenvalue> Spectrum::eigenvalues() const {

@@ -1,0 +1,88 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "kepler_planar",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "mezic": "Mezic (2020), J. Nonlinear Sci. 30:2091-2145, section 11 (arXiv:1702.07597)",
+  "murray": "Murray and Dermott (1999), Solar System Dynamics, chapter 2"
+ },
+ "definitions": [
+  [
+   "H",
+   "(p_1^2 + p_2^2)/2 - mu/sqrt(q_1^2 + q_2^2)"
+  ]
+ ],
+ "eigenfunctions": [
+  {
+   "id": "energy",
+   "title": "Energy",
+   "kind": "exact",
+   "psi": "H",
+   "eigenvalue": "0",
+   "conditions": "Zero damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "murray"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  },
+  {
+   "id": "angular_momentum",
+   "title": "Angular momentum",
+   "kind": "exact",
+   "psi": "q_1*p_2 - q_2*p_1",
+   "eigenvalue": "0",
+   "conditions": "Zero damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "murray"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  },
+  {
+   "id": "mean_anomaly",
+   "title": "Mean-anomaly phase exp(i M)",
+   "kind": "shell",
+   "definitions": [
+    [
+     "a",
+     "-mu/(2*H)"
+    ],
+    [
+     "rv",
+     "(q_1*p_1 + q_2*p_2)/sqrt(mu*a)"
+    ],
+    [
+     "M",
+     "atan2(rv, 1 - sqrt(q_1^2 + q_2^2)/a) - rv"
+    ]
+   ],
+   "psi": "cos(M)",
+   "psi_imag": "sin(M)",
+   "eigenvalue": "0",
+   "eigenvalue_imag": "sqrt(mu/a^3)",
+   "conditions": "Zero damping and driver; bound noncollision orbits H < 0",
+   "derivation": "e cos E = 1 - r/a, e sin E = (q.p)/sqrt(mu a), M = E - e sin E (Kepler's equation)",
+   "references": [
+    "murray",
+    "mezic"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  }
+ ]
+}

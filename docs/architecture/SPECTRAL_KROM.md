@@ -18,7 +18,8 @@ snapshot pairs. They never manufacture adjacent pairs across trajectory boundari
 
 C++ entry points are in
 [KoopmanSpectralAnalysis.hpp](../../native/include/dynsyslab/core/KoopmanSpectralAnalysis.hpp).
-Typed results are in [SpectralKROM.hpp](../../native/include/dynsyslab/core/SpectralKROM.hpp).
+Every fit is a krom (`KoopmanModel`, one `krom` data object); its compressed operator is in
+[KoopmanCompression.hpp](../../native/include/dynsyslab/core/KoopmanCompression.hpp).
 The C entry point is `dsl_workflow_koopman_spectral_json`; it follows the existing
 opaque-result lifecycle and error-status protocol. Python exposes
 `NativeWorkflow.koopman_spectral(request)`. The compiled CLI accepts
@@ -60,22 +61,29 @@ selection, and application-specific ENSO workflows. These require distinct
 contracts or further validation. The published DeepMDMD repository URL was
 unavailable; no substitute code was invented.
 
-## What a spectral KROM contains
+## What a spectral fit contains
 
-A `SpectralKROM` is a second KROM representation, separate from the existing
-polynomial/scattered eigenfunction `KoopmanModel`. It retains a finite operator
-even when a diagonal eigenmode representation is unreliable:
+A spectral fit is a krom like any other method's: one `KoopmanModel`, one `krom` data object.
+What is particular to it is its **compressed operator**, `KoopmanModel::compression()`
+(`KoopmanCompression`), which it keeps because some analyses need the operator itself rather than
+its eigenpairs (it stays valid even when a diagonal eigenmode representation is unreliable):
 
-- Frozen dictionary and normalization; linear, polynomial, Chebyshev, Laguerre,
-  Hermite, Fourier-Hermite, radial sections or nearest-center indicator partitions.
-- Basis B with columns orthonormal in the training quadrature metric, coefficient
-  action A, discrete multipliers, and explicit eigenfunction coefficients.
-- Named dictionary readouts for measured coordinates or other supplied outputs.
-- Typed spectral measures, residual landscapes and minimizing coefficients,
-  invariance diagnostics, wave packets, stochastic diagnostics and RKHS-adjoint
-  results. Measures store angular densities, moments, optional atoms and mass.
-- Sampling interval, coordinate-provider contract, method, assumptions and
-  content identity.
+- **The atomic part, on the spectrum.** The eigenpairs: values with stable mode ids (numbered in the
+  operator's eigensystem order), each pair's one-step residual, and the eigenfunctions as an
+  expansion on the frozen dictionary (and an interpolation over physical states).
+- **The continuous part and the observables, on the spectrum.** Rigged DMD's spectral bands (a named
+  angle grid with its kernel) and, per observable, its Koopman modes and its measure on each
+  band (density, moments, mass) with its wave packets as an expansion on the same dictionary
+  (`SpectralMeasure::packets`); atoms follow from the Koopman modes (`Spectrum::atoms`).
+- **Evidence, on the spectrum.** The pseudospectrum (grid, minimum residual) with its minimizers
+  (`Pseudospectrum::minimizers`).
+- **The operator, as `compression()`.** Frozen dictionary and normalization (linear, polynomial,
+  Chebyshev, Laguerre, Hermite, Fourier-Hermite, radial sections or nearest-center indicator
+  partitions); basis B with columns orthonormal in the training quadrature metric; the coefficient
+  action A; named readouts of dictionary features; sampling interval, coordinate contract, method,
+  assumptions. Its identity (`koopmanCompressionIdentity`) is what references to the krom's
+  operator-derived observables name. Child kroms and extraction keep it.
+- **Diagnostics**: invariance angles, stochastic residuals and RKHS-adjoint results.
 
 Automatic basis construction and deterministic farthest-point or k-means center selection
 use training points only. Training normalization is frozen; evaluation never
@@ -104,19 +112,14 @@ A spectral measure is not an eigenmode list. Wave packets are finite-width
 functions, not certified distributional limits. RKHS adjoint sections are stored
 as **adjoint** results and are not accepted as an autonomous forward model.
 
-A `koopman_spectral` step publishes its `SpectralData` once, on the krom (see
-[EIGENFUNCTION_OBJECTS.md](EIGENFUNCTION_OBJECTS.md#eigenpairs-spectrum-and-pseudospectrum)): the
-one-step residuals on the eigenpairs, the residual grid as the spectrum's `Pseudospectrum`, the
-measures as its continuous components, and invariance, wave packets, stochastic residuals and RKHS
-adjoints as the krom's `spectralDiagnostics()` (`spectral_diagnostics_json`). The operator contract
-embedded in the krom carries none of it; `readSpectralKromArchive` restores it. Mode extraction
-keeps the selected pairs' residuals and the operator's pseudospectrum and continuous part, and
-clears the diagnostics because they refer to the original trial subspace; it does not silently
-relabel them as diagnostics of the extracted subspace. New spectral KROM archives use
-`dynsyslab.spectral-krom/v1`, a compact JSON contract, and separate NPZ numeric
-arrays. Identity is checked on loading. Spectral KROMs do not automatically become
-control-ready polynomial KROMs: no continuous input map or physical-state provider
-is inferred.
+A `koopman_spectral` step publishes the fit as a krom (see
+[EIGENFUNCTION_OBJECTS.md](EIGENFUNCTION_OBJECTS.md#eigenpairs-spectrum-and-pseudospectrum)). Mode
+extraction keeps the selected pairs (with their ids and residuals), the operator, its pseudospectrum,
+measures and spectral functions, and clears the diagnostics because they refer to the original trial
+subspace. The archive stores the operator as `compression_basis`, `compression_action` and
+`compression_readout__<name>` with its description in the krom block, and the spectral functions as
+`spectral_function__<key>`. There is no second archive kind: the query and periodic routes write
+kroms too. A spectral fit's krom has no input maps until a stage fits them.
 
 ## Observable references to an existing KROM
 
@@ -181,12 +184,14 @@ prediction = api.koopman_spectral({
 })
 ~~~
 
-Output archives are created atomically and never overwrite an existing path.
-Queries accept either `archive` or the returned `model` object. Actions:
+Output archives are created atomically and never overwrite an existing path. A fit is a krom:
+`output_archive` writes it, and actions on an existing fit name it as `krom` (or `archive`); inline
+models are no longer accepted. Results report the spectrum (`eigenvalues`, `mode_ids`, `residuals`
+with the pseudospectrum, `measures` each with its `packets`) and, unless `include_model:false`, the
+operator as `compression`. Actions:
 `fit`, `inspect`, `evaluate`, `reconstruct`, `rollout`, `residuals`,
 `rigged_measure`, `correlation_measure`, `specrkhs`, `pagerank`, `observable`.
-Complex arrays use pairs [real, imaginary]. `include_model:false` suppresses the
-full fitted model in responses. An `inspect` query returns the exact coordinate contract.
+Complex arrays use pairs [real, imaginary]. An `inspect` query returns the exact coordinate contract.
 
 For repeated stochastic data supply `replicate_count` and
 `successor_replicates` in replicate by sample by coordinate order in `data`.
@@ -194,15 +199,40 @@ At least two independent successors at each identical source point are required.
 The empirical mean residual retains finite-replicate sampling error; the reported
 innovation variance is unbiased under the asserted independent-replicate model.
 
-For Rigged DMD, choose `method:"mpedmd"`, explicitly set
-`assume_measure_preserving:true`, and add:
+### Rigged DMD: the `rigged_measure` stage
+
+Rigged DMD (Colbrook, Drysdale & Horning, arXiv:2405.00782, 2024) is a stage of its own that acts
+on a krom. The krom's spectral fit must be a unitary compression, which `mpedmd` with
+`assume_measure_preserving:true` gives (Colbrook, SIAM J. Numer. Anal. 61, 2023). The stage checks
+the operator (A^T A = I), not the method's name. A child krom finds the fit through its parents, so
+measures can be added in several steps.
 
 ~~~json
-"rigged_measures": [
-  {"name": "observable", "coefficients": [1, 0],
-   "angles": [-3.14, -1.57, 0, 1.57, 3.14], "bandwidth": 0.08, "order": 4}
-]
+[{"name": "mpedmd", "settings": {"assume_measure_preserving": true, "rank": 2,
+   "dictionary": {"kind": "linear", "constant": false}}},
+ {"name": "rigged_measure", "settings": {"measures": [
+   {"name": "observable", "coefficients": [1, 0],
+    "angles": [-3.14, -1.57, 0, 1.57, 3.14], "bandwidth": 0.08, "order": 4}]}}]
 ~~~
+
+`krom` names the krom to analyse (default: the stage's source); it must carry a unitary compression,
+inherited from its parents when it is a child. Each item names a spectral band (`band`,
+default `name`: the angle grid with the kernel's bandwidth and order; an existing band must match)
+and an observable (`observable`, default `name`, given by dictionary `coefficients`; or output
+`output` of a fitted feature readout, `reconstruction: {name, output}`, whose name it then takes).
+The result is a child krom whose spectrum gains the band, the observable's measure on it (the
+smoothed density on the grid, its mass) and, when the observable has none, its Koopman modes, its
+exact coefficients on the eigenfunctions. A unitary compression's measure of an observable is purely
+atomic, one atom per eigenpair with mass |c_k|^2, the observable's Koopman mode on that unit-norm
+eigenfunction, and the masses sum to its squared norm (Colbrook 2023); `Spectrum::atoms` derives
+them from the Koopman modes by stable mode id, so they resolve in any child or extraction that keeps
+those pairs. Rigged DMD's density is this atomic measure smoothed by its kernel. The measure's
+generalized eigenfunctions, one wave packet per angle, are an expansion on the frozen dictionary held
+by the measure (`SpectralMeasure::packets`); they survive `krom_extract` and evaluate as an
+observable of kind `wave-packet` (`component`: the measure's key `band/observable/output`, or
+`index`: its position). The stage's metadata lists the new measures by key. A fitting stage refuses
+`rigged_measures` and points to this stage. The `koopman-spectral` query keeps its `rigged_measures` setting and its
+`rigged_measure` action.
 
 This example assumes a two-feature dictionary; supply one coefficient per frozen feature.
 Coefficients describe the observable in the frozen dictionary, not in eigenmode
@@ -211,6 +241,53 @@ silently performed. Higher-order rational kernels can have negative lobes.
 `correlation_measure` requires `assume_stationary:true`. `specrkhs` returns typed
 associated data without constructing a forward KROM. `pagerank` requires a
 nonnegative transition graph; a signed EDMD matrix is not automatically such a graph.
+
+### Pooled fits over a family of orbits
+
+`mpedmd` (and the other `koopman_spectral` fits) take `"additional_sources": [archives...]` of the same
+system and clock, or `"pool": true`, which makes a one-stage job's `sources` one fit (the first leads,
+the rest are its additional sources; `"sources": ["${solve.archives}"]` in a job group pools every
+orbit a family solve wrote): every record's delay pairs enter one fit, none crossing a record boundary. Settings
+`"source_weights"` weight the records: `"uniform"`, a list, or
+`{"canonical_area": {"invariant": "energy", "band": "<band>"}}`, the trapezoid rule in the invariant
+divided by each orbit's frequency, dE/Ω, which is the invariant measure's transverse density across a
+family of periodic orbits in action-angle coordinates (dI = dE/Ω; Arnold, *Mathematical Methods of
+Classical Mechanics*, §50). Each record's weight is split evenly over its pairs, so the time averages
+along each orbit discretize the measure along it. The krom's origin lists every record.
+
+An observable given to Rigged DMD (or any measure) must lie in the fit's trial subspace. Its Koopman
+modes are solved in two steps, z = basis⁺g on the whitened trial basis's orthogonal columns (the span
+test) and then V c = z on the action's eigenvectors, so the whitening's condition number
+σ_max/σ_min does not enter the solve. `residual_grid` also takes a lattice
+`{"real": [from, to, n], "imag": [from, to, n]}`, which the Viewer draws as the pseudospectrum.
+
+### A system's known spectrum against a fit: `band_projection` and `packet_validation`
+
+When the system catalogue gives a band with generalized eigenfunctions (a shell entry: exact phase
+φ and frequency Ω(H)), orbit records measure an observable's spectral measure on that band exactly up
+to quadrature. `band_projection` pools its sources, one orbit each: along each record it takes the
+weighted Birkhoff averages a_n = ⟨g e^{−inφ}⟩ with the smooth window exp(−1/(s(1−s))), which converge
+faster than any power of the record length for a smooth quasi-periodic signal (Das & Yorke,
+*Nonlinearity* 31, 2018). These are g's Fourier coefficients in the band's exact phase. Weighted
+across orbits by `weights` (as above), they give the measure's atoms at nΩ_j, which the stage smooths
+with Rigged DMD's kernel onto `angles` (`reference_density__<obs>`, the density a Rigged DMD fit is
+compared with) and turns into wave-packet amplitudes at `packet_centers`. With `"krom"` it also
+publishes a child of that krom whose spectrum gains the reference band (default name
+`fourier-reference`) with the measures of the named observables (`measures: [{observable, as,
+output}]`), beside the fit's own bands: one spectrum holds the exact and the fitted measures of one
+observable.
+
+`packet_validation` evaluates a fitted krom's Rigged DMD wave packets along held-out orbit records (on
+the fit's own delay windows, its Hankel provenance checked against the settings) and compares their
+RMS amplitude on each orbit with the band projection's reference packets
+(`packet_rms__<obs>__<k>`, `reference_packet_rms__<obs>__<k>`, `validation_frequency`).
+With `"krom"`, the report's metadata `density_errors` lists, for every density the krom already has of
+the compared output on the same angle grid (Rigged DMD's), its relative L2 error against the reference
+and both masses; `packet_validation`'s metadata `errors` gives the packets' relative L2 amplitude error
+over the held-out orbits. The data pack `data-packs/known-spectrum-comparisons-2026-11-28` runs this
+comparison on every catalogue system with a shell band.
+`workflow/native/tests/band_projection_tests.cpp` runs the whole comparison on the pendulum as one job
+group: solve, project, pooled mpEDMD, Rigged DMD, both bands on one spectrum, held-out packets.
 
 ## Experiments
 

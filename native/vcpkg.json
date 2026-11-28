@@ -1,6 +1,6 @@
 {
   "name": "dynsyslab-native-core",
-  "version-string": "0.10.3",
+  "version-string": "0.11.0",
   "builtin-baseline": "04a9d8e5212d01ee1dd9478eadd9caade4f8b0d4",
   "dependencies": [
     "eigen3",

@@ -55,8 +55,6 @@ inline constexpr const char* kKromSchema = "dynsyslab.krom/v1";
 [[nodiscard]] bool isKrom(const NpzRecord& archive);
 [[nodiscard]] bool isKromMetadata(const std::string& metadataJson);
 
-// A spectral K-ROM archive (SpectralKromArchive.hpp) as a model in its own frozen dictionary.
-[[nodiscard]] KoopmanModel spectralKromModel(const NpzRecord& archive, const SystemConfiguration& system);
 
 // The krom archive of `model`, with `metadataJson` as the base of its metadata (its data_object
 // envelope is kept, with kind krom) and `extraArrays` (properties of the producing method). A model

@@ -66,7 +66,7 @@ class SpectralKoopmanTest(unittest.TestCase):
             result = subprocess.run([str(cli), "koopman-spectral", str(query)], check=True, capture_output=True, text=True)
             self.assertEqual(json.loads(result.stdout)["model_identity"], fit["model_identity"])
             info = subprocess.run([str(cli), "krom-info", path], check=True, capture_output=True, text=True)
-            self.assertEqual(json.loads(info.stdout)["model_identity"], fit["model_identity"])
+            self.assertEqual(json.loads(info.stdout)["compression"]["identity"], fit["model_identity"])
 
     def test_independent_weighted_edmd_normal_equations(self):
         rng = np.random.default_rng(14)
@@ -76,24 +76,26 @@ class SpectralKoopmanTest(unittest.TestCase):
         result = self.api.koopman_spectral({"action": "fit", "data": {"dimension": 2,
             "x": x.ravel().tolist(), "y": y.ravel().tolist(), "weights": w.tolist()},
             "settings": {"method": "resdmd", "dictionary": {"kind": "linear", "constant": False}}})
-        model = result["model"]
+        model = result["compression"]
         basis = np.array(model["basis"]).reshape(2, 2)
-        operator = basis @ np.array(model["action"]).reshape(2, 2) @ np.linalg.inv(basis)
+        action = np.array(model["action"]).reshape(2, 2)
+        operator = basis @ action @ np.linalg.inv(basis)
         direct = np.linalg.solve(x.T @ (w[:, None]*x), x.T @ (w[:, None]*y))
         np.testing.assert_allclose(operator, direct, atol=1e-12)
-        c = np.array(model["eigenfunctions"])
-        c = (c[:, 0]+1j*c[:, 1]).reshape(2, 2)
-        lam = np.array(model["multipliers"])
-        lam = lam[:, 0]+1j*lam[:, 1]
+        # The eigenpairs follow from the operator; each pair's residual is independent of its scale.
+        lam, vectors = np.linalg.eig(action)
+        c = basis @ vectors
         residual = np.sqrt(np.sum(w[:, None]*abs(y@c-(x@c)*lam)**2, axis=0)/
                            np.sum(w[:, None]*abs(x@c)**2, axis=0))
-        np.testing.assert_allclose(result["spectral"]["residuals"]["eigenpair"], residual, atol=1e-12)
+        np.testing.assert_allclose(sorted(result["spectral"]["residuals"]["eigenpair"]), sorted(residual), atol=1e-12)
 
     def test_batch_free_rollout_with_independent_rotation_reference(self):
-        model = self.fit('mpedmd')['model']
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        model = self.fit('mpedmd', output_archive=str(Path(folder.name) / "rotation.npz"))['archive']
         points = np.array([[1., 0.], [.3, -.7], [0., 0.]])
         for steps in (0, 31):
-            result = self.api.koopman_spectral(dict(action='rollout_batch', model=model,
+            result = self.api.koopman_spectral(dict(action='rollout_batch', krom=model,
                 initial_points=points.ravel().tolist(), steps=steps))
             theta = .31*np.arange(steps+1)
             expected = np.stack([np.column_stack((x*np.cos(theta)-y*np.sin(theta),
@@ -104,7 +106,7 @@ class SpectralKoopmanTest(unittest.TestCase):
             self.assertEqual(result['samples'], steps+1)
         for points_bad, steps_bad in (([], 1), ([1], 1), ([1, 0], 10000000)):
             with self.assertRaises(NativeWorkflowError):
-                self.api.koopman_spectral(dict(action='rollout_batch', model=model,
+                self.api.koopman_spectral(dict(action='rollout_batch', krom=model,
                     initial_points=points_bad, steps=steps_bad))
 
     def test_shared_hankel_postprocessor(self):
@@ -124,12 +126,12 @@ class SpectralKoopmanTest(unittest.TestCase):
             self.api.plan(job)
             result = self.api.run(job, root / "archives")
             paths = list((root / "archives").rglob("*.npz"))
-            fitted = [p for p in paths if "spectral_krom_contract_json" in np.load(p).files]
+            fitted = [p for p in paths if "compression_action" in np.load(p).files]
             self.assertEqual(len(fitted), 1, result)
-            model = self.api.koopman_spectral({"action": "inspect", "archive": str(fitted[0])})
+            model = self.api.koopman_spectral({"action": "inspect", "krom": str(fitted[0])})
             self.assertEqual(model["rank"], 2)
             self.assertLess(max(model["spectral"]["residuals"]["eigenpair"]), 1e-10)
-            self.assertAlmostEqual(model["model"]["sample_interval"], .1)
+            self.assertAlmostEqual(model["compression"]["sample_interval"], .1)
 
 if __name__ == "__main__":
     unittest.main()

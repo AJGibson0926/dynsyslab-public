@@ -1,0 +1,47 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "euler_top",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "arnold": "https://doi.org/10.1007/978-1-4757-2063-1"
+ },
+ "definitions": [],
+ "eigenfunctions": [
+  {
+   "id": "casimir",
+   "title": "Casimir |M|^2",
+   "kind": "exact",
+   "psi": "M_1^2 + M_2^2 + M_3^2",
+   "eigenvalue": "0",
+   "conditions": "Zero damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "arnold"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  },
+  {
+   "id": "energy",
+   "title": "Energy",
+   "kind": "exact",
+   "psi": "M_1^2/(2*inertia_1) + M_2^2/(2*inertia_2) + M_3^2/(2*inertia_3)",
+   "eigenvalue": "0",
+   "conditions": "Zero damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "arnold"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  }
+ ]
+}

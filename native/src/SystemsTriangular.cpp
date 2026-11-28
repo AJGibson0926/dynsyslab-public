@@ -127,19 +127,8 @@ DynamicalKnowledge triangularKnowledge(const SystemConfiguration& config) {
         "Their partial derivatives close in the same span; derivatives above order two vanish.",
         R"(z=(1,x_1,x_1^2,\eta)^T,\quad \eta=x_2+c x_1^2/(b-2a))",
         free&&nonresonant,"Zero driver; b!=2a, or c=0 with eta=x_2");
-    // Library eigenfunctions (loaded by libraryEigenfunctions). Brunton et al. (2016), eqs. 25-27;
-    // Kaiser et al. (2021), eqs. 50-52. Df(0)=diag(a,b), so the linearized principal
-    // eigenfunctions at the origin are x_1 and x_2; eta is the exact one that x_2 linearizes.
-    const std::string eta=c==0?"x_2":"x_2 + c/(b - 2*a)*x_1^2";
-    r.eigenfunctions={
-        {"x_1","Exact eigenfunction x_1","exact","x_1","0","a","0","Zero driver",
-         "x_1' = a x_1",{brunton,kaiser},free},
-        {"eta","Exact eigenfunction eta","exact",eta,"0","b","0","Zero driver; b!=2a, or c=0",
-         "eta' = x_2' + 2c x_1 x_1'/(b-2a) = b eta",{brunton,kaiser},free&&nonresonant},
-        {"principal_a","Linearized principal eigenfunction at the origin (rate a)","principal","x_1","0","a","0",
-         "Zero driver; near the origin","left eigenvector (1,0) of Df(0)",{brunton},free},
-        {"principal_b","Linearized principal eigenfunction at the origin (rate b)","principal","x_2","0","b","0",
-         "Zero driver; near the origin","left eigenvector (0,1) of Df(0); linearization of eta",{brunton},free}};
+    // Its library eigenfunctions (x_1, eta and the principal pair at the origin; Brunton et al. 2016,
+    // Kaiser et al. 2021) are catalogue data: native/catalog/systems/quadratic_triangular.json.
     add("quadratic_triangular-slow-manifold","Invariant parabola and fast deviation","invariant_manifold",
         "The zero set eta=0 is invariant; eta evolves at rate b. "
         "It is the distinguished slow graph when b<a<0. At the reference parameters "

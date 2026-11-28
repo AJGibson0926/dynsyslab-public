@@ -1,5 +1,6 @@
 #include <dynsyslab/core/PeriodicSpectralComparison.hpp>
-#include <dynsyslab/core/SpectralKromArchive.hpp>
+#include <dynsyslab/core/KoopmanArchive.hpp>
+#include <optional>
 #include <dynsyslab/core/FileDigest.hpp>
 #include <algorithm>
 #include <cmath>
@@ -34,15 +35,24 @@ J auditJson(const math::PeriodicQuadratureAudit&a){A relativeErrors;
         {"scope","Normalized supplied orbit weights; finite Fourier products only, not omitted tails or transverse quadrature"}};}
 std::string identifier(const J&v){const auto s=v.string();if(s.empty()||s.size()>120||
     !std::all_of(s.begin(),s.end(),[](unsigned char c){return std::isalnum(c)||c=='_'||c=='-';}))throw std::invalid_argument("Group name needs letters, digits, hyphens or underscores");return s;}
-struct Model {std::string label,archive;std::vector<std::size_t>channels;std::vector<double>offsets;core::SpectralKROM model;};
+struct Model {std::string label,archive;std::vector<std::size_t>channels;std::vector<double>offsets;std::optional<core::KoopmanModel> model;};
+// A periodic-delay fit is a krom; requests name its archive.
+core::KoopmanModel loadKrom(const J& v){
+    if(!v.at("model").isNull())throw std::invalid_argument("Periodic-delay fits are kroms: pass the archive path as \"archive\"");
+    auto model=core::loadKoopmanModel(std::filesystem::u8path(v.at("archive").string()));
+    if(!model.compression())throw std::invalid_argument("This krom has no compressed operator (a spectral fit's)");
+    return model;
+}
+const core::KoopmanCompression& operatorOf(const core::KoopmanModel& model){return *model.compression();}
+std::string identityOf(const core::KoopmanModel& model){return core::koopmanCompressionIdentity(*model.compression());}
 }
 core::json::Value evaluatePeriodicSpectralQuery(const J&q){
     if(q.at("operation").string()=="packet_features"){
-        const auto model=q.at("model").isNull()?core::loadSpectralKrom(std::filesystem::u8path(q.at("archive").string())):core::spectralKromFromJson(q.at("model"));
+        const auto model=loadKrom(q);
         const auto r=core::periodicDelayPacketFeatures(model,integer(q.at("channel")),reals(q.at("packet_centers")),number(q.at("bandwidth")),integer(q.at("order"),8));
         return O{{"schema","dynsyslab.periodic-result/v1"},{"method","periodic-packet-features"},
-            {"model_identity",core::spectralKromIdentity(model)},{"coordinate_contract",model.coordinateContract},
-            {"sample_interval",model.sampleInterval},{"packet_centers",values(r.centers)},{"bandwidth",q.at("bandwidth")},{"order",q.at("order")},
+            {"model_identity",identityOf(model)},{"coordinate_contract",operatorOf(model).coordinateContract},
+            {"sample_interval",operatorOf(model).sampleInterval},{"packet_centers",values(r.centers)},{"bandwidth",q.at("bandwidth")},{"order",q.at("order")},
             {"features",O{{"channels",values(r.channels)},{"time_offsets",values(r.timeOffsets)},
                 {"outputs",double(r.outputs)},{"coefficients",values(r.coefficients)}}},
             {"layout","coefficients input x output; input offset/channel, output center/(real,imaginary)"},
@@ -56,14 +66,14 @@ core::json::Value evaluatePeriodicSpectralQuery(const J&q){
             for(const auto&v:array(q.at("evaluation_steps"))){selected.push_back(indices(v));
                 if(selected.back().empty())throw std::invalid_argument("Evaluation-step lists cannot be empty");steps.push_back(selected.back().back());}
         }else steps=indices(q.at("steps_per_orbit"));
-        const auto model=q.at("model").isNull()?core::loadSpectralKrom(std::filesystem::u8path(q.at("archive").string())):core::spectralKromFromJson(q.at("model"));
+        const auto model=loadKrom(q);
         const auto result=core::auditPeriodicDelayForecast(model,validation,steps,selected);A rows;
         for(std::size_t j=0;j<result.size();++j){const auto&r=result[j];rows.emplace_back(O{{"steps",double(r.steps)},
             {"parameter",q.at("validation").array()[j].at("parameter")},{"channels",double(r.channels)},{"step_indices",values(r.stepIndices)},
             {"reference_mean_square",values(r.referenceMeanSquare)},{"prediction_mean_square",values(r.predictionMeanSquare)},
             {"error_mean_square",values(r.errorMeanSquare)},{"persistence_error_mean_square",values(r.persistenceErrorMeanSquare)}});}
         return O{{"schema","dynsyslab.periodic-result/v1"},{"method","periodic-delay-forecast-audit"},
-            {"model_identity",core::spectralKromIdentity(model)},{"sample_interval",model.sampleInterval},{"orbits",rows},
+            {"model_identity",identityOf(model)},{"sample_interval",operatorOf(model).sampleInterval},{"orbits",rows},
             {"validation_sha256",core::sha256Text(core::json::dump(q.at("validation")))},
             {"layout","one row per orbit; forecast arrays time/channel, including current time"},
             {"scope","Newest-coordinate, past-only free forecasts. Exact uniform-phase Parseval integrals for supplied finite Fourier coefficients, up to roundoff. No temporal interpolation, phase quadrature, omitted-tail bound or continuum-transverse certificate."}};
@@ -84,21 +94,21 @@ core::json::Value evaluatePeriodicSpectralQuery(const J&q){
         auto model=core::fitPeriodicDelayModel(training,indices(q.at("channels")),reals(q.at("time_offsets")),
             integer(q.at("phase_count")),options,q.at("require_resolved_quadrature").boolean(true),q.at("storage").string("auto"));
         const O provenance{{"training_sha256",core::sha256Text(core::json::dump(q.at("training")))},
-            {"source",q.at("source")},{"coordinate_contract",model.coordinateContract},
+            {"source",q.at("source")},{"coordinate_contract",operatorOf(model).coordinateContract},
             {"method",options.method},{"svd_tolerance",options.relativeTolerance},{"requested_rank",double(options.rank)}};
         if(!output.empty()){
             const auto path=std::filesystem::u8path(output);
             if(!path.parent_path().empty())std::filesystem::create_directories(path.parent_path());
-            auto archive=core::makeSpectralKromArchive(model);
-            archive.arrays["periodic_fit_provenance_json"]=core::NpyArray::fromString(core::json::dump(provenance));
-            core::writeNpzAtomicNew(path,archive);
+            core::writeNpzAtomicNew(path,core::makeKoopmanArchive(model,"{}",
+                {{"periodic_fit_provenance_json",core::NpyArray::fromString(core::json::dump(provenance))}}));
         }
         O result{{"schema","dynsyslab.periodic-result/v1"},{"method","periodic-delay-fit"},
-            {"fitting_method",model.method},{"model_identity",core::spectralKromIdentity(model)},
-            {"rank",double(model.rank)},{"samples",double(model.samples)},{"features",double(model.dictionary.size())},
-            {"coordinate_contract",model.coordinateContract},{"provenance",provenance},{"quadrature_audit",auditJson(audit)}};
+            {"fitting_method",operatorOf(model).method},{"model_identity",identityOf(model)},
+            {"rank",double(operatorOf(model).rank)},{"samples",double(operatorOf(model).samples)},
+            {"features",double(operatorOf(model).dictionary.size())},
+            {"coordinate_contract",operatorOf(model).coordinateContract},{"provenance",provenance},{"quadrature_audit",auditJson(audit)}};
         if(!output.empty())result["archive"]=output;
-        if(q.at("include_model").boolean(output.empty()))result["model"]=core::spectralKromJson(model);
+        if(q.at("include_model").boolean(output.empty()))result["compression"]=core::koopmanCompressionJson(operatorOf(model));
         return result;
     }
     const auto validation=bank(q.at("validation"));math::auditPeriodicQuadrature(validation,{});
@@ -129,11 +139,11 @@ core::json::Value evaluatePeriodicSpectralQuery(const J&q){
             input.arrays["metadata_json"]=core::NpyArray::fromString(core::json::dump(q));core::writeNpzAtomicNew(requestArchive,input);
         }
         for(auto&m:models){m.model=core::fitPeriodicDelaySpectrum(training,m.channels,m.offsets,phases,options,q.at("require_resolved_quadrature").boolean(true),q.at("storage").string("auto"));
-            if(!m.archive.empty()){std::filesystem::create_directories(std::filesystem::u8path(output));core::writeNpzAtomicNew(std::filesystem::u8path(m.archive),core::makeSpectralKromArchive(m.model));}}
+            if(!m.archive.empty()){std::filesystem::create_directories(std::filesystem::u8path(output));core::writeNpzAtomicNew(std::filesystem::u8path(m.archive),core::makeKoopmanArchive(*m.model,"{}"));}}
     }else if(q.at("operation").string()=="spectral_compare"){
         if(array(q.at("models")).empty()||array(q.at("models")).size()>128)throw std::invalid_argument("Need 1..128 frozen models");
         for(const auto&v:array(q.at("models"))){Model m;m.label=v.at("label").string();m.channels=indices(v.at("channels"));m.offsets=reals(v.at("time_offsets"));m.archive=v.at("archive").string();
-            m.model=v.at("model").isNull()?core::loadSpectralKrom(std::filesystem::u8path(m.archive)):core::spectralKromFromJson(v.at("model"));models.push_back(std::move(m));}
+            m.model=loadKrom(v);models.push_back(std::move(m));}
     }else throw std::invalid_argument("Unknown periodic spectral operation");
     if(models.empty()||models.size()>128)throw std::invalid_argument("Need 1..128 models");
     std::vector<std::size_t>channels;for(const auto&m:models)for(auto c:m.channels)if(std::find(channels.begin(),channels.end(),c)==channels.end())channels.push_back(c);
@@ -144,7 +154,7 @@ core::json::Value evaluatePeriodicSpectralQuery(const J&q){
         references.emplace_back(O{{"channel",double(c)},{"name",name},{"density",values(ref.spectrum.density)},
             {"total_mass",ref.spectrum.totalMass},{"zero_harmonic_mass",ref.spectrum.zeroHarmonicMass},{"packet_rms",values(ref.packetRms)}});
         for(const auto&m:models){if(std::find(m.channels.begin(),m.channels.end(),c)==m.channels.end())continue;
-            const auto r=core::comparePeriodicDelaySpectrum(m.model,m.channels,m.offsets,validation,ref);
+            const auto r=core::comparePeriodicDelaySpectrum(*m.model,m.channels,m.offsets,validation,ref);
             results.emplace_back(O{{"channel",double(c)},{"observable",name},{"model",m.label},{"rank",double(r.rank)},{"features",double(r.features)},
                 {"fitted_mass",r.fittedMass},{"density",values(r.density)},{"packet_rms",values(r.packetRms)},{"packet_error_rms",values(r.packetErrorRms)},
                 {"density_absolute_l2",r.densityErrorNorm},{"density_relative_l2",relative(r.densityErrorNorm,r.densityReferenceNorm)},
@@ -153,10 +163,10 @@ core::json::Value evaluatePeriodicSpectralQuery(const J&q){
                 {"packet_complex_relative_l2",relatives(r.complexErrorNorm,r.packetReferenceNorm)}});
         }
     }
-    for(const auto&m:models){O r{{"label",m.label},{"archive",m.archive},{"model_identity",core::spectralKromIdentity(m.model)},
-        {"channels",values(m.channels)},{"time_offsets",values(m.offsets)},{"rank",double(m.model.rank)},
-        {"coordinate_contract",m.model.coordinateContract}};
-        if(q.at("include_models").boolean())r["model"]=core::spectralKromJson(m.model);modelRecords.emplace_back(r);}
+    for(const auto&m:models){O r{{"label",m.label},{"archive",m.archive},{"model_identity",identityOf(*m.model)},
+        {"channels",values(m.channels)},{"time_offsets",values(m.offsets)},{"rank",double(operatorOf(*m.model).rank)},
+        {"coordinate_contract",operatorOf(*m.model).coordinateContract}};
+        if(q.at("include_models").boolean())r["compression"]=core::koopmanCompressionJson(operatorOf(*m.model));modelRecords.emplace_back(r);}
     return O{{"schema","dynsyslab.periodic-result/v1"},{"method","periodic-spectral-comparison"},
         {"angles",values(angles)},{"packet_centers",values(centers)},{"sample_interval",dt},{"bandwidth",width},{"order",double(order)},
         {"validation_frequencies",frequencies},{"validation_parameters",parameters},{"validation_families",families},{"references",references},{"comparisons",results},

@@ -37,6 +37,7 @@ References are resolved when a stage starts:
 |---|---|
 | `${id.archive}` | the stage's result: its one method's primary object (error if several methods published) |
 | `${id.archives[N]}` | its N-th archive |
+| `${id.archives}` | every archive it published, as a list (for example all trajectories of a family solve); inside a list such as `sources` it is spliced in |
 | `${id.output:METHOD}` | the primary object a postprocess stage produced for METHOD |
 | `${id.object:KIND}` | its one data object of that kind, e.g. `krom` or `matrix` ([DATA_OBJECTS.md](DATA_OBJECTS.md)) |
 | `${id.manifest}` | its hierarchy, campaign or experiment manifest |
@@ -191,6 +192,9 @@ script.
 
 ## Job groups
 
+A `viewer_figure` job with a `figure.view` other than `time-series` renders that Viewer route of its
+source archive (for example `spectral_measures` or `koopman_spectrum` with `"figure": 0`), in a data
+tree of its own holding a hard link to the source, removed afterwards.
 A `job_group` job runs other job files by relative path, and a `viewer_figure` job renders a PNG
 with the Viewer CLI. Both are described in [Data packs](../DATA_PACKS.md).
 

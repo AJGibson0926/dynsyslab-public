@@ -4,10 +4,11 @@
 // references its parent and stores only what it adds.
 #include <dynsyslab/core/DataObject.hpp>
 #include <dynsyslab/core/KoopmanArchive.hpp>
-#include <dynsyslab/core/SpectralKromArchive.hpp>
+#include <dynsyslab/core/KoopmanSpectralAnalysis.hpp>
 #include <dynsyslab/workflow/Postprocess.hpp>
 #include <dynsyslab/workflow/Run.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -90,8 +91,9 @@ int main() {
             const auto archive = c::readNpz(resdmd);
             check(archive.contains("eigenpair_residual") && archive.contains("pseudospectrum_grid")
                   && !archive.contains("spectral_data_json"), "the residuals live in the krom's spectrum");
-            check(c::readSpectralKromArchive(archive).spectral.residuals.eigenpair.size() == 2,
-                  "the spectral fit restores its residuals from the krom");
+            check(archive.contains("compression_action") && !archive.contains("spectral_krom_contract_json")
+                  && c::loadKoopmanModel(resdmd).compression() && c::loadKoopmanModel(resdmd).compression()->rank == 2,
+                  "the krom carries its compressed operator; there is no separate spectral contract");
         }
         const auto rates = model.continuousEigenvalues();
         check(std::abs(rates[0] - expected) < 2e-2 || std::abs(rates[0] - std::conj(expected)) < 2e-2,
@@ -136,7 +138,7 @@ int main() {
             }
             check(visited == delay.liftedDimension() && delay.pairs().size() == visited, "pairs() visits every pair");
             check(!c::readNpz(hdmd).contains("eigenfunction_koopman_residual"), "H-DMD keeps no parallel residual array");
-            check(!delay.spectrum().pseudospectrum() && delay.spectrum().continuous().empty(), "H-DMD has no pseudospectrum");
+            check(!delay.spectrum().pseudospectrum() && delay.spectrum().bands().empty(), "H-DMD has no pseudospectrum");
         }
         {   // control_target lifts a recorded trajectory over its own clock when no time is given.
             const auto lifted = c::readNpz(postprocess(free, R"([{"name":"control_target","settings":{"krom":")"
@@ -187,6 +189,53 @@ int main() {
         const auto b = controlled.controlMap(x0, "constant");
         check(b.size() == 2 && std::isfinite(b[0].real()) && std::abs(b[0]) > 0, "a fitted input map");
         check(!c::readNpz(withB).contains("reconstruction_names"), "the input-map krom stores no readout of its own");
+
+        {   // Rigged DMD is a stage on a krom whose fit is unitary (Colbrook, Drysdale & Horning 2024).
+            const auto mp = postprocess(free, R"([{"name":"hankel_matrix","settings":{"observables":[0,1],
+                "window":{"delays":1,"columns":200}}},{"name":"mpedmd","settings":{"use_previous_hankel":true,"rank":2,
+                "assume_measure_preserving":true,"dictionary":{"kind":"linear","constant":false}}}])", root).archives.back();
+            const std::string measures = R"(,"measures":[{"name":"x","angles":[-0.2,0.0,0.2],"bandwidth":0.1,"order":2,
+                "coefficients":[1,0]}]}}])";
+            const auto rigged = postprocess(free, R"([{"name":"rigged_measure","settings":{"krom":")" + mp.generic_u8string()
+                + "\"" + measures, root).archives.front();
+            const auto child = c::loadKoopmanModel(rigged);
+            check(child.parent() && child.spectrum().bands().size() == 1, "a child krom with one spectral band");
+            const auto* measure = child.spectrum().measure("x", "x");
+            check(measure && measure->density.size() == 3 && child.spectrum().band("x")->method == "rigged-resolvent"
+                  && measure->packets && measure->packets->outputCount() == 3 && child.compression()
+                  && child.spectrum().koopmanModes("x"),
+                  "the observable's measure on the band, with its generalized eigenfunctions and Koopman modes");
+            const std::string second = R"(,"measures":[{"name":"y","angles":[-0.2,0.0,0.2],"bandwidth":0.1,"order":2,
+                "coefficients":[0,1]}]}}])";
+            const auto again = postprocess(free, R"([{"name":"rigged_measure","settings":{"krom":")" + rigged.generic_u8string()
+                + "\"" + second, root).archives.front();
+            check(c::loadKoopmanModel(again).spectrum().bands().size() == 2, "a child of a child finds the fit through its parent");
+            const auto kept = postprocess(again, R"([{"name":"krom_extract","settings":{"selected_modes":[0,1]}}])", root).archives.front();
+            const auto extracted = c::loadKoopmanModel(kept);
+            const auto* y = extracted.spectrum().measure("y", "y");
+            check(extracted.spectrum().bands().size() == 2 && y && y->packets && extracted.compression(),
+                  "krom_extract keeps the measures, their generalized eigenfunctions and the operator");
+            const auto atoms = extracted.spectrum().atoms("y");
+            check(atoms.size() == 2 && extracted.spectrum().modeIndex(atoms[0].mode) && extracted.spectrum().modeIndex(atoms[1].mode)
+                  && std::abs(atoms[0].mass + atoms[1].mass - y->totalMass) < 1e-10,
+                  "the measure's atoms, from the observable's Koopman modes, name the krom's eigenpairs by mode id");
+            const auto one = c::loadKoopmanModel(postprocess(again, R"([{"name":"krom_extract","settings":{"selected_modes":[1]}}])", root).archives.front());
+            const auto kept1 = one.spectrum().modeId(0);
+            const auto oneAtoms = one.spectrum().atoms("y");
+            check(kept1 == extracted.spectrum().modeId(1) && oneAtoms.size() == 1 && oneAtoms[0].mode == kept1
+                  && one.spectrum().measure("y", "y"),
+                  "selecting one pair keeps its id and its atom; the measure stays whole");
+            bool refused = false;  // ResDMD's compression is not unitary
+            try { (void)postprocess(free, R"([{"name":"rigged_measure","settings":{"krom":")" + resdmd.generic_u8string() + "\"" + measures, root); }
+            catch (const std::exception& error) { refused = std::string(error.what()).find("unitary") != std::string::npos; }
+            check(refused, "Rigged DMD refuses a compression that is not unitary");
+            refused = false;  // the fitting stage no longer computes measures
+            try { (void)postprocess(free, R"([{"name":"hankel_matrix","settings":{"observables":[0,1],"window":{"delays":1,"columns":200}}},
+                {"name":"mpedmd","settings":{"use_previous_hankel":true,"rank":2,"assume_measure_preserving":true,
+                "dictionary":{"kind":"linear","constant":false},"rigged_measures":[]}}])", root); }
+            catch (const std::exception& error) { refused = std::string(error.what()).find("rigged_measure stage") != std::string::npos; }
+            check(refused, "rigged_measures on a fitting stage points to the rigged_measure stage");
+        }
 
         std::error_code ignored;
         fs::remove_all(root, ignored);

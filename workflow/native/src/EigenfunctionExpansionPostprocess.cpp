@@ -14,7 +14,8 @@
 // pieces expression terms, so hand-written and fitted eigenfunctions share terms.
 //
 // Library: "library": true | ["x_1", "eta"] loads the source system's own hand-derived
-// eigenfunctions (DynamicalKnowledge::eigenfunctions) with its parameters; no other settings.
+// eigenfunctions (DynamicalKnowledge::eigenfunctions) with its parameters; no other settings. Entries with
+// a constant eigenvalue are the krom's eigenpairs; shell entries are spectral bands of its spectrum.
 #include "TimeSeriesSource.hpp"
 #include "DictionaryTerms.hpp"
 #include "ExpansionArchive.hpp"
@@ -64,10 +65,11 @@ std::filesystem::path runEigenfunctionExpansion(const std::filesystem::path& sou
         std::vector<std::string> ids;
         if (!std::holds_alternative<bool>(library.storage()))
             for (const auto& id : library.array()) ids.push_back(id.string());
-        std::vector<double> reference;  // the orbit whose eigenvalues shell entries take
-        if (const auto& at = settings.at("reference_state"); !at.isNull())
-            for (const auto& value : at.array()) reference.push_back(value.number());
-        return publishBank(c::libraryEigenfunctionBank(*system, ids, reference), "system-library");
+        // Shell entries are generalized eigenfunctions: they join the krom's spectrum as bands, not pairs.
+        if (!settings.at("reference_state").isNull())
+            throw std::invalid_argument("eigenfunction_expansion: reference_state is gone; shell entries load as spectral bands"
+                                        " (generalized eigenfunctions on the continuous spectrum), not as eigenpairs of one orbit");
+        return publishBank(c::libraryEigenfunctionBank(*system, ids), "system-library");
     }
     c::FunctionDomain domain;
     const auto& requested = settings.at("domain");

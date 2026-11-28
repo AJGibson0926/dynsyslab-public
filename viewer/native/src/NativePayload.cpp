@@ -21,6 +21,7 @@
 #include "AnalyticOverlay.hpp"
 #include "FieldPayload.hpp"
 #include "SpectralMeasurePayload.hpp"
+#include "SpectralBandPayload.hpp"
 #include "ModeWeightPayload.hpp"
 #include "LinearSystemsPayload.hpp"
 #include "LinearSystemsLoopPayload.hpp"
@@ -443,6 +444,7 @@ Payload buildNativePayload(const std::filesystem::path& source, const std::strin
     if (view=="hankel_spectrum" || view=="gramian_spectrum" || view=="frequency_response" || view=="pole_zero"
         || isClassicalLinearSystemsView(view))
         return buildLinearSystemsPayload(source,view,record,metadata);
+    if (view == "spectral_measures") return spectralMeasuresPayload(source, view);
     if (record.contains("low_rank") || record.contains("singular_values"))
         return decompositionPayload(source,view,record,metadata);
     if (view == "mode_weights") return modeWeightPayload(source, view, record, metadata);

@@ -5,7 +5,6 @@
 #include <dynsyslab/core/DataObject.hpp>
 #include <dynsyslab/core/FileDigest.hpp>
 #include <dynsyslab/core/LongPath.hpp>
-#include <dynsyslab/core/SpectralKromArchive.hpp>
 #include <dynsyslab/core/SpectrumArchive.hpp>
 #include <dynsyslab/core/System.hpp>
 #include "KoopmanArchiveMetadata.hpp"
@@ -23,12 +22,6 @@ namespace {
 
 json::Value metadataOf(const NpzRecord& archive) {
     return archive.metadataJson().empty() ? json::Value{} : json::parse(archive.metadataJson());
-}
-
-std::vector<std::size_t> allModes(std::size_t count) {
-    std::vector<std::size_t> modes(count);
-    for (std::size_t j = 0; j < count; ++j) modes[j] = j;
-    return modes;
 }
 
 // One krom archive on `system` (resolved once, for the whole chain), its parents resolved.
@@ -54,9 +47,17 @@ KoopmanModel readNode(const NpzRecord& archive, const std::string& label, const 
             throw std::invalid_argument("the parent krom of " + label + " is missing: " + path.u8string());
         if (sha256File(path) != parentBlock.at("sha256").string())
             throw std::invalid_argument("the parent krom of " + label + " has changed: " + path.u8string());
-        std::vector<std::size_t> modes;
-        for (const auto& mode : parentBlock.at("modes").array()) modes.push_back(std::size_t(mode.number()));
         auto base = readNode(readNpz(path), path.u8string(), system, depth + 1);
+        // The selected pairs, by stable mode id (older archives list positions under "modes").
+        std::vector<std::size_t> modes;
+        const bool byId = !parentBlock.at("mode_ids").isNull();
+        for (const auto& mode : parentBlock.at(byId ? "mode_ids" : "modes").array()) {
+            const auto value = std::size_t(mode.number());
+            if (!byId) { modes.push_back(value); continue; }
+            const auto index = base.spectrum().modeIndex(value);
+            if (!index) throw std::invalid_argument("the parent krom of " + label + " has no pair with mode id " + std::to_string(value));
+            modes.push_back(*index);
+        }
         model.emplace(modes.empty() ? std::move(base) : base.extract(modes));
         for (auto& function : detail::readKromRepresentations(block.at("representations"), archive, model->samples(), model->liftedDimension())) {
             const auto name = representationName(*function);
@@ -80,6 +81,10 @@ KoopmanModel readNode(const NpzRecord& archive, const std::string& label, const 
     }
     if (archive.contains("spectral_diagnostics_json"))
         model->setSpectralDiagnostics(spectralDiagnosticsFromJson(json::parse(archive.at("spectral_diagnostics_json").string())));
+    // A spectral fit's compressed operator and the functions on its spectral sets; a child's own
+    // replace or add to what it inherited.
+    if (!block.at("compression").isNull()) model->setCompression(detail::readKromCompression(block.at("compression"), archive));
+    if (!block.at("spectral_functions").isNull()) detail::readKromSpectralFunctions(block.at("spectral_functions"), archive, *model);
     return std::move(*model);
 }
 
@@ -99,7 +104,7 @@ KoopmanModel loadKoopmanModel(const std::filesystem::path& path, const SystemCon
     const auto resolved = detail::resolveArchiveBinding(archive, system, binding);
     auto model = readNode(archive, path.u8string(), resolved.system, 0);
     model.setBindingEvidenceJson(resolved.evidence);
-    model.setParent({std::filesystem::absolute(path).lexically_normal(), sha256File(path), allModes(model.liftedDimension())});
+    model.setParent({std::filesystem::absolute(path).lexically_normal(), sha256File(path), model.spectrum().modeIds()});
     // The binding's choices are this model's own: a krom written from it records them.
     if (!binding.interpolationDomain.empty()) {
         model.useRepresentation("interpolation");
@@ -136,40 +141,6 @@ KoopmanModel readKoopmanModel(const NpzRecord& archive) {
     return readNode(archive, "this archive", detail::systemFromMetadata(archive), 0);
 }
 
-KoopmanModel spectralKromModel(const NpzRecord& archive, const SystemConfiguration& system) {
-    // A spectral K-ROM in its own frozen dictionary: psi_j(q) = sum_k E_kj phi_k(q). The domain follows
-    // its Hankel window: one delay of a solve's full state is the physical state; one delay of named
-    // coordinate columns is those catalog observables; longer windows are data coordinates.
-    const auto metadata = metadataOf(archive);
-    const auto krom = readSpectralKromArchive(archive);
-    const std::size_t features = krom.dictionary.size(), modes = krom.multipliers.size();
-    if (!features || !modes || krom.eigenfunctions.size() != features * modes)
-        throw std::invalid_argument("spectral K-ROM eigenfunction coefficients have the wrong shape");
-    std::vector<std::complex<double>> coefficients(modes * features);
-    for (std::size_t j = 0; j < modes; ++j)
-        for (std::size_t k = 0; k < features; ++k) coefficients[j * features + k] = krom.eigenfunctions[k * modes + j];
-    auto spectrum = Spectrum::fromDiscreteMultipliers(krom.multipliers, krom.sampleInterval);
-    FunctionDomain domain; domain.dimension = krom.dictionary.dimension;
-    json::Value contract;
-    try { contract = json::parse(krom.coordinateContract); } catch (const std::exception&) {}
-    const auto& channels = contract.at("channels");
-    bool oneDelay = contract.at("delays").number(0) == 1 && !channels.isNull() && channels.array().size() == domain.dimension;
-    std::vector<std::string> observables;
-    for (std::size_t k = 0; oneDelay && k < channels.array().size(); ++k) {
-        const auto& channel = channels.array()[k];
-        oneDelay = channel.at("lag_samples").number(0) == 0 && channel.at("measurement_column").number(-1) == double(k);
-        observables.push_back(channel.at("observable").string());
-    }
-    const bool fromSolve = metadata.at("coordinate_transform_kind").string().empty() && metadata.at("value_space").string().empty();
-    const auto physical = createSystem(system)->descriptor().stateDimension;
-    if (oneDelay && fromSolve && physical == domain.dimension) domain = FunctionDomain::physicalState(domain.dimension);
-    else if (oneDelay && !fromSolve && std::none_of(observables.begin(), observables.end(), [](const std::string& n) { return n.empty(); }))
-        domain = FunctionDomain::fromCatalog(observables, domain.dimension);
-    FunctionExpansion functions(std::make_shared<const ExpansionDictionary>(ExpansionDictionary::fromSpectral(krom.dictionary)),
-                                std::move(coefficients), std::move(domain));
-    return KoopmanModel(std::move(functions), std::move(spectrum), system);
-}
-
 NpzRecord makeKoopmanArchive(const KoopmanModel& model, const std::string& metadataJson,
                              std::map<std::string, NpyArray> extraArrays,
                              const std::vector<ChannelDescriptor>& inputChannels) {
@@ -192,13 +163,17 @@ NpzRecord makeKoopmanArchive(const KoopmanModel& model, const std::string& metad
         for (const auto mode : parent->modes) modes.emplace_back(double(mode));
         block["parent"] = json::Value::Object{
             {"path", std::filesystem::absolute(parent->path).lexically_normal().generic_u8string()},
-            {"sha256", parent->sha256}, {"modes", modes}};
+            {"sha256", parent->sha256}, {"mode_ids", modes}};
     }
     detail::writeKromReadouts(archive, model, child);
     detail::writeNamedInputMaps(archive, model, child);
     if (child && model.ownsSpectralEvidence()) writeSpectralEvidence(archive, model.spectrum());
     if (!child || model.ownsSpectralEvidence())
         archive.arrays["spectral_diagnostics_json"] = NpyArray::fromString(json::dump(spectralDiagnosticsJson(model.spectralDiagnostics())));
+    if (model.compression() && (!child || model.ownsCompression()))
+        block["compression"] = detail::writeKromCompression(archive, *model.compression());
+    if (auto functions = detail::writeKromSpectralFunctions(archive, model, child); !functions.empty())
+        block["spectral_functions"] = json::Value(std::move(functions));
 
     json::Value metadata = metadataJson.empty() ? json::Value(json::Value::Object{}) : json::parse(metadataJson);
     if (!std::holds_alternative<json::Value::Object>(metadata.storage())) throw std::invalid_argument("KROM metadata must be a JSON object");
@@ -212,6 +187,8 @@ NpzRecord makeKoopmanArchive(const KoopmanModel& model, const std::string& metad
         metadata.object()["input_dimension"] = static_cast<double>(model.inputDimension());  // no system to give it
     }
     metadata.object()["schema"] = kKromSchema;
+    if (model.compression())  // what references to the operator's observables name (KromSpectralObservables.hpp)
+        metadata.object()["model_identity"] = koopmanCompressionIdentity(*model.compression());
     metadata.object()["krom"] = json::Value(std::move(block));
     metadata.object()["eigenfunction_representation"] = model.representation().name;
     metadata.object()["binding_evidence"] = json::parse(model.bindingEvidenceJson());

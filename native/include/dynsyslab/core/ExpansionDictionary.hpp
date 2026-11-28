@@ -17,7 +17,7 @@
 //   expression                any analytic expression of the raw q
 #include <dynsyslab/core/AnalyticExpression.hpp>
 #include <dynsyslab/core/Json.hpp>
-#include <dynsyslab/core/SpectralKROM.hpp>
+#include <dynsyslab/core/KoopmanCompression.hpp>
 
 #include <complex>
 #include <cstddef>

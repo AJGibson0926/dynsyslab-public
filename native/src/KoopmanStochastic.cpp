@@ -6,8 +6,8 @@ void validateReplicates(const KoopmanSnapshotPairs& data) {
         throw std::invalid_argument("Stochastic analysis needs at least two independent successors per source snapshot");
 }
 }
-SpectralKROM fitStochasticKoopmanSpectral(const KoopmanSnapshotPairs& data,const SpectralDictionary& dictionary,
-                                         const KoopmanSpectralOptions& options) {
+KoopmanModel fitStochasticKoopmanSpectral(const KoopmanSnapshotPairs& data,const SpectralDictionary& dictionary,
+                                          const KoopmanSpectralOptions& options,std::optional<FunctionDomain> domain) {
     spectral_detail::check(data,dictionary.dimension);validateReplicates(data);
     KoopmanSnapshotPairs pooled;pooled.samples=data.samples*data.replicateCount;pooled.dimension=data.dimension;
     const auto w=spectral_detail::weights(data.samples,data.weights,options.weightPolicy);
@@ -17,17 +17,32 @@ SpectralKROM fitStochasticKoopmanSpectral(const KoopmanSnapshotPairs& data,const
         for(double v:w)pooled.weights.push_back(v/data.replicateCount);
     }
     auto settings=options;settings.method="resdmd";settings.weightPolicy="uniform";
-    auto model=fitKoopmanSpectral(pooled,dictionary,settings);model.method="stochastic_resdmd";
-    model.assumptions="Replicated independent successor realizations at identical source points asserted by caller. Regression approximates conditional expectation.";
+    auto model=fitKoopmanSpectral(pooled,dictionary,settings,std::move(domain));
+    auto compression=*model.compression();compression.method="stochastic_resdmd";
+    compression.assumptions="Replicated independent successor realizations at identical source points asserted by caller. Regression approximates conditional expectation.";
+    model.setCompression(std::move(compression));
     auto weightedData=data;weightedData.weights=w;
-    model.spectral.stochastic=stochasticKoopmanResiduals(model,weightedData);
+    auto diagnostics=model.spectralDiagnostics();diagnostics.stochastic=stochasticKoopmanResiduals(model,weightedData);
+    model.setSpectralDiagnostics(std::move(diagnostics));
     return model;
 }
-StochasticSpectralResiduals stochasticKoopmanResiduals(const SpectralKROM& model,const KoopmanSnapshotPairs& data) {
-    spectral_detail::check(data,model.dictionary.dimension);validateReplicates(data);
-    const auto x=model.evaluateEigenfunctions(data.x),y=model.evaluateEigenfunctions(data.successorReplicates);
+StochasticSpectralResiduals stochasticKoopmanResiduals(const KoopmanModel& model,const KoopmanSnapshotPairs& data) {
+    if(!model.compression())throw std::invalid_argument("Stochastic residuals need the krom's compressed operator");
+    const auto& dictionary=model.compression()->dictionary;
+    spectral_detail::check(data,dictionary.dimension);validateReplicates(data);
+    // The krom's eigenfunctions on its frozen dictionary, at the sources and at every successor.
+    const auto& coefficients=frozenDictionaryExpansion(model).coefficients();
+    const auto multipliers=model.spectrum().discreteMultipliers();
+    const auto r=multipliers.size(),n=dictionary.size();
+    const auto evaluate=[&](const std::vector<double>& points) {
+        const auto phi=dictionary.evaluate(points);const auto count=points.size()/dictionary.dimension;
+        std::vector<std::complex<double>> out(count*r);
+        for(std::size_t i=0;i<count;++i)for(std::size_t j=0;j<r;++j)for(std::size_t k=0;k<n;++k)out[i*r+j]+=phi[i*n+k]*coefficients[j*n+k];
+        return out;
+    };
+    const auto x=evaluate(data.x),y=evaluate(data.successorReplicates);
     const auto w=spectral_detail::weights(data.samples,data.weights);
-    const auto m=data.samples,r=model.rank,R=data.replicateCount;
+    const auto m=data.samples,R=data.replicateCount;
     StochasticSpectralResiduals out;out.replicates=R;
     out.interpretation="Sample-mean residual and unbiased innovation standard deviation are distinct. Total is RMS pathwise residual; total^2=sampleMean^2+(R-1)/R*innovation^2. Mean residual retains finite-replicate sampling error.";
     for(std::size_t j=0;j<r;++j) {
@@ -35,7 +50,7 @@ StochasticSpectralResiduals stochasticKoopmanResiduals(const SpectralKROM& model
         for(std::size_t i=0;i<m;++i) {
             std::complex<double> mean{};
             for(std::size_t k=0;k<R;++k)mean+=y[(k*m+i)*r+j]/double(R);
-            meanError+=w[i]*std::norm(mean-model.multipliers[j]*x[i*r+j]);denom+=w[i]*std::norm(x[i*r+j]);
+            meanError+=w[i]*std::norm(mean-multipliers[j]*x[i*r+j]);denom+=w[i]*std::norm(x[i*r+j]);
             for(std::size_t k=0;k<R;++k)variance+=w[i]*std::norm(y[(k*m+i)*r+j]-mean)/(R-1);
         }
         if(denom<=1e-28)throw std::invalid_argument("Stochastic residual denominator vanishes");

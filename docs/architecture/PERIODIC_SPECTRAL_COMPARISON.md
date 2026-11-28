@@ -91,7 +91,8 @@ it as `dynsyslab_client.periodic.fit_delay_model`. An optional `output_archive`
 creates an immutable standard spectral KROM, with `periodic_fit_provenance_json`
 containing the bank digest, source, coordinate contract and fitting settings.
 The result always includes model identity, rank, original sample/feature counts
-and the phase audit. `include_model` defaults to true without an archive and
+and the phase audit. A fit is a krom, written to `output_archive`; later operations name it as `archive`.
+`include_model` (the operator, as `compression`) defaults to true without an archive and
 false when one is written. Existing destinations reject before fitting.
 
 This is standard [EDMD](https://arxiv.org/abs/1408.4408) or the existing mpEDMD

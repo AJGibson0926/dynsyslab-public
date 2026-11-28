@@ -1,0 +1,399 @@
+{
+ "schema": "dynsyslab.compute-job/v1",
+ "kind": "job_group",
+ "label": "known-spectrum-comparison",
+ "description": "One system's known spectrum against mpEDMD and Rigged DMD on the same orbits: solve a family of periodic orbits (training) and interleaved held-out orbits; project the training orbits onto the catalogue band's exact phase (band_projection: weighted Birkhoff Fourier coefficients, the reference measure and packets); fit pooled measure-preserving EDMD on delays of the first state coordinate with canonical-area orbit weights; Rigged DMD on the fit (a 1024-angle band and the packet at angle 0.5); the reference added beside it with density errors; packets validated on the held-out orbits; Viewer figures of the spectral measures, the eigenvalues over the pseudospectrum, and the packet amplitudes by orbit frequency.",
+ "parameters": {
+  "dt": 0.1,
+  "stop": 200,
+  "delays": 32,
+  "harmonics": 63,
+  "svd_tolerance": 1e-14
+ },
+ "jobs": [
+  {
+   "id": "train",
+   "job": {
+    "schema": "dynsyslab.compute-job/v1",
+    "kind": "solve",
+    "label": "train",
+    "system": {
+     "name": "${params.system}",
+     "parameters": "${params.parameters}"
+    },
+    "time": {
+     "start": 0,
+     "stop": "${params.stop}",
+     "output_step": "${params.dt}"
+    },
+    "initial_conditions": {
+     "mode": "explicit",
+     "count": "${params.train_count}",
+     "clusters": 1,
+     "values": "${params.train}"
+    },
+    "solver": {
+     "method": "RK45",
+     "rtol": 1e-11,
+     "atol": 1e-13
+    },
+    "archive": {
+     "enabled": true
+    }
+   }
+  },
+  {
+   "id": "held",
+   "job": {
+    "schema": "dynsyslab.compute-job/v1",
+    "kind": "solve",
+    "label": "held",
+    "system": {
+     "name": "${params.system}",
+     "parameters": "${params.parameters}"
+    },
+    "time": {
+     "start": 0,
+     "stop": "${params.stop}",
+     "output_step": "${params.dt}"
+    },
+    "initial_conditions": {
+     "mode": "explicit",
+     "count": "${params.held_count}",
+     "clusters": 1,
+     "values": "${params.held}"
+    },
+    "solver": {
+     "method": "RK45",
+     "rtol": 1e-11,
+     "atol": 1e-13
+    },
+    "archive": {
+     "enabled": true
+    }
+   }
+  },
+  {
+   "id": "reference",
+   "keep": true,
+   "inputs": {
+    "train": "${train.archives}"
+   },
+   "job": {
+    "schema": "dynsyslab.compute-job/v1",
+    "kind": "postprocess",
+    "label": "reference",
+    "archive": {
+     "enabled": true
+    },
+    "sources": [
+     "${inputs.train}"
+    ],
+    "methods": [
+     {
+      "name": "band_projection",
+      "settings": {
+       "band": "${params.band}",
+       "observables": [
+        "${params.observable}"
+       ],
+       "harmonics": "${params.harmonics}",
+       "weights": {
+        "canonical_area": {
+         "invariant": "${params.invariant}",
+         "band": "${params.band}"
+        }
+       },
+       "invariant": "${params.invariant}",
+       "sample_interval": "${params.dt}",
+       "bandwidth": 0.05,
+       "order": 6,
+       "angles": {
+        "count": 1024
+       },
+       "packet_centers": [
+        0.5
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "fit",
+   "inputs": {
+    "train": "${train.archives}"
+   },
+   "job": {
+    "schema": "dynsyslab.compute-job/v1",
+    "kind": "postprocess",
+    "label": "fit",
+    "archive": {
+     "enabled": true
+    },
+    "sources": [
+     "${inputs.train}"
+    ],
+    "methods": [
+     {
+      "name": "mpedmd",
+      "settings": {
+       "observables": [
+        0
+       ],
+       "window": {
+        "delays": "${params.delays}"
+       },
+       "assume_measure_preserving": true,
+       "dictionary": {
+        "kind": "linear",
+        "constant": false
+       },
+       "pool": true,
+       "svd_tolerance": "${params.svd_tolerance}",
+       "source_weights": {
+        "canonical_area": {
+         "invariant": "${params.invariant}",
+         "band": "${params.band}"
+        }
+       },
+       "residual_grid": {
+        "real": [
+         -1.25,
+         1.25,
+         121
+        ],
+        "imag": [
+         -1.25,
+         1.25,
+         121
+        ]
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "rigged",
+   "keep": true,
+   "inputs": {
+    "fit": "${fit.archive}"
+   },
+   "job": {
+    "schema": "dynsyslab.compute-job/v1",
+    "kind": "postprocess",
+    "label": "rigged",
+    "archive": {
+     "enabled": true
+    },
+    "sources": [
+     "${inputs.fit}"
+    ],
+    "methods": [
+     {
+      "name": "rigged_measure",
+      "settings": {
+       "measures": [
+        {
+         "name": "${params.observable}",
+         "band": "rigged",
+         "reconstruction": {
+          "name": "coordinates",
+          "output": 0
+         },
+         "angles": {
+          "count": 1024
+         },
+         "bandwidth": 0.05,
+         "order": 6
+        },
+        {
+         "name": "${params.observable}",
+         "band": "packets",
+         "reconstruction": {
+          "name": "coordinates",
+          "output": 0
+         },
+         "angles": [
+          0.5
+         ],
+         "bandwidth": 0.05,
+         "order": 6
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "both",
+   "keep": true,
+   "inputs": {
+    "train": "${train.archives}",
+    "krom": "${rigged.archive}"
+   },
+   "job": {
+    "schema": "dynsyslab.compute-job/v1",
+    "kind": "postprocess",
+    "label": "both",
+    "archive": {
+     "enabled": true
+    },
+    "sources": [
+     "${inputs.train}"
+    ],
+    "methods": [
+     {
+      "name": "band_projection",
+      "settings": {
+       "band": "${params.band}",
+       "observables": [
+        "${params.observable}"
+       ],
+       "harmonics": "${params.harmonics}",
+       "weights": {
+        "canonical_area": {
+         "invariant": "${params.invariant}",
+         "band": "${params.band}"
+        }
+       },
+       "sample_interval": "${params.dt}",
+       "bandwidth": 0.05,
+       "order": 6,
+       "angles": {
+        "count": 1024
+       },
+       "krom": "${inputs.krom}",
+       "measures": [
+        {
+         "observable": "${params.observable}",
+         "as": "coordinates",
+         "output": 0
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "packets",
+   "keep": true,
+   "inputs": {
+    "held": "${held.archives}",
+    "krom": "${rigged.archive}"
+   },
+   "job": {
+    "schema": "dynsyslab.compute-job/v1",
+    "kind": "postprocess",
+    "label": "packets",
+    "archive": {
+     "enabled": true
+    },
+    "sources": [
+     "${inputs.held}"
+    ],
+    "methods": [
+     {
+      "name": "packet_validation",
+      "settings": {
+       "krom": "${inputs.krom}",
+       "observables": [
+        0
+       ],
+       "window": {
+        "delays": "${params.delays}"
+       },
+       "band": "${params.band}",
+       "harmonics": "${params.harmonics}",
+       "packets": [
+        {
+         "observable": "${params.observable}",
+         "measure": {
+          "band": "packets",
+          "observable": "coordinates",
+          "output": 0
+         }
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "measures-figure",
+   "keep": true,
+   "inputs": {
+    "src": "${both.archives[1]}"
+   },
+   "job": {
+    "schema": "dynsyslab.compute-job/v1",
+    "kind": "viewer_figure",
+    "source": "${inputs.src}",
+    "output": "${params.figure_measures}",
+    "figure": {
+     "view": "spectral_measures",
+     "width": 1600,
+     "height": 900
+    }
+   }
+  },
+  {
+   "id": "spectrum-figure",
+   "keep": true,
+   "inputs": {
+    "src": "${rigged.archive}"
+   },
+   "job": {
+    "schema": "dynsyslab.compute-job/v1",
+    "kind": "viewer_figure",
+    "source": "${inputs.src}",
+    "output": "${params.figure_spectrum}",
+    "figure": {
+     "view": "koopman_spectrum",
+     "figure": 0,
+     "width": 1000,
+     "height": 900
+    }
+   }
+  },
+  {
+   "id": "packets-figure",
+   "keep": true,
+   "inputs": {
+    "src": "${packets.archive}"
+   },
+   "job": {
+    "schema": "dynsyslab.compute-job/v1",
+    "kind": "viewer_figure",
+    "source": "${inputs.src}",
+    "output": "${params.figure_packets}",
+    "figure": {
+     "view": "time-series",
+     "width": 1300,
+     "height": 800,
+     "title": "${params.packet_title}",
+     "time_key": "validation_frequency",
+     "time_label": "orbit frequency (rad / time)",
+     "value_label": "packet RMS amplitude at angle 0.5",
+     "curves": [
+      {
+       "series": "reference_packet_rms__${params.observable}__0",
+       "label": "exact (band projection)",
+       "color": "#202020"
+      },
+      {
+       "series": "packet_rms__${params.observable}__0",
+       "label": "Rigged DMD",
+       "color": "#e8745b",
+       "line_style": "dash"
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

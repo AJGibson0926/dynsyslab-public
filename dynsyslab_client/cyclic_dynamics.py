@@ -1,5 +1,7 @@
 """Thin orchestration of native local state-pair fits over a finite cycle."""
 from __future__ import annotations
+import tempfile
+from pathlib import Path
 
 
 def fit_cyclic_state_pair_models(workflow, phase_pairs, *, sample_interval=1.0,
@@ -27,24 +29,28 @@ def fit_cyclic_state_pair_models(workflow, phase_pairs, *, sample_interval=1.0,
     if validation_pairs is not None and len(validation_pairs) != len(phase_pairs):
         raise ValueError('Supply one validation record per phase')
     matrices, models, validation = [], [], []
-    for phase, data in enumerate(phase_pairs):
-        fit = workflow.koopman_spectral(dict(action='fit', data=data, settings=dict(
-            method='resdmd', rank=dimension, svd_tolerance=svd_tolerance,
-            sample_interval=sample_interval,
-            dictionary=dict(kind='linear', constant=False, normalize=False))))
-        if fit['rank'] != dimension:
-            raise ValueError(f'Phase {phase} has insufficient independent training directions')
-        model = fit['model']; columns = []
-        for component in range(dimension):
-            initial = [float(j == component) for j in range(dimension)]
-            rollout = workflow.koopman_spectral(dict(action='rollout', model=model,
-                reconstruction='coordinates', initial=initial, steps=1))
-            columns.append(rollout['values'][dimension:2 * dimension])
-        matrices.extend(columns[j][i] for i in range(dimension) for j in range(dimension))
-        models.append(model)
-        if validation_pairs is not None:
-            validation.append(workflow.koopman_spectral(dict(action='residuals', model=model,
-                                                          data=validation_pairs[phase])))
+    # Each phase's fit is a krom; it is written to a scratch archive that the rollout and the residuals
+    # name, and its compressed operator is returned.
+    with tempfile.TemporaryDirectory() as scratch:
+        for phase, data in enumerate(phase_pairs):
+            archive = str(Path(scratch) / f'phase-{phase}.npz')
+            fit = workflow.koopman_spectral(dict(action='fit', data=data, output_archive=archive, settings=dict(
+                method='resdmd', rank=dimension, svd_tolerance=svd_tolerance,
+                sample_interval=sample_interval,
+                dictionary=dict(kind='linear', constant=False, normalize=False))))
+            if fit['rank'] != dimension:
+                raise ValueError(f'Phase {phase} has insufficient independent training directions')
+            columns = []
+            for component in range(dimension):
+                initial = [float(j == component) for j in range(dimension)]
+                rollout = workflow.koopman_spectral(dict(action='rollout', krom=archive,
+                    reconstruction='coordinates', initial=initial, steps=1))
+                columns.append(rollout['values'][dimension:2 * dimension])
+            matrices.extend(columns[j][i] for i in range(dimension) for j in range(dimension))
+            models.append(fit['compression'])
+            if validation_pairs is not None:
+                validation.append(workflow.koopman_spectral(dict(action='residuals', krom=archive,
+                                                              data=validation_pairs[phase])))
     return dict(dimension=dimension, period=len(phase_pairs), values=matrices,
                 models=models, validation=validation,
                 scope='Local linear state-pair fits conditioned on supplied finite-cycle phase; no global closure or derivative certificate.')

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(dynsyslab_workflow VERSION 0.10.3 LANGUAGES CXX)
+project(dynsyslab_workflow VERSION 0.11.0 LANGUAGES CXX)
 
 if(MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
@@ -30,7 +30,8 @@ add_library(dynsyslab_workflow SHARED
   src/EstimationPostprocess.cpp src/DecompositionPostprocess.cpp
   src/CoordinateTransformPostprocess.cpp src/CoordinateChannels.cpp src/CoordinateChangeKinds.cpp src/CoordinateResample.cpp src/CoordinateDiagnostics.cpp src/CoordinateInverse.cpp src/HankelShorthand.cpp src/SindyDynamicsPostprocess.cpp
   src/PcaPostprocess.cpp src/KromPostprocess.cpp src/KromEvidence.cpp
-  src/KoopmanSpectralQuery.cpp src/KoopmanSpectralPostprocess.cpp)
+  src/KoopmanSpectralQuery.cpp src/KoopmanSpectralPostprocess.cpp src/RiggedMeasurePostprocess.cpp
+  src/OrbitAverages.cpp src/BandProjectionPostprocess.cpp src/PostprocessPooling.cpp)
 target_sources(dynsyslab_workflow PRIVATE src/KromValidationPostprocess.cpp src/PeriodicIdentificationQuery.cpp src/PeriodicFeatureQuery.cpp src/PeriodicFeedback.cpp
   src/KoopmanFeedback.cpp src/EstimatedControl.cpp src/EstimatorFactory.cpp src/KlqeProcessCovariance.cpp
   src/HeldInputRecords.cpp src/BilinearCertificatePostprocess.cpp src/BilinearCertificateBinding.cpp
@@ -117,6 +118,10 @@ if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
   add_executable(dynsyslab_resdmd_krom_tests tests/resdmd_krom_tests.cpp)
   target_link_libraries(dynsyslab_resdmd_krom_tests PRIVATE dynsyslab_workflow)
   add_test(NAME dynsyslab_resdmd_krom_tests COMMAND dynsyslab_resdmd_krom_tests)
+  add_executable(dynsyslab_band_projection_tests tests/band_projection_tests.cpp)
+  target_link_libraries(dynsyslab_band_projection_tests PRIVATE dynsyslab_workflow)
+  add_test(NAME dynsyslab_band_projection_tests COMMAND dynsyslab_band_projection_tests)
+  set_tests_properties(dynsyslab_band_projection_tests PROPERTIES LABELS "workflow;native;spectral")
   add_executable(dynsyslab_identification_workflow_tests tests/identification_workflow_tests.cpp)
   target_link_libraries(dynsyslab_identification_workflow_tests PRIVATE dynsyslab_workflow)
   add_test(NAME dynsyslab_identification_workflow_tests COMMAND dynsyslab_identification_workflow_tests)

@@ -260,7 +260,7 @@ bool pooledMethod(const std::string& name) {
         || name == "mode_selection" || name == "krom_recenter" || name == "krom_readout"
         || name == "reference_signal" || name == "control_score" || name == "figure_dataset" || name == "bifurcation_points" || name == "observable_spectrum_comparison" || name == "io_delay_model" || name == "animation"
         || name == "ssm" || name == "orbit_geometry" || name == "run_invariant" || name == "field_model" || name == "pulse_response"
-        || name == "control_map_audit" || isKromToolMethod(name);
+        || name == "control_map_audit" || name == "band_projection" || name == "packet_validation" || isKromToolMethod(name);
 }
 }  // namespace
 
@@ -290,6 +290,7 @@ PostprocessResult executePostprocess(const json::Value& submitted,
     const std::filesystem::path& archiveRoot, const std::filesystem::path& progressPath,
     const dynsyslab::core::ExecutionContext* execution) {
     using namespace postprocess_detail;
+    if (const auto pooled = pooledSourcesJob(submitted)) return executePostprocess(*pooled, archiveRoot, progressPath, execution);
     // Observables named in a Hankel method become an explicit coordinate change.
     const auto job = expandHankelCoordinateShorthand(submitted);
     if (execution) execution->report({"postprocess", "Loading source archives", 0.0, 0, 1});
@@ -338,6 +339,8 @@ PostprocessResult executePostprocess(const json::Value& submitted,
             name=="field_model"?runFieldModel(sources,stage->at("settings"),archiveRoot,label):
             name=="pulse_response"?runPulseResponse(sources,stage->at("settings"),archiveRoot,label):
             name=="control_map_audit"?runControlMapAudit(sources,stage->at("settings"),archiveRoot,label):
+            name=="band_projection"?runBandProjection(sources,stage->at("settings"),archiveRoot,label):
+            name=="packet_validation"?runPacketValidation(sources,stage->at("settings"),archiveRoot,label):
             isKromToolMethod(name)?runKromTool(name,sources,stage->at("settings"),archiveRoot,label):
             runEchoHistoryKoopman(sources, stage->at("settings"), archiveRoot, label);
         addStepObjects(result, output, name);
@@ -379,12 +382,13 @@ PostprocessResult executePostprocess(const json::Value& submitted,
         const StageScope scope(method, settings);
         const dynsyslab::numerics::SvdDriverScope svdScope(dynsyslab::numerics::svdDriverFromName(settings.at("svd_driver").string()));
         std::filesystem::path output;
-        if (method == "linear_analysis" || method == "linear_systems" || method == "controllability" || method == "observable_reconstruction" || method == "krom_extract" || method == "dmdc" || method == "edmdc" || method=="history_projection" || method=="eigenfunction_expansion" || method=="eigenfunction_errors" || method=="domain_field" || method=="ftle"
+        if (method == "linear_analysis" || method == "linear_systems" || method == "controllability" || method == "observable_reconstruction" || method == "krom_extract" || method == "rigged_measure" || method == "dmdc" || method == "edmdc" || method=="history_projection" || method=="eigenfunction_expansion" || method=="eigenfunction_errors" || method=="domain_field" || method=="ftle"
             || method=="receiver_signals" || method=="state_readout" || method=="ring_errors"
             || method=="affine_dynamics" || method=="prehistory" || method=="clock_audit"
             || method=="delay_pairs" || method=="delay_consistency"
             || method=="klqe" || method=="observability" || method=="empirical_observability") {
             if(method=="history_projection")output=runHistoryProjection(sourcePath,settings,archiveRoot,label);
+            else if(method=="rigged_measure")output=runRiggedMeasure(sourcePath,settings,archiveRoot,label);
             else if(method=="eigenfunction_expansion")output=runEigenfunctionExpansion(sourcePath,settings,archiveRoot,label);
             else if(method=="domain_field")output=runDomainField(sourcePath,settings,archiveRoot,label);
             else if(method=="ftle")output=runFtle(sourcePath,settings,archiveRoot,label);

@@ -79,7 +79,7 @@ int main() {
         const auto reference=core::json::parse(archive.metadataJson()).at("krom").at("parent");
         require(!archive.contains("training_states") && !archive.contains("eigenfunction_values")
             && !archive.contains("discrete_eigenvalues") && !archive.contains("expansion_coefficients")
-            && !archive.contains("control_constant_matrix") && reference.at("modes").array().size()==1
+            && !archive.contains("control_constant_matrix") && reference.at("mode_ids").array().size()==1
             && std::filesystem::equivalent(std::filesystem::u8path(reference.at("path").string()),source),
             "extracted KROM must reference its parent, not copy it");
         const auto metadata=json::parse(archive.metadataJson());

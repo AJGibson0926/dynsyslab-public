@@ -2,12 +2,30 @@
 #include <dynsyslab/numerics/Eigensystem.hpp>
 #include <dynsyslab/numerics/MatrixFunctions.hpp>
 #include <dynsyslab/numerics/LeastSquares.hpp>
+#include <dynsyslab/core/ExpansionDictionary.hpp>
 #include <limits>
 namespace dynsyslab::core {
 using namespace spectral_detail;
-SpectralKROM fitKoopmanSpectral(const KoopmanSnapshotPairs& data,const SpectralDictionary& dictionary,
-                               const KoopmanSpectralOptions& options) {
-    if(options.method=="stochastic_resdmd")return fitStochasticKoopmanSpectral(data,dictionary,options);
+namespace {
+// The krom of a compression: its eigenvalues (pairs numbered in the eigensystem's order) and the
+// eigenfunctions psi_j = sum_k E_kj phi_k on the frozen dictionary over `domain`.
+KoopmanModel kromOfCompression(KoopmanCompression compression,std::optional<FunctionDomain> domain) {
+    const auto n=compression.dictionary.size(),r=compression.rank;
+    const auto eig=numerics::eigensystem(compression.action,r);
+    std::vector<std::complex<double>> coefficients(r*n);  // mode-major: outputs x terms
+    for(std::size_t j=0;j<r;++j)for(std::size_t i=0;i<n;++i)for(std::size_t k=0;k<r;++k)
+        coefficients[j*n+i]+=compression.basis[i*r+k]*eig.rightEigenvectors[k*r+j];
+    if(!domain){FunctionDomain data;data.dimension=compression.dictionary.dimension;domain=data;}
+    FunctionExpansion functions(std::make_shared<const ExpansionDictionary>(ExpansionDictionary::fromSpectral(compression.dictionary)),
+                                std::move(coefficients),std::move(*domain));
+    KoopmanModel model(std::move(functions),Spectrum::fromDiscreteMultipliers(eig.eigenvalues,compression.sampleInterval),std::size_t(0));
+    model.setCompression(std::move(compression));
+    return model;
+}
+}
+KoopmanModel fitKoopmanSpectral(const KoopmanSnapshotPairs& data,const SpectralDictionary& dictionary,
+                                const KoopmanSpectralOptions& options,std::optional<FunctionDomain> domain) {
+    if(options.method=="stochastic_resdmd")return fitStochasticKoopmanSpectral(data,dictionary,options,std::move(domain));
     dictionary.validate();check(data,dictionary.dimension);
     if(!std::isfinite(options.sampleInterval)||options.sampleInterval<=0||
        !std::isfinite(options.relativeTolerance)||options.relativeTolerance<=0)
@@ -37,7 +55,7 @@ SpectralKROM fitKoopmanSpectral(const KoopmanSnapshotPairs& data,const SpectralD
     }
     auto svd=numerics::singularValueDecomposition(x,m,n,options.rank,options.relativeTolerance);
     if(!svd.rank)throw std::invalid_argument("Source dictionary has zero numerical rank");
-    SpectralKROM model;model.dictionary=dictionary;model.method=method;
+    KoopmanCompression model;model.dictionary=dictionary;model.method=method;
     model.sampleInterval=options.sampleInterval;model.rank=svd.rank;model.samples=m;
     const auto r=model.rank;model.basis=whitening(svd);
     auto successor=product(y,model.basis,m,n,r);
@@ -72,45 +90,55 @@ SpectralKROM fitKoopmanSpectral(const KoopmanSnapshotPairs& data,const SpectralD
     }
     if(model.assumptions.empty())model.assumptions="Finite data least-squares Koopman compression; no global convergence or nonlinear state-closure certificate.";
     if(options.weightPolicy=="smooth-birkhoff")model.assumptions+=" Smooth Birkhoff weights; accelerated asymptotics require additional ergodic regularity.";
-    auto eig=numerics::eigensystem(model.action,r);
-    model.multipliers=eig.eigenvalues;model.eigenfunctions.resize(n*r);
-    for(std::size_t i=0;i<n;++i)for(std::size_t j=0;j<r;++j)
-        for(std::size_t k=0;k<r;++k)model.eigenfunctions[i*r+j]+=model.basis[i*r+k]*eig.rightEigenvectors[k*r+j];
+    model.validate();
+    SpectralDiagnostics diagnostics;
+    diagnostics.invariance=koopmanInvariance(product(rawX,model.basis,m,n,r),product(rawY,model.basis,m,n,r),m,r,options.relativeTolerance);
+    auto krom=kromOfCompression(std::move(model),domain);
+    // The pairs' one-step residuals on the training data and, on the grid, the pseudospectrum with its
+    // minimizers (Colbrook & Townsend 2024).
     auto effective=data;effective.weights=w;
-    model.spectral.residuals=koopmanResiduals(model,effective,options.residualGrid,"empirical-training");
-    model.spectral.invariance=koopmanInvariance(product(rawX,model.basis,m,n,r),product(rawY,model.basis,m,n,r),m,r,options.relativeTolerance);
-    model.validate();return model;
+    std::vector<std::complex<double>> minimizers;
+    krom.setSpectralEvidence(koopmanResiduals(krom,effective,options.residualGrid,"empirical-training",&minimizers));
+    if(!minimizers.empty()) {
+        const auto& expansion=frozenDictionaryExpansion(krom);
+        krom.setSpectralFunction(pseudospectrumFunctionKey(),FunctionExpansion(
+            std::make_shared<const ExpansionDictionary>(expansion.dictionary()),std::move(minimizers),expansion.coordinates()));
+    }
+    krom.setSpectralDiagnostics(std::move(diagnostics));
+    return krom;
 }
-void fitSpectralReconstruction(SpectralKROM& model,const std::string& name,
+void fitFeatureReadout(KoopmanModel& krom,const std::string& name,
     const std::vector<double>& points,const std::vector<double>& targets,std::size_t outputs,
     const std::vector<double>& suppliedWeights) {
-    model.validate();const auto d=model.dictionary.dimension,n=model.dictionary.size(),r=model.rank;
+    if(!krom.compression())throw std::invalid_argument("A feature readout needs the krom's compressed operator");
+    auto model=*krom.compression();const auto d=model.dictionary.dimension,n=model.dictionary.size(),r=model.rank;
     if(name.empty()||points.empty()||points.size()%d||!outputs||targets.size()!=points.size()/d*outputs)
         throw std::invalid_argument("Readout points/outputs shape mismatch");
     for(double v:targets)if(!std::isfinite(v))throw std::invalid_argument("Nonfinite reconstruction target");
     const auto m=points.size()/d;auto w=weights(m,suppliedWeights);
     auto q=product(model.dictionary.evaluate(points),model.basis,m,n,r);
     auto c=numerics::solveLeastSquares(weighted(q,w,r),m,r,weighted(targets,w,outputs),outputs);
-    SpectralReconstruction readout;readout.outputs=outputs;readout.coefficients=product(model.basis,c,n,r,outputs);
+    FeatureReadout readout;readout.outputs=outputs;readout.coefficients=product(model.basis,c,n,r,outputs);
     auto prediction=product(q,c,m,r,outputs);double error=0,norm=0;
     for(std::size_t i=0;i<m;++i)for(std::size_t j=0;j<outputs;++j) {
         const auto k=i*outputs+j;error+=w[i]*std::pow(prediction[k]-targets[k],2);norm+=w[i]*targets[k]*targets[k];
     }
     readout.relativeTrainingError=std::sqrt(error/std::max(norm,1e-300));
-    model.reconstructions[name]=std::move(readout);
+    model.readouts[name]=std::move(readout);
+    krom.setCompression(std::move(model));
 }
-std::vector<double> rolloutSpectralKrom(const SpectralKROM& model,const std::string& name,
+std::vector<double> rolloutCompression(const KoopmanCompression& model,const std::string& name,
     const std::vector<double>& point,std::size_t steps) {
     model.validate();if(point.size()!=model.dictionary.dimension)throw std::invalid_argument("Rollout needs one initial coordinate vector");
-    return rolloutSpectralKromBatch(model,name,point,steps);
+    return rolloutCompressionBatch(model,name,point,steps);
 }
-std::vector<double> rolloutSpectralKromBatch(const SpectralKROM& model,const std::string& name,
+std::vector<double> rolloutCompressionBatch(const KoopmanCompression& model,const std::string& name,
     const std::vector<double>& points,std::size_t steps) {
     model.validate();
     const auto dimension=model.dictionary.dimension;
     if(points.empty()||points.size()%dimension)throw std::invalid_argument("Batch rollout needs complete initial coordinate vectors");
     const auto trajectories=points.size()/dimension;
-    const auto n=model.dictionary.size(),r=model.rank;const auto& readout=model.reconstructions.at(name);
+    const auto n=model.dictionary.size(),r=model.rank;const auto& readout=model.readouts.at(name);
     const auto all=product(model.dictionary.evaluate(points),model.basis,trajectories,n,r);
     auto c=numerics::solveLeastSquares(model.basis,n,r,readout.coefficients,readout.outputs);
     std::vector<double> out;

@@ -24,8 +24,9 @@ Figure complexPlaneStemFigure(const ComplexStemPlot& plot) {
     if (plot.logHeights) {
         double smallest = std::numeric_limits<double>::infinity();
         for (const double h : plot.heights) if (h > 0 && std::isfinite(h)) smallest = std::min(smallest, h);
-        for (const auto& overlay : plot.overlays)
-            for (const double h : overlay.heights) if (h > 0 && std::isfinite(h)) smallest = std::min(smallest, h);
+        for (const auto* set : {&plot.overlays, &plot.curves})
+            for (const auto& overlay : *set)
+                for (const double h : overlay.heights) if (h > 0 && std::isfinite(h)) smallest = std::min(smallest, h);
         floor = std::isfinite(smallest) ? std::floor(std::log10(smallest)) : 0.0;
     }
     const double gapValue = std::numeric_limits<double>::quiet_NaN();
@@ -89,6 +90,19 @@ Figure complexPlaneStemFigure(const ComplexStemPlot& plot) {
     figure.traces.push_back(stemTrace(plot.seriesLabel, plot.color, plot.bases, plot.heights));
     for (const auto& overlay : plot.overlays)
         figure.traces.push_back(stemTrace(overlay.label, overlay.color, overlay.bases, overlay.heights));
+    for (const auto& curve : plot.curves) {
+        if (curve.bases.size() != curve.heights.size())
+            throw std::invalid_argument("complex stem plot curve needs one height per base point");
+        Trace line; line.label = curve.label; line.color = curve.color;
+        for (std::size_t index = 0; index < curve.bases.size(); ++index) {
+            const double raw = curve.heights[index];
+            const bool shown = std::isfinite(raw) && (!plot.logHeights || raw > 0);
+            line.x.push_back(shown ? curve.bases[index].real() : gapValue);
+            line.y.push_back(shown ? curve.bases[index].imag() : gapValue);
+            line.z.push_back(shown ? (plot.logHeights ? std::log10(raw) : raw) : gapValue);
+        }
+        figure.traces.push_back(std::move(line));
+    }
     return figure;
 }
 

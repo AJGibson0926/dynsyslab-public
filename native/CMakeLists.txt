@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(dynsyslab_native VERSION 0.10.3 LANGUAGES CXX)
+project(dynsyslab_native VERSION 0.11.0 LANGUAGES CXX)
 
 include(CTest)
 option(DYNSYSLAB_BUILD_PYTHON "Build optional Python bindings" OFF)
@@ -76,21 +76,30 @@ set_property(SOURCE src/BuildInfo.cpp APPEND PROPERTY COMPILE_DEFINITIONS
 add_library(dynsyslab_foundation ${DYNSYSLAB_LIBRARY_KIND}
   src/Models.cpp src/Execution.cpp src/SignalMetrics.cpp src/Npy.cpp src/Json.cpp src/Text.cpp src/FileDigest.cpp src/BuildInfo.cpp src/PortableNormal.cpp src/OutputPath.cpp
   src/LegacyCsv.cpp src/LegacyCsvImport.cpp
-  src/TimeSeriesRecord.cpp src/DataObject.cpp src/Spectrum.cpp
+  src/TimeSeriesRecord.cpp src/DataObject.cpp src/Spectrum.cpp src/SpectrumParts.cpp
   src/TimeSeries.cpp src/DelaySampling.cpp src/TimeSeriesOperations.cpp src/Fourier.cpp src/DiscreteFourier.cpp src/Extrema.cpp src/SpectrumComparison.cpp src/NumericalDifferentiation.cpp src/NumericalDifferentiationSmoothers.cpp src/FiniteDifferenceStencils.cpp src/TimeSeriesArchive.cpp
   src/Extension.cpp src/ExtensionModels.cpp src/ODE.cpp src/Integrator.cpp src/ControllerCallLog.cpp src/IntegratorExplicit.cpp src/IntegratorRadau.cpp src/DimensionalSystem.cpp src/PresetMetadata.cpp src/DelayRollout.cpp src/KnownInput.cpp src/InputAffineSensor.cpp src/Hierarchy.cpp
-  src/AnalyticExpression.cpp src/AnalyticExpressionText.cpp src/EllipticIntegrals.cpp src/FunctionExpansion.cpp src/ExpressionTerms.cpp src/ExpansionDictionary.cpp src/ObservableExpressions.cpp src/OscillatorObservables.cpp src/BasisFunctions.cpp
+  src/AnalyticExpression.cpp src/AnalyticExpressionText.cpp src/ExpressionFunctions.cpp src/EllipticIntegrals.cpp src/PolynomialRoots.cpp src/FunctionExpansion.cpp src/ExpressionTerms.cpp src/ExpansionDictionary.cpp src/ObservableExpressions.cpp src/OscillatorObservables.cpp src/BasisFunctions.cpp
   src/SpecialFunctions.cpp src/Lauricella.cpp src/QuarticOrbit.cpp src/AnalyticSolution.cpp src/AnalyticHistories.cpp src/PeriodicAnalysis.cpp src/TorusAnalysis.cpp src/CoefficientShift.cpp
   src/AnalyticQuadrature.cpp src/AnalyticDoublePendulum.cpp src/AnalyticModelLimits.cpp src/AnalyticKuramoto.cpp
   src/NeuralKnowledge.cpp src/CoupledKnowledge.cpp src/BubbleKnowledge.cpp
   src/AnalyticHenonHeiles.cpp src/AnalyticOscillators.cpp src/AnalyticRPE.cpp src/AnalyticOtherSystems.cpp
-  src/SystemsHarmonic.cpp src/ResearchPapers.cpp src/ResearchPapersExtra.cpp src/ResearchPapersOscillators.cpp src/DynamicalKnowledge.cpp src/SystemEigenfunctionLibrary.cpp src/RpeDynamicalKnowledge.cpp src/DoublePendulumKnowledge.cpp
+  src/SystemsHarmonic.cpp src/ResearchPapers.cpp src/ResearchPapersExtra.cpp src/ResearchPapersOscillators.cpp src/DynamicalKnowledge.cpp src/SystemCatalog.cpp src/RpeDynamicalKnowledge.cpp src/DoublePendulumKnowledge.cpp
   src/Hankel.cpp src/PathSimplification.cpp src/ObservableDerivative.cpp src/Observable.cpp src/ObservableRepresentation.cpp src/FunctionDomain.cpp src/DomainGrid.cpp src/GridFieldArchive.cpp src/RecordedArchive.cpp src/TimeGridArchive.cpp src/ArchiveCompression.cpp src/System.cpp src/SystemSupport.cpp src/SystemLabels.cpp src/Targets.cpp
   src/TrainingDomain.cpp
   src/SystemsBasic.cpp src/SystemsTriangular.cpp src/SystemsMultiwell.cpp src/SystemsIntegrable.cpp src/AnalyticIntegrable.cpp src/AnalyticCelestial.cpp src/SystemsToda.cpp src/AnalyticToda.cpp src/Toda.cpp src/SystemsMechanical.cpp src/SystemsBiological.cpp
   src/SystemsBubble.cpp src/SystemsRPE.cpp src/SystemsRPEBaseline.cpp src/SystemsMarmottant.cpp src/AcousticReceiver.cpp
   src/SystemsReddySzeri.cpp)
 dynsyslab_module(dynsyslab_foundation)
+# The system catalogue (known eigenfunctions as data, native/catalog/systems/*.json), embedded.
+file(GLOB DYNSYSLAB_CATALOG_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/catalog/systems/*.json")
+set(DYNSYSLAB_CATALOG_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/generated/SystemCatalogData.cpp")
+add_custom_command(OUTPUT "${DYNSYSLAB_CATALOG_SOURCE}"
+  COMMAND "${CMAKE_COMMAND}" "-DOUT=${DYNSYSLAB_CATALOG_SOURCE}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/catalog/systems"
+          -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedCatalog.cmake"
+  DEPENDS ${DYNSYSLAB_CATALOG_FILES} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedCatalog.cmake"
+  COMMENT "Embedding the system catalogue")
+target_sources(dynsyslab_foundation PRIVATE "${DYNSYSLAB_CATALOG_SOURCE}")
 find_package(boost_math CONFIG REQUIRED)
 find_package(boost_multiprecision CONFIG REQUIRED)
 target_link_libraries(dynsyslab_foundation PRIVATE Boost::math)
@@ -115,6 +124,9 @@ add_library(dynsyslab_lie ${DYNSYSLAB_LIBRARY_KIND}
 dynsyslab_module(dynsyslab_lie)
 target_link_libraries(dynsyslab_lie PUBLIC dynsyslab_foundation PRIVATE Boost::multiprecision)
 if(BUILD_TESTING AND DYNSYSLAB_BUILD_TESTS)
+  add_executable(dynsyslab_expression_functions_tests tests/expression_functions_tests.cpp)
+  target_link_libraries(dynsyslab_expression_functions_tests PRIVATE dynsyslab_foundation)
+  add_test(NAME dynsyslab_expression_functions_tests COMMAND dynsyslab_expression_functions_tests)
   add_executable(dynsyslab_known_input_tests tests/known_input_tests.cpp)
   target_link_libraries(dynsyslab_known_input_tests PRIVATE dynsyslab_foundation)
   add_test(NAME dynsyslab_known_input_tests COMMAND dynsyslab_known_input_tests)
@@ -228,7 +240,7 @@ endif()
 
 add_library(dynsyslab_eigenfunctions ${DYNSYSLAB_LIBRARY_KIND}
   src/SpectrumArchive.cpp
-  src/ExpansionProjection.cpp src/FunctionInterpolation.cpp src/ScatteredInterpolants.cpp src/SpectralDictionary.cpp src/SpectralKromSerialization.cpp src/EigenfunctionFit.cpp src/PolynomialBasis.cpp src/KnownEigenfunctions.cpp src/EigenfunctionLibrary.cpp
+  src/ExpansionProjection.cpp src/FunctionInterpolation.cpp src/ScatteredInterpolants.cpp src/SpectralDictionary.cpp src/KoopmanCompressionSerialization.cpp src/EigenfunctionFit.cpp src/PolynomialBasis.cpp src/KnownEigenfunctions.cpp src/EigenfunctionLibrary.cpp
   src/PolynomialEigenfunctionConstruction.cpp)
 dynsyslab_module(dynsyslab_eigenfunctions)
 target_link_libraries(dynsyslab_eigenfunctions PUBLIC dynsyslab_foundation)
@@ -318,9 +330,9 @@ if(NOT DYNSYSLAB_ENABLE_LINALG)
   target_sources(dynsyslab_koopman PRIVATE src/SpectralUnavailable.cpp)
 endif()
 if(DYNSYSLAB_ENABLE_ARCHIVE_IO)
-  target_sources(dynsyslab_koopman PRIVATE src/KoopmanArchive.cpp src/KromArchiveParts.cpp src/HankelBasis.cpp
+  target_sources(dynsyslab_koopman PRIVATE src/KoopmanArchive.cpp src/KromArchiveParts.cpp src/KromSpectralParts.cpp src/HankelBasis.cpp
     src/ControlMapArchive.cpp src/KoopmanInputMaps.cpp src/KoopmanBinding.cpp
-    src/SpectralKromArchive.cpp)
+    src/KromSpectralObservables.cpp)
 endif()
 
 if(DYNSYSLAB_ENABLE_LINALG)

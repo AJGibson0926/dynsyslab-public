@@ -1,0 +1,54 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "isotonic_oscillator",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "kuru": "Kuru and Negro (2008), classical factorization, arXiv:0709.4649"
+ },
+ "definitions": [
+  [
+   "H",
+   "momentum^2/2 + omega^2*position^2/2 + inverse_square_strength/(2*position^2)"
+  ]
+ ],
+ "eigenfunctions": [
+  {
+   "id": "energy",
+   "title": "Energy",
+   "kind": "exact",
+   "psi": "H",
+   "eigenvalue": "0",
+   "conditions": "Zero damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "kuru"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  },
+  {
+   "id": "isochronous_mode",
+   "title": "Isochronous mode Z = q^2 - H/omega^2 - i q p/omega",
+   "kind": "exact",
+   "psi": "position^2 - H/omega^2",
+   "psi_imag": "-position*momentum/omega",
+   "eigenvalue": "0",
+   "eigenvalue_imag": "2*omega",
+   "conditions": "Zero damping and driver; position > 0",
+   "derivation": "Z' = 2 i omega Z for every orbit (the frequency does not depend on the energy)",
+   "references": [
+    "kuru"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  }
+ ]
+}

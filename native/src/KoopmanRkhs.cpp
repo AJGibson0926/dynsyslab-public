@@ -33,8 +33,9 @@ RkhsAdjointSpectrum rkhsAdjointSpectrum(const KoopmanSnapshotPairs& data,double 
     RkhsAdjointSpectrum out;out.dimension=d;out.nodesCount=n;out.rank=r;out.nodes=data.x;out.successors=data.y;out.bandwidth=bandwidth;
     out.eigenvalues=spectrum.eigenvalues;out.sectionCoefficients.resize(n*r);
     out.assumptions="Gaussian RKHS adjoint compression: K* k_x=k_T(x). Kernel norms replace empirical L2 quadrature. Boundedness/domain and dense-section limits are required for operator-level convergence; residuals are finite-space diagnostics. Adjoint eigenvectors are not automatically Koopman eigenfunctions or a forward predictor.";
-    out.residuals.scope="finite-rkhs-section-span";out.residuals.definition="RKHS norm ||(K*-lambda)f||/||f|| using exact kernel Gram matrices, subject to floating-point error";
-    out.residuals.pseudospectrum={out.residuals.definition,out.residuals.scope,grid,{},{},n};
+    out.pseudospectrum.scope="finite-rkhs-section-span";
+    out.pseudospectrum.definition="RKHS norm ||(K*-lambda)f||/||f|| using exact kernel Gram matrices, subject to floating-point error";
+    out.pseudospectrum.grid=grid;
     const auto residualMatrix=[&](std::complex<double> z) {
         if(!std::isfinite(z.real())||!std::isfinite(z.imag()))throw std::invalid_argument("Nonfinite RKHS spectral point");
         std::vector<std::complex<double>> h(r*r);
@@ -46,15 +47,15 @@ RkhsAdjointSpectrum rkhsAdjointSpectrum(const KoopmanSnapshotPairs& data,double 
         auto h=residualMatrix(spectrum.eigenvalues[j]);std::complex<double> norm{};
         for(std::size_t i=0;i<r;++i)for(std::size_t k=0;k<r;++k)
             norm+=std::conj(spectrum.rightEigenvectors[i*r+j])*h[i*r+k]*spectrum.rightEigenvectors[k*r+j];
-        out.residuals.eigenpair.push_back(std::sqrt(std::max(0.,norm.real())));
+        out.residuals.push_back(std::sqrt(std::max(0.,norm.real())));
         for(std::size_t i=0;i<n;++i)for(std::size_t k=0;k<r;++k)out.sectionCoefficients[i*r+j]+=b[i*r+k]*spectrum.rightEigenvectors[k*r+j];
     }
     for(auto z:grid) {
         auto minimum=numerics::hermitianEigensystem(residualMatrix(z),r);
-        out.residuals.pseudospectrum.minimum.push_back(std::sqrt(std::max(0.,minimum.eigenvalues.front())));
+        out.pseudospectrum.minimum.push_back(std::sqrt(std::max(0.,minimum.eigenvalues.front())));
         for(std::size_t i=0;i<n;++i) {
             std::complex<double> value{};for(std::size_t k=0;k<r;++k)value+=b[i*r+k]*minimum.eigenvectors[k*r];
-            out.residuals.pseudospectrum.minimizingCoefficients.push_back(value);
+            out.pseudospectrumMinimizers.push_back(value);
         }
     }
     return out;

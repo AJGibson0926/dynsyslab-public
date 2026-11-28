@@ -47,7 +47,7 @@ Catalog baseCatalog(const std::filesystem::path& projectRoot) {
     result.projectName = "DynSysLab";
     result.projectRoot = projectRoot.generic_u8string();
     result.viewLabels = {{"open", "Open"}, {"data_overview", "Data overview"},
-        {"koopman_spectrum", "Spectrum"}, {"mode_weights", "Mode weights"}, {"time", "Time series"},
+        {"koopman_spectrum", "Spectrum"}, {"mode_weights", "Mode weights"}, {"spectral_measures", "Spectral measures"}, {"time", "Time series"},
         {"krom_dashboard", "KROM dashboard"}, {"phase", "Phase space"},
         {"field", "Space-time field"}, {"three_d", "Three-state view"},
         {"fourier", "Frequency spectra"},
@@ -214,7 +214,7 @@ Catalog Catalog::scan(const std::filesystem::path& projectRoot,
 
 Catalog Catalog::indexed(const std::filesystem::path& projectRoot,
                          const std::filesystem::path& archiveRoot) {
-    constexpr std::uint32_t snapshotVersion = 11;  // 11: index summary v5; 10: observable series; 9: animation, domain fields
+    constexpr std::uint32_t snapshotVersion = 12;  // 12: indexed child kroms, spectral_measures; 11: index summary v5; 10: observable series; 9: animation, domain fields
     constexpr const char* consumer = "dynsyslab.viewer.native";
     if (!std::filesystem::is_regular_file(
             dynsyslab::core::archiveIndexPath(archiveRoot)))

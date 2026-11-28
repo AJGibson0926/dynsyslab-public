@@ -29,12 +29,12 @@ struct PeriodicDelayPacketFeatures {
 };
 // Resolve the newest-coordinate observable, compute frozen Rigged-DMD packets,
 // and shift the history origin to its newest sample. No source archive changes.
-PeriodicDelayPacketFeatures periodicDelayPacketFeatures(const SpectralKROM&,
+PeriodicDelayPacketFeatures periodicDelayPacketFeatures(const KoopmanModel&,
     std::size_t channel,const std::vector<double>& centers,double bandwidth,std::size_t order);
 // Newest-coordinate, past-only free forecasts; exact uniform-phase integrals
 // for supplied finite Fourier series. Reads the frozen delay contract. No
 // phase grid, refitting, temporal interpolation or Fourier-tail certificate.
-std::vector<PeriodicDelayForecastAudit> auditPeriodicDelayForecast(const SpectralKROM&,
+std::vector<PeriodicDelayForecastAudit> auditPeriodicDelayForecast(const KoopmanModel&,
     const std::vector<math::PeriodicSnapshotOrbit>&validation,
     const std::vector<std::size_t>&stepsPerOrbit,
     const std::vector<std::vector<std::size_t>>&evaluationSteps={});
@@ -44,11 +44,11 @@ std::vector<PeriodicDelayForecastAudit> auditPeriodicDelayForecast(const Spectra
 // source/successor least-squares problem; it does not subsample or truncate.
 // General delay fitting accepts EDMD/ResDMD/mpEDMD; packet comparison below
 // still requires mpEDMD. No spectrum is smoothed by this fitting operation.
-SpectralKROM fitPeriodicDelayModel(const std::vector<math::PeriodicSnapshotOrbit>&,
+KoopmanModel fitPeriodicDelayModel(const std::vector<math::PeriodicSnapshotOrbit>&,
     const std::vector<std::size_t>&channels,const std::vector<double>&timeOffsets,
     std::size_t phaseCount,const KoopmanSpectralOptions&,bool requireResolvedQuadrature=true,
     const std::string& storage="auto");
-SpectralKROM fitPeriodicDelaySpectrum(const std::vector<math::PeriodicSnapshotOrbit>&,
+KoopmanModel fitPeriodicDelaySpectrum(const std::vector<math::PeriodicSnapshotOrbit>&,
     const std::vector<std::size_t>&channels,const std::vector<double>&timeOffsets,
     std::size_t phaseCount,const KoopmanSpectralOptions&,bool requireResolvedQuadrature=true,
     const std::string& storage="auto");
@@ -59,7 +59,7 @@ PeriodicSpectralReference periodicSpectralReference(
     double bandwidth,std::size_t order);
 // Frozen model, same signed offsets/channel order used at fit. Current-time
 // coordinate readout is compared to the ORIGINAL observable, not its projection.
-PeriodicSpectralComparison comparePeriodicDelaySpectrum(const SpectralKROM&,
+PeriodicSpectralComparison comparePeriodicDelaySpectrum(const KoopmanModel&,
     const std::vector<std::size_t>&channels,const std::vector<double>&timeOffsets,
     const std::vector<math::PeriodicSnapshotOrbit>&validation,const PeriodicSpectralReference&);
 }

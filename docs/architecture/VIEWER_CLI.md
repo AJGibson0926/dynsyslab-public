@@ -91,6 +91,17 @@ runs are drawn once in dark grey: solid for the most widely shared target, dashe
 the others, labelled with the runs that share them. Without `--color`, the second and
 later runs are dashed.
 
+### Routes for Koopman spectra
+
+| Route | Panels |
+|---|---|
+| `koopman_spectrum` | a krom's eigenvalues on the unit circle over its pseudospectrum (log10 of the minimum residual, when the fit's `residual_grid` is a rectangular lattice), then each selected mode's eigenfunction; `--figure 0` renders the eigenvalue panel alone |
+| `mode_weights` | stems of each observable's modal weight on the mu and lambda planes |
+| `spectral_measures` | a krom whose spectrum holds bands or measures: per observable output, the atoms \|c_j\|² as 3-D stems at the multipliers on the unit circle with each unit-circle band's density drawn around the circle, and every band's density against its parameter with the atoms as stems (bands of one observable overlay: a system's exact reference band beside Rigged DMD's); one-point bands (packet centres) are markers |
+
+A krom that only refers to its parent (a child krom) is recognised from the archive index summary
+as well as from its full metadata.
+
 ### Routes for linear-systems archives
 
 | Route | Panels |

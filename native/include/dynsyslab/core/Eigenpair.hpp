@@ -18,8 +18,11 @@
 #include <dynsyslab/core/Eigenfunction.hpp>
 #include <dynsyslab/core/Eigenvalue.hpp>
 
+#include <complex>
+#include <cstddef>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace dynsyslab::core {
 
@@ -41,13 +44,22 @@ struct EigenpairResidual {
     std::string scope;       // residual_scope
 };
 
-// An eigenvalue with its eigenfunction (when the holder has one: a Spectrum alone does not) and its
-// residual (when the method computed one). KoopmanModel::eigenpair(j) assembles all three; the
-// eigenfunction shares the model's representations rather than copying them.
+// One output of an observable projected onto this pair: its Koopman mode c, the coefficient of the
+// eigenfunction in g ~ offset + sum_j c_j psi_j.
+struct KoopmanMode {
+    std::string observable;
+    std::size_t output{};
+    std::complex<double> value;
+};
+
+// An eigenvalue with its eigenfunction (when the spectrum has representations), its residual (when the
+// method computed one) and the Koopman modes of the observables decomposed over the spectrum. A view:
+// Spectrum::pair(j) assembles it, the eigenfunction sharing the spectrum's representations.
 struct Eigenpair {
     Eigenvalue eigenvalue;
     std::optional<Eigenfunction> eigenfunction;
     std::optional<EigenpairResidual> residual;
+    std::vector<KoopmanMode> modes;
 };
 
 }  // namespace dynsyslab::core

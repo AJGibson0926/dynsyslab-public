@@ -93,10 +93,10 @@ same basis.
 |---|---|---|
 | `Eigenvalue` | `core/Eigenvalue.hpp` | One eigenvalue: λ, μ, Δt, the logarithm branch through the spectrum. |
 | `Eigenfunction` | `core/Eigenfunction.hpp` | One function with its named representations, sharing dictionaries and interpolation data with its siblings. |
-| `Eigenpair` | `core/Eigenpair.hpp` | An `Eigenvalue`, its `Eigenfunction` (absent on a bare spectrum) and an optional `EigenpairResidual {value, definition, scope}`. |
-| `Spectrum` | `core/Spectrum.hpp` | The point part (the eigenvalues and their pairs' residuals), the continuous part (`SpectralMeasure` components, `core/SpectralMeasure.hpp`; they have no eigenfunctions) and an optional `Pseudospectrum`. |
+| `Eigenpair` | `core/Eigenpair.hpp` | A view: an `Eigenvalue`, its `Eigenfunction` (absent when the spectrum has no representations), an optional `EigenpairResidual {value, definition, scope}` and the observables' `KoopmanMode`s on it. |
+| `Spectrum` | `core/Spectrum.hpp`, `core/SpectralDecomposition.hpp` | The computed spectrum, by Lebesgue decomposition: the atomic part (eigenvalues with mode ids, residuals, and the eigenfunctions' representations and training samples), the continuous part (`ContinuousComponent`s: subsets of C on a grid, without eigenvalues), the observables' decomposition (Koopman modes per observable; an `SpectralMeasure` per observable and component, with its wave packets), an optional `Pseudospectrum` and the compressed operator. |
 | `Pseudospectrum` | `core/Pseudospectrum.hpp` | Grid points z with the minimum residual at each (and the minimizers); `levelSet(ε)` is the sampled ε-pseudospectrum. |
-| `KoopmanModel` | `core/KoopmanModel.hpp` | The K-ROM: a spectrum whose point part are its eigenpairs (`eigenpair(j)` joins eigenvalue, eigenfunction and residual; `for (const auto& pair : krom.pairs())` visits them all in mode order, assembling each on access, so nothing is copied or stored twice), optional B and C, and a spectral fit's `spectralDiagnostics()`. |
+| `KoopmanModel` | `core/KoopmanModel.hpp` | The K-ROM, a plant for estimation and control: a spectrum (`eigenpair(j)` and `for (const auto& pair : krom.pairs())` assemble its pairs on access, so nothing is copied or stored twice), input maps B_ψ, measurements (observables read out through their Koopman modes, which the spectrum stores), the bound system, and a spectral fit's `spectralDiagnostics()`. |
 
 The residual is a property of the pair: it measures how well this function and this value satisfy
 the eigen-equation together, so it sits on neither the eigenvalue nor the eigenfunction. Each
@@ -115,13 +115,46 @@ are empty. H-DMD's per-representation value error and Koopman residual stay its 
 The pseudospectrum is computed evidence about the spectrum, not part of it: σ ⊂ σ_ε for every ε and
 σ = ∩_ε σ_ε (Trefethen & Embree, *Spectra and Pseudospectra*, Princeton 2005). ResDMD evaluates it
 on the `residual_grid` you give, in the plane of μ, with the definition and scope of its eigenpair
-residuals. Spectral measures of measure-preserving systems (mpEDMD, Colbrook, *SIAM J. Numer.
-Anal.* 61, 2023; Rigged DMD and ResDMD smoothed measures, Colbrook, Drysdale & Horning,
-arXiv:2405.00782) are the continuous components; the trial space's invariance, wave packets,
-stochastic residuals and RKHS adjoints are the krom's spectral diagnostics.
+residuals.
+
+By the Lebesgue decomposition of an observable's spectral measure (Halmos, *Lectures on Ergodic
+Theory*, 1956; Mezić, *Nonlinear Dyn.* 41, 2005) the spectrum has an atomic part, the eigenpairs, and
+a continuous part. A `SpectralBand` is a connected piece of the continuous part: a subset of C given
+by a real parameter p on a support (`unit-circle`, p an angle and the multiplier e^{ip};
+`imaginary-axis`, p a frequency and the rate ip; `bandPoint`), optionally sampled on a grid of p. The
+continuous part splits further into absolutely and singularly continuous parts; a band records which
+(`continuity`) only when its source distinguishes them, and none does today.
+
+A band holds its **generalized eigenfunctions** ψ_p when they are known: the operator-level
+counterpart of the eigenfunctions, not square integrable (they live in a rigged Hilbert space;
+Gelfand & Vilenkin, *Generalized Functions* 4, 1964). Two forms: *sampled*, one function per grid
+point; and *level set*, ψ_p(x) = δ(level(x) − p) profile(x), where `level` is a scalar map and the
+profile satisfies ∇profile·f = bandPoint(level(x)) profile. The system library's shell entries are
+of the second form (below), and a library band also carries the same functions written out as one
+explicit expression over (state, p), its `family` (archive key `band/<name>/family`): by default
+`dirac(level - p)*(profile)`, or the entry's own `generalized_eigenfunction` text. As distributions,
+these are never evaluated pointwise on their support: the family is 0 off it and refuses (NaN, so the
+dictionary reports an overflow) on it; they are used by pairing with test functions, as the
+`band_projection` stage below does along orbit records. Rigged DMD gives bands without generalized eigenfunctions: it computes,
+with the `rigged_measure` stage on a unitary compression such as measure-preserving EDMD's
+(Colbrook, Drysdale & Horning, arXiv:2405.00782; Colbrook, *SIAM J. Numer. Anal.* 61, 2023), an
+observable's measure and wave packets, which are observable-level.
+
+Observables are decomposed over both parts in one table: an observable's Koopman modes c_j (g ≈ offset
++ Σ c_j ψ_j, the readout C), and its `SpectralMeasure` μ_g(A) = ⟨E(A)g, g⟩ on each band (density,
+moments, mass) with its wave packets there (the smoothed projection of g onto the band's generalized
+eigenfunctions, one per grid point, on the frozen dictionary). The parallel is exact: an eigenpair is to
+its Koopman mode what a band's generalized eigenfunctions are to an observable's measure and wave
+packets. The atoms of an observable's measure are |c_j|² ‖ψ_j‖² at the eigenvalues, so they are derived
+from its Koopman modes (`Spectrum::atoms`), never stored twice. The views run both ways over the same
+table: a pair lists the observables' modes on it (`Eigenpair::modes`), an observable its modes and
+measures (`Spectrum::decomposition`), a band the measures on it (`Spectrum::bandMeasures`). Pairs carry stable mode ids (`Spectrum::modeId`): a fit numbers them
+0..n-1 and every selection keeps them, so references to pairs (atoms, a child krom's parent link)
+need no renumbering. The trial space's invariance, stochastic residuals and RKHS adjoints are
+the krom's spectral diagnostics.
 
 Selecting modes (`extract`, `krom_extract`) keeps the selected pairs' residuals and the operator's
-continuous part and pseudospectrum; it clears the diagnostics of the original trial space. The
+continuous part (measures with their generalized eigenfunctions) and pseudospectrum; it clears the diagnostics of the original trial space. The
 Viewer's K-ROM spectrum shows each eigenvalue with its residual and, when the grid is a rectangular
 lattice, the pseudospectrum as a heat map of log₁₀ of the minimum residual under the eigenvalues.
 
@@ -220,12 +253,45 @@ eigenfunction. You choose dictionary terms and coefficients:
 There is one coefficient row per eigenvalue, and each entry is real or `[re, im]`. The shorthand
 `"eigenfunctions": [{"real": "r", "imag": "-v/1.7"}]` decomposes each text into dictionary terms
 (polynomial parts become monomials). `"library": true` or `"library": ["x_1", "eta"]` loads the
-source system's own library entries instead (see below); `"reference_state": [...]` picks the orbit
-whose eigenvalues shell entries take. `domain` may instead list catalog observables, such as
-`["echo", "echo_dot"]`. Expressions support `+`, `-`, `*`, `/`, `^` with a constant exponent, `exp`,
+source system's own library entries instead (see below): entries with a constant eigenvalue become
+the krom's eigenpairs and shell entries its spectral bands. `domain` may instead list catalog observables, such as
+`["echo", "echo_dot"]`. Expressions support `+`, `-`, `*`, `/`, `^` (any exponent), `exp`,
 `log`, `sin`, `cos`, `tanh`, `sech`, `sqrt`, `pi`, `atan2(y, x)` and the elliptic integrals in the
-parameter m = k² (`ellipk(m)`, `ellipe(m)`, `ellipf(phi, m)`, `ellipe(phi, m)`; Carlson 1995,
-*Numer. Algorithms* 10:13–26). Every function has an exact symbolic derivative.
+parameter m = k² (`ellipk(m)`, `ellipe(m)`, `ellipf(phi, m)`, `ellipe(phi, m)`, and the third kind
+`ellippi(phi, n, m)` = Π(n; φ|m) for n < 1, through Carlson's R_F, R_D, R_C and R_J by duplication;
+Carlson 1995, *Numer. Algorithms* 10:13–26; DLMF 19.25.14, 19.36), and `polyroot(k, c_0, ..., c_d)`, the
+k-th largest real root of c_0 x^d + … + c_d (Aberth iteration with Newton polishing). Every function
+has an exact symbolic derivative (DLMF 19.4 for Π; implicit differentiation for a root). A text may
+name intermediates before its result, `a = …; b = …; result`; a named intermediate is one shared node,
+evaluated, differentiated and serialized once (JSON `analytic-state-expression/v2`, a node table,
+whenever a node is shared; v1 trees otherwise).
+
+Special functions take their parameters first; a parameter may depend on a summation variable but not
+on the state. Values come from Boost.Math and the elliptic integrals; each derivative is exact (DLMF):
+
+| Family | Functions |
+|---|---|
+| Elementary | `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `asinh`, `acosh`, `atanh`, `abs` |
+| Bessel and Airy | `besselj(nu, x)`, `bessely`, `besseli`, `besselk`, `sphbesselj(n, x)`, `sphbessely`, `airyai(x)`, `airybi`, `airyaiprime`, `airybiprime` |
+| Gamma and error | `gamma`, `lgamma`, `digamma`, `polygamma(n, x)`, `beta(a, b)`, `gammap(a, x)`, `gammaq(a, x)`, `erf`, `erfc`, `zeta(s)` (no derivative) |
+| Exponential integrals, Lambert W | `expint(x)` (Ei), `expintn(n, x)` (E_n), `lambertw`, `lambertwm1` |
+| Hypergeometric | `hyp0f1(b, x)`, `hyp1f1(a, b, x)`, `hyp2f1(a, b, c, x)` |
+| Elliptic | `jacobiam(u, m)`, `sn(u, m)`, `cn(u, m)`, `dn(u, m)`, `jacobizeta(phi, m)`, `weierstrassp(g2, g3, z)`, `weierstrasspprime(g2, g3, z)`, `theta1`…`theta4(z, q)` (nome q) |
+| Orthogonal polynomials | `legendre(n, x)`, `hermite(n, x)`, `laguerre(n, x)`, `chebyshevt(n, x)`, `chebyshevu(n, x)`, expanded by their recurrences |
+
+Series are `sum(k, from, to, term)`, with `k` bound in `term` and `to` an integer or `inf`; for example
+Kepler's equation by its Kapteyn series, `M + sum(n, 1, inf, 2/n*besselj(n, n*e)*sin(n*M))`. An infinite
+sum adds terms until five in a row fall below 1e-17 of the partial sum and is NaN if that does not
+happen within a million terms: convergence is checked, never assumed. Derivatives are taken term by
+term (valid when the differentiated series converges uniformly, as power and Fourier series do in
+their domains), and sums nest.
+
+Distributions: `heaviside(x)` (½ at 0), `sign(x)`, `dirac(x)` and its derivatives `diracderiv(n, x)`
+(δ⁽ⁿ⁾). Off the singular point they are ordinary functions (heaviside and sign are constant, dirac and
+its derivatives 0); at it, `dirac` and `diracderiv` are NaN, since a distribution has no pointwise
+value there (Gelfand & Shilov, *Generalized Functions* 1, 1964). Derivatives follow the distributional
+rules: heaviside′ = δ, sign′ = 2δ, (δ⁽ⁿ⁾)′ = δ⁽ⁿ⁺¹⁾. They let a generalized eigenfunction be written as
+it is, for example the real part `dirac(Omega - p)*cos(phi)` of a shell family.
 
 - **One domain, chosen where the eigenfunctions are made.** H-DMD's `interpolation_domain` sets it
   (the former `interpolation_domains` list is read as its first entry). The K-ROM loader uses
@@ -319,37 +385,47 @@ The result also holds the residual g − Bψ as an expansion in the merged dicti
 relative residual per output. For example, on the triangular system 2x₁ + 3x₂ − 3x₁² projects onto
 (x₁, η) exactly with B = (2, 3), and x₂ alone leaves the residual −k x₁².
 
-**System eigenfunction library.** Each system can carry hand-derived eigenfunctions in its
-`DynamicalKnowledge::eigenfunctions`. They are stored as data, so systems do not depend on the
-Koopman libraries. Each `EigenfunctionEntry` has:
+**System catalogue.** A system's known Koopman spectrum is information stored with the system, not
+code: the catalogue file `native/catalog/systems/<system id>.json` (schema
+`dynsyslab.system-catalog/v1`), compiled into the library at build time
+(`native/cmake/EmbedCatalog.cmake`) so every caller reads the same data. One loader
+(`SystemCatalog.cpp`) serves every system, and a system's `DynamicalKnowledge::eigenfunctions` are
+its catalogue entries; adding an exact expression is a data change. A file holds named references,
+shared `definitions` (ordered `[name, expression]` pairs, the expression language's named
+intermediates) and `eigenfunctions`, each with:
 
-- an id, a title and a kind;
-- real and imaginary expression text in the state and parameter names;
-- the eigenvalue as rate text;
-- conditions, a derivation note and references;
-- an `applicable` flag computed from the configuration.
+- an `id`, a `title` and a `kind`;
+- `psi` and `psi_imag`, the eigenfunction's real and imaginary parts, and `eigenvalue` and
+  `eigenvalue_imag` (for a shell entry, its level map), optionally after entry `definitions`;
+- `conditions` and `derivation` as text, and reference keys;
+- `requires`: the checks that make it applicable, lists of expressions that must be `zero`,
+  `positive` or `nonnegative`, and `near` pairs [expression, tolerance].
+
+Expressions name the system's state, its parameters, its dimensionless groups and the driver
+(`driver_amplitude`, `driver_frequency_hz`, `driver_phase_radians`).
 
 There are three kinds of entry:
 
 - **exact**: one eigenvalue on the stated region;
 - **principal**: the linearization wᵀ(x − x*) at an equilibrium, where w is a left eigenvector of
   Df(x*). It is accurate near x* only;
-- **shell**: exact on the stated region, but the eigenvalue depends on the orbit through a conserved
-  quantity, for example i Ω(H) for a phase e^{iφ}. Along every orbit ψ(x(t)) = e^{iΩ(H)t} ψ(x(0)).
-  Loading one needs a reference state, and the eigenvalue is that orbit's. (Across an energy
-  band the fixed-eigenvalue object is the distribution δ(H − E) e^{iφ}; Mezić 2020, *J. Nonlinear
-  Sci.* 30, section 11.)
+- **shell**: a phase e^{iφ} with frequency Ω(H) through a conserved quantity, so along every orbit
+  e^{iφ(x(t))} = e^{iΩ(H)t} e^{iφ(x(0))}. Where the frequency varies (twist) it is not an eigenfunction
+  on the phase space: the fixed-eigenvalue objects are the distributions δ(Ω(H(x)) − p) e^{iφ(x)}, the
+  generalized eigenfunctions of a band of the imaginary axis (Mezić 2020, *J. Nonlinear Sci.* 30,
+  section 11). A shell entry therefore loads as a `SpectralBand` (`libraryBands`) in level-set form:
+  profile e^{iφ}, level map Ω(H). It is never an eigenpair.
 
-`libraryEigenfunctions(system, ids, reference)` substitutes the configured parameters and returns
+`libraryEigenfunctions(system, ids)` substitutes the configured parameters and groups and returns
 `Eigenfunction` objects on the physical state, named by entry id. `libraryEigenfunctionBank` returns
 the same entries as one shared expansion plus spectrum, for building a K-ROM or projecting.
 `eigenfunctionGeneratorResidual` checks any eigenfunctions against the configured equations,
 using |∇ψ·f − λψ|. The job method `eigenfunction_expansion` with `"library": true` (or a list of
-ids) publishes them as a K-ROM. The triangular benchmark registers x₁, η = x₂ + c x₁²/(b − 2a),
+ids) publishes them as a K-ROM: the system's known spectrum, its eigenpairs and bands, ready for the
+Viewer or for fitting input maps B_ψ and readouts like any other krom. The triangular benchmark registers x₁, η = x₂ + c x₁²/(b − 2a),
 and the principal pair x₁ and x₂ at the origin; x₂ is the linearization of η (Brunton et al.
 2016, PLOS ONE 11(2):e0150171; Kaiser, Kutz and Brunton 2021, Mach. Learn.: Sci. Technol.
-2:035023). The other catalog entries live in `native/src/SystemEigenfunctionLibrary.cpp`, and
-`system_eigenfunction_library_tests` checks every one against the configured equations:
+2:035023). `system_eigenfunction_library_tests` checks every entry against the configured equations:
 
 | System | Entries |
 |---|---|
@@ -360,6 +436,7 @@ and the principal pair x₁ and x₂ at the origin; x₂ is the linearization of
 | `morse_oscillator`, `poschl_teller`, `cosh_oscillator` | `energy`; `phase` (shell, closed form; the cosh phase is elliptic) |
 | `radial_twist` | `action`; `rotation` q − ip, λ = i(ω + αI) (shell) |
 | `kepler_planar` | `energy`, `angular_momentum`; `mean_anomaly` e^{iM}, M = E − e sin E from the state, Ω = √(μ/a³) (shell) |
+| `rpe` (inviscid, unforced) | `energy` E = r³v²/2 + U(r) (κ ≠ 1); `phase` e^{iθ} (κ = 4/3), θ = Ω(T/2 − t(r)) with t(r) the time from the outer turning radius, in elliptic integrals of the first and third kind by the substitution of Byrd & Friedman 259.00 on the radius quartic r⁴v² = 2(Er − G − Ar⁴/3 − Sr³/2) (turning radii from `polyroot`), Ω = 2π/T (shell) |
 | `euler_top`, `coupled_duffing_hamiltonian`, `triple_well_duffing`, `three_leaf_hamiltonian_clover` | conserved quantities (eigenvalue 0) |
 
 Conservative entries require zero damping and no driver; their `applicable` flag is false otherwise.
@@ -464,7 +541,7 @@ rerun the experiment.
 The arrays are:
 
 - `continuous_eigenvalues`, `discrete_eigenvalues`, and the spectrum's evidence (`eigenpair_residual`,
-  `pseudospectrum_*`, `continuous_spectrum_json`; `core/SpectrumArchive.hpp`);
+  `pseudospectrum_*`, `spectral_bands_json`, `spectral_measures_json`; `core/SpectrumArchive.hpp`);
 - `eigenfunction_values`, `training_time`, `training_sample_indices`;
 - `interpolation_points`, the interpolation's base points q_k (samples × domain dimension);
 - `window_map` (modes × rows): row j is eigenfunction j's own linear map from a raw window, so each

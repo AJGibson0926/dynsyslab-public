@@ -42,8 +42,8 @@ KoopmanModel::KoopmanModel(FunctionExpansion p, Spectrum s, std::size_t inputs,
     if (!fitDiagnostics_.residualMaximum.empty() && fitDiagnostics_.residualMaximum.size() != modes)
         throw std::invalid_argument("Fit diagnostics must be mode aligned");
     coordinates().validate();  // the state map (if any) matches the coordinate dimension
-    samples_.modes = modes;
-    representations_.push_back({representationName(*polynomial_), std::make_shared<const FunctionExpansion>(*polynomial_)});
+    spectrum_->clearEigenfunctions().setSamples(EigenfunctionSamples{{}, {}, {}, modes});  // the given eigenfunctions replace any it had
+    spectrum_->addRepresentation(std::make_shared<const FunctionExpansion>(*polynomial_));
 }
 KoopmanModel::KoopmanModel(FunctionExpansion p, Spectrum s, SystemConfiguration system,
                            EigenfunctionFitDiagnostics diagnostics)
@@ -62,7 +62,7 @@ void KoopmanModel::attachPhysicalSystem(SystemConfiguration configuration) {
         throw std::invalid_argument("KROM observable and polynomial dimensions differ");
     if (!q.stateMap) q.physicalStateDimension = physical;
     polynomial_ = polynomial_->withCoordinates(std::move(q));
-    if (!representations_.empty()) representations_.front().function = std::make_shared<const FunctionExpansion>(*polynomial_);
+    if (!spectrum_->representations().empty()) spectrum_->setFirstRepresentation(std::make_shared<const FunctionExpansion>(*polynomial_));
 }
 const FunctionExpansion &KoopmanModel::expansion() const {
     if (!polynomial_)

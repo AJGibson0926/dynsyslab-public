@@ -1,0 +1,51 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "radial_twist",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "arnold": "https://doi.org/10.1007/978-1-4757-2063-1",
+  "mezic": "Mezic (2020), J. Nonlinear Sci. 30:2091-2145, section 11 (arXiv:1702.07597)"
+ },
+ "definitions": [],
+ "eigenfunctions": [
+  {
+   "id": "action",
+   "title": "Action I = (position^2 + momentum^2)/2",
+   "kind": "exact",
+   "psi": "(position^2 + momentum^2)/2",
+   "eigenvalue": "0",
+   "conditions": "Zero damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "arnold"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  },
+  {
+   "id": "rotation",
+   "title": "Rotation q - i p",
+   "kind": "shell",
+   "psi": "position",
+   "psi_imag": "-momentum",
+   "eigenvalue": "0",
+   "eigenvalue_imag": "omega + twist*(position^2 + momentum^2)/2",
+   "conditions": "Zero damping and driver",
+   "derivation": "(q - i p)' = i Omega(I) (q - i p), Omega = omega + twist I (q = position, p = momentum)",
+   "references": [
+    "arnold",
+    "mezic"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  }
+ ]
+}

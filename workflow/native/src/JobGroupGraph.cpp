@@ -69,7 +69,7 @@ std::string siblingToken(const Scope& scope, const std::string& id, const std::s
 // experiment-style ${id.archive} forms. A whole-string reference keeps the value's JSON type.
 json::Value bind(const json::Value& value, const Scope& scope, bool keepUnknownParameters) {
     static const std::regex pattern(
-        R"(\$\{(?:(inputs|params)\.([A-Za-z0-9_.-]+)|([A-Za-z0-9][A-Za-z0-9_-]*)\.(outputs\.[A-Za-z0-9_-]+|archive|archives\[[0-9]+\]|output:[A-Za-z0-9_]+))\})");
+        R"(\$\{(?:(inputs|params)\.([A-Za-z0-9_.-]+)|([A-Za-z0-9][A-Za-z0-9_-]*)\.(outputs\.[A-Za-z0-9_-]+|archives\[[0-9]+\]|archives|archive|output:[A-Za-z0-9_]+))\})");
     if (const auto* text = std::get_if<std::string>(&value.storage())) {
         const auto lookup = [&](const std::smatch& match, bool& known) -> json::Value {
             known = true;
@@ -128,7 +128,7 @@ void tokens(const json::Value& value, std::set<std::string>& leaves) {
 void siblingReferences(const json::Value& value, std::set<std::string>& ids) {
     if (const auto* text = std::get_if<std::string>(&value.storage())) {
         static const std::regex pattern(
-            R"(\$\{([A-Za-z0-9][A-Za-z0-9_-]*)\.(?:outputs\.[A-Za-z0-9_-]+|archive|archives\[[0-9]+\]|output:[A-Za-z0-9_]+)\})");
+            R"(\$\{([A-Za-z0-9][A-Za-z0-9_-]*)\.(?:outputs\.[A-Za-z0-9_-]+|archives\[[0-9]+\]|archives|archive|output:[A-Za-z0-9_]+)\})");
         for (std::sregex_iterator it(text->begin(), text->end(), pattern), end; it != end; ++it)
             if ((*it)[1] != "inputs" && (*it)[1] != "params") ids.insert((*it)[1].str());
     } else if (const auto* array = std::get_if<json::Value::Array>(&value.storage())) {

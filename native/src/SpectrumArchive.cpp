@@ -1,5 +1,5 @@
 #include <dynsyslab/core/SpectrumArchive.hpp>
-#include <dynsyslab/core/SpectralKROM.hpp>
+#include <dynsyslab/core/KoopmanCompression.hpp>
 
 #include <cmath>
 #include <limits>
@@ -23,22 +23,23 @@ void writeSpectralEvidence(NpzRecord& archive, const Spectrum& spectrum) {
     if (const auto& p = spectrum.pseudospectrum(); p && !p->empty()) {
         archive.arrays["pseudospectrum_grid"] = NpyArray::fromComplex({p->grid.size()}, p->grid);
         archive.arrays["pseudospectrum_minimum"] = NpyArray::fromDoubles({p->minimum.size()}, p->minimum);
-        if (!p->minimizingCoefficients.empty())
-            archive.arrays["pseudospectrum_minimizing_coefficients"] =
-                NpyArray::fromComplex({p->grid.size(), p->features}, p->minimizingCoefficients);
         archive.arrays["pseudospectrum_json"] = NpyArray::fromString(json::dump(json::Value::Object{
-            {"definition", p->definition}, {"scope", p->scope}, {"features", double(p->features)}}));
+            {"definition", p->definition}, {"scope", p->scope}}));
     }
-    if (!spectrum.continuous().empty()) {
-        json::Value::Array components;
-        for (const auto& component : spectrum.continuous()) components.push_back(spectralMeasureJson(component));
-        archive.arrays["continuous_spectrum_json"] = NpyArray::fromString(json::dump(json::Value(std::move(components))));
+    // The spectral bands and the observables' measures on them, as values; the measures' wave
+    // packets and the pseudospectrum's minimizers are spectral functions (KromSpectralParts.cpp).
+    if (!spectrum.bands().empty()) {
+        json::Value::Array bands, measures;
+        for (const auto& band : spectrum.bands()) bands.push_back(spectralBandJson(band));
+        for (const auto& measure : spectrum.measures()) measures.push_back(spectralMeasureJson(measure));
+        archive.arrays["spectral_bands_json"] = NpyArray::fromString(json::dump(json::Value(std::move(bands))));
+        archive.arrays["spectral_measures_json"] = NpyArray::fromString(json::dump(json::Value(std::move(measures))));
     }
 }
 
 bool hasSpectralEvidence(const NpzRecord& archive) {
     return archive.contains("eigenpair_residual") || archive.contains("pseudospectrum_grid")
-        || archive.contains("continuous_spectrum_json");
+        || archive.contains("spectral_bands_json") || archive.contains("continuous_spectrum_json");
 }
 
 void readSpectralEvidence(const NpzRecord& archive, Spectrum& spectrum) {
@@ -56,18 +57,45 @@ void readSpectralEvidence(const NpzRecord& archive, Spectrum& spectrum) {
     if (archive.contains("pseudospectrum_grid")) {
         const auto block = json::parse(archive.at("pseudospectrum_json").string());
         Pseudospectrum p{block.at("definition").string(), block.at("scope").string(),
-                         archive.at("pseudospectrum_grid").complexDoubles(), archive.at("pseudospectrum_minimum").doubles(),
-                         {}, std::size_t(block.at("features").number(0))};
-        if (archive.contains("pseudospectrum_minimizing_coefficients"))
-            p.minimizingCoefficients = archive.at("pseudospectrum_minimizing_coefficients").complexDoubles();
+                         archive.at("pseudospectrum_grid").complexDoubles(), archive.at("pseudospectrum_minimum").doubles()};
+        if (const auto& kept = spectrum.pseudospectrum(); kept && kept->grid == p.grid) p.minimizers = kept->minimizers;
         spectrum.setPseudospectrum(std::move(p));
     }
-    if (archive.contains("continuous_spectrum_json")) {
-        std::vector<SpectralMeasure> components;
-        const auto parsed = json::parse(archive.at("continuous_spectrum_json").string());
-        for (const auto& component : parsed.array())
-            components.push_back(spectralMeasureFromJson(component));
-        spectrum.setContinuous(std::move(components));
+    // Bands (spectral_bands_json; continuous_spectrum_json before they were named bands).
+    const char* bandsKey = archive.contains("spectral_bands_json") ? "spectral_bands_json" : "continuous_spectrum_json";
+    if (archive.contains(bandsKey)) {
+        std::vector<SpectralBand> bands;
+        std::vector<SpectralMeasure> measures;
+        const auto parsed = json::parse(archive.at(bandsKey).string());  // outlives the loop
+        for (const auto& entry : parsed.array()) {
+            if (entry.at("density").isNull()) { bands.push_back(spectralBandFromJson(entry)); continue; }
+            // An archive written before bands and measures were separated: one measure per entry,
+            // of the observable the entry was named for.
+            SpectralBand c;
+            c.name = entry.at("name").string(); c.support = entry.at("domain").string("unit-circle");
+            c.method = entry.at("method").string(); c.assumptions = entry.at("assumptions").string();
+            c.bandwidth = entry.at("bandwidth").number(0); c.order = std::size_t(entry.at("order").number(0));
+            SpectralMeasure m;
+            m.observable = m.band = c.name;
+            for (const auto& value : entry.at("grid").array()) c.grid.push_back(value.number());
+            for (const auto& value : entry.at("density").array()) m.density.push_back(value.number());
+            m.totalMass = entry.at("total_mass").number(0);
+            bands.push_back(std::move(c));
+            measures.push_back(std::move(m));
+        }
+        if (archive.contains("spectral_measures_json")) {
+            const auto listed = json::parse(archive.at("spectral_measures_json").string());
+            for (const auto& entry : listed.array()) measures.push_back(spectralMeasureFromJson(entry));
+        }
+        // A measure keeps the wave packets the spectrum already has for it (a child's, from its parent).
+        for (auto& m : measures)
+            if (const auto* kept = spectrum.measure(m.band, m.observable, m.output)) m.packets = kept->packets;
+        spectrum.setMeasures({});
+        // A band keeps the generalized eigenfunctions the spectrum already has for it (a child's, from its parent).
+        for (auto& b : bands)
+            if (const auto* kept = spectrum.band(b.name); kept && b.eigenfunctions.empty()) b.eigenfunctions = kept->eigenfunctions;
+        spectrum.setBands(std::move(bands));
+        spectrum.setMeasures(std::move(measures));
     }
 }
 
@@ -94,6 +122,10 @@ void writeSpectrumArrays(NpzRecord& archive, const Spectrum& spectrum) {
         std::vector<double> branches;
         for (const auto branch : spectrum.logarithmBranches()) branches.push_back(double(branch));
         if (!branches.empty()) archive.arrays["logarithm_branches"] = NpyArray::fromDoubles({branches.size()}, branches);
+    }
+    if (const auto ids = spectrum.modeIds(); [&] { for (std::size_t j = 0; j < ids.size(); ++j) if (ids[j] != j) return true; return false; }()) {
+        std::vector<double> values(ids.begin(), ids.end());
+        archive.arrays["mode_ids"] = NpyArray::fromDoubles({values.size()}, values);  // stable pair ids (Spectrum::modeId)
     }
     archive.arrays["eigenvalue_domain"] =
         NpyArray::fromString(spectrum.domain() == EigenvalueDomain::discreteTime ? "discrete" : "continuous");
@@ -125,6 +157,11 @@ Spectrum readSpectrumArrays(const NpzRecord& archive, DataOrigin origin) {
                                              EigenvalueDomain::continuousTime, branches);
     }
     spectrum.withOrigin(std::move(origin));
+    if (archive.contains("mode_ids")) {
+        std::vector<std::size_t> ids;
+        for (const double id : archive.at("mode_ids").doubles()) ids.push_back(std::size_t(id));
+        spectrum.setModeIds(std::move(ids));
+    }
     readSpectralEvidence(archive, spectrum);
     return spectrum;
 }

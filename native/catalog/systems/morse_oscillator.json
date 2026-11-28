@@ -1,0 +1,72 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "morse_oscillator",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "demarcus": "DeMarcus (1978), Am. J. Phys., https://doi.org/10.1119/1.11110",
+  "kuru": "Kuru and Negro (2008), classical factorization, arXiv:0709.4649",
+  "mezic": "Mezic (2020), J. Nonlinear Sci. 30:2091-2145, section 11 (arXiv:1702.07597)"
+ },
+ "definitions": [
+  [
+   "H",
+   "momentum^2/(2*mass) + depth*(1 - exp(-inverse_length*position))^2"
+  ]
+ ],
+ "eigenfunctions": [
+  {
+   "id": "energy",
+   "title": "Energy",
+   "kind": "exact",
+   "psi": "H",
+   "eigenvalue": "0",
+   "conditions": "Zero damping and driver",
+   "derivation": "conserved by the configured field: eigenvalue 0",
+   "references": [
+    "demarcus"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  },
+  {
+   "id": "phase",
+   "title": "Bound-orbit phase exp(i phi)",
+   "kind": "shell",
+   "definitions": [
+    [
+     "k",
+     "sqrt(H/depth)"
+    ],
+    [
+     "s2",
+     "1 - H/depth"
+    ],
+    [
+     "W",
+     "inverse_length*sqrt(2*(depth - H)/mass)"
+    ]
+   ],
+   "psi": "(s2*exp(inverse_length*position) - 1)/k",
+   "psi_imag": "-inverse_length*momentum*s2*exp(inverse_length*position)/(mass*k*W)",
+   "eigenvalue": "0",
+   "eigenvalue_imag": "W",
+   "conditions": "Zero damping and driver; bound orbits 0 < H < depth",
+   "derivation": "elementary bound solution of the Morse oscillator; Omega = a sqrt(2(D - H)/m)",
+   "references": [
+    "demarcus",
+    "kuru",
+    "mezic"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude",
+     "damping"
+    ]
+   }
+  }
+ ]
+}

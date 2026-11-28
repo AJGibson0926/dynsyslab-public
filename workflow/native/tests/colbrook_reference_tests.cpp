@@ -16,6 +16,7 @@
 #include <dynsyslab/numerics/StreamingQr.hpp>
 #include <dynsyslab/workflow/KoopmanSpectralQuery.hpp>
 
+#include <chrono>
 #include <cmath>
 #include <complex>
 #include <filesystem>
@@ -60,16 +61,22 @@ J fitRequest(const Pairs& p,const std::vector<double>& coefficients,const std::v
         {"settings",J::Object{{"method","mpedmd"},{"dictionary",J::Object{{"kind","linear"},{"constant",false}}},
             {"sample_interval",.1},{"assume_measure_preserving",true},{"rigged_measures",measures}}}};
 }
+// A fit is a krom: each is written to its own archive, which later actions name.
 J fit(const Pairs& p,const std::vector<double>& coefficients,const std::vector<double>& angles,
       double bandwidth,const std::vector<std::size_t>& orders){
-    return dynsyslab::workflow::evaluateKoopmanSpectralQuery(fitRequest(p,coefficients,angles,bandwidth,orders));
+    static int count=0;
+    const auto path=std::filesystem::temp_directory_path()/("dynsyslab-colbrook-"+std::to_string(++count)+"-"+
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".npz");
+    auto request=fitRequest(p,coefficients,angles,bandwidth,orders);
+    request.object()["output_archive"]=path.generic_u8string();
+    return dynsyslab::workflow::evaluateKoopmanSpectralQuery(request);
 }
 // Row i of the fitted operator in the MATLAB/Colbrook convention PX*K = PY: one rollout step from e_i.
 std::vector<double> operatorRows(const J& result,std::size_t dimension){
     std::vector<double> rows;
     for(std::size_t i=0;i<dimension;++i){std::vector<double> e(dimension,0.);e[i]=1;
         const auto out=numbers(dynsyslab::workflow::evaluateKoopmanSpectralQuery(J::Object{
-            {"schema","dynsyslab.koopman-spectral-query/v1"},{"action","rollout"},{"model",result.at("model")},
+            {"schema","dynsyslab.koopman-spectral-query/v1"},{"action","rollout"},{"krom",result.at("archive")},
             {"initial",array(e)},{"steps",1.}}).at("values"));
         require(out.size()==2*dimension,"rollout shape");
         rows.insert(rows.end(),out.begin()+dimension,out.end());}
@@ -78,7 +85,7 @@ std::vector<double> operatorRows(const J& result,std::size_t dimension){
 std::vector<double> density(const J& result,std::size_t index){
     return numbers(result.at("spectral").at("measures").array().at(index).at("density"));}
 std::vector<cd> packet(const J& result,std::size_t index){
-    return complexes(result.at("spectral").at("wave_packets").array().at(index).at("coefficients"));}
+    return complexes(result.at("spectral").at("measures").array().at(index).at("packets"));}  // a measure's generalized eigenfunctions
 
 Pairs rotation(){Pairs p;p.dimension=2;
     for(int i=0;i<128;++i){const double t=2*pi*i/128;

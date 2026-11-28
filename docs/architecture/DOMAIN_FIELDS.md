@@ -53,7 +53,8 @@ the drawing in Viewer. Nothing below depends on anything above it.
 ```
 
 - `function`: `{"observable": name}`, `{"observables": [...]}`, `{"expression": text or [texts],
-  "variables": [...]}` (parameters are constants), `{"library": id, "reference_state": [...]}` or
+  "variables": [...]}` (parameters are constants), `{"library": id}` (a shell entry plots its band's
+  profile e^{iφ}) or
   `{"krom": path, "modes": [...]}`. A K-ROM whose coordinates cannot be computed from the state is
   sampled on its own q.
 - `domain`: bounds, points, `axes` to grid and `anchor` for the rest. The default is the source

@@ -4,6 +4,7 @@
 #include "HierarchyCatalog.hpp"
 #include "SystemViewDefaults.hpp"
 #include "ModeWeightPayload.hpp"
+#include "SpectralBandPayload.hpp"
 
 #include <dynsyslab/core/Archive.hpp>
 #include <dynsyslab/core/Json.hpp>
@@ -124,7 +125,9 @@ void enrichArchiveCatalogItem(CatalogItem& item,
         const auto system=systemLabel(metadata);
         if (!system.empty()) item.system=system;
         // What the archive is (its declared data-object kind) and the step that made it.
-        const auto objectKind=dynsyslab::core::dataObjectKind(metadataText);
+        // The full data-object record, or the archive index's summary of it (its kind only).
+        auto objectKind=dynsyslab::core::dataObjectKind(metadataText);
+        if (objectKind.empty()) objectKind=metadata.at("data_object").at("kind").string();
         const auto method=metadata.at("method").string();
         const auto format=metadata.at("schema").string();
         if (!method.empty()) {
@@ -228,13 +231,6 @@ void enrichArchiveCatalogItem(CatalogItem& item,
             const auto role=metadata.at("dataset_role").string();
             appendUnique(item.tags,role);
             if(!role.empty())item.properties["dataset role"]=role;
-        } else if(archive.contains("spectral_krom_contract_json")) {
-            if(item.parentId.empty())item.category="Koopman spectral models";
-            item.kind="koopman_spectral_model";
-            item.subtitle="Frozen dictionary operator and spectral diagnostics";
-            item.views.clear();appendUnique(item.views,"koopman_spectrum");
-            item.properties["control-ready"]="no inferred physical provider or input maps";
-            if (dashboardReady) prependUnique(item.views,"krom_dashboard");
         } else if (objectKind=="krom") {
             if (item.parentId.empty()) item.category="KROMs";
             item.kind="krom"; item.subtitle="Native Koopman reduced-order model";
@@ -243,6 +239,7 @@ void enrichArchiveCatalogItem(CatalogItem& item,
             if (dashboardReady) prependUnique(item.views,"krom_dashboard");
             appendUnique(item.views,"koopman_spectrum");
             if (hasModeWeights(archive)) appendUnique(item.views,"mode_weights");
+            if (hasSpectralMeasures(archive)) appendUnique(item.views,"spectral_measures");
         } else if (spectrumMethod(method) || archive.contains("continuous_eigenvalues")
                    || archive.contains("discrete_eigenvalues")) {
             if (item.parentId.empty()) item.category="Koopman spectra";

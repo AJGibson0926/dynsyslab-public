@@ -341,19 +341,18 @@ const std::map<std::string, ApproximateControlMap>& KoopmanModel::controlMaps() 
 
 void KoopmanModel::setReconstruction(std::string observable,
                                      ReconstructionResult reconstruction) {
-    if (observable.empty() || !reconstruction.outputs
-        || reconstruction.modes!=liftedDimension()
-        || reconstruction.matrix.size()!=reconstruction.outputs*liftedDimension()
-        || (!reconstruction.offset.empty()&&reconstruction.offset.size()!=reconstruction.outputs))
-        throw std::invalid_argument("observable reconstruction dimensions do not match KROM");
     inherited_.readouts.erase(observable);
-    reconstructions_[std::move(observable)]=std::move(reconstruction);
+    spectrum_->setKoopmanModes(std::move(observable),std::move(reconstruction));
 }
 bool KoopmanModel::hasReconstruction(const std::string& observable) const {
-    return reconstructions_.count(observable)!=0;
+    return spectrum_->koopmanModes(observable)!=nullptr;
 }
 const ReconstructionResult& KoopmanModel::reconstruction(
-    const std::string& observable) const { return reconstructions_.at(observable); }
+    const std::string& observable) const {
+    const auto* modes=spectrum_->koopmanModes(observable);
+    if(!modes)throw std::out_of_range("this KROM has no reconstruction of "+observable);
+    return *modes;
+}
 std::vector<std::complex<double>> KoopmanModel::reconstruct(
     const std::string& observable, const double* state) const {
     const auto& mapping=reconstruction(observable);
@@ -370,7 +369,7 @@ std::vector<std::complex<double>> KoopmanModel::reconstruct(
     return result;
 }
 const std::map<std::string, ReconstructionResult>&
-KoopmanModel::reconstructions() const noexcept { return reconstructions_; }
+KoopmanModel::reconstructions() const noexcept { return spectrum_->koopmanModes(); }
 
 const std::vector<KoopmanDatasetReference>& KoopmanModel::datasetReferences() const noexcept {
     return datasetReferences_;

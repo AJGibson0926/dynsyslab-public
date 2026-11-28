@@ -106,9 +106,9 @@ void validateController(const json::Value& job) {
 bool supportedMethod(const json::Value& stage) {
     static const std::set<std::string> supported{
         "svd", "pca", "pod", "bagged_pca", "robust_pca", "hankel_pod", "hankel_svd", "hankel_matrix",
-        "dmd", "dmdc", "edmdc", "hdmd", "hankel_dmd", "sindy", "edmd", "havok", "eigenfunction_expansion", "eigenfunction_errors", "domain_field", "ftle", "ssm", "orbit_geometry", "receiver_signals", "state_readout", "ring_errors", "affine_dynamics", "prehistory", "clock_audit", "run_invariant", "field_model", "pulse_response", "control_map_audit", "delay_pairs", "delay_consistency",
+        "dmd", "dmdc", "edmdc", "hdmd", "hankel_dmd", "sindy", "edmd", "havok", "eigenfunction_expansion", "eigenfunction_errors", "domain_field", "ftle", "ssm", "orbit_geometry", "receiver_signals", "state_readout", "ring_errors", "affine_dynamics", "prehistory", "clock_audit", "run_invariant", "field_model", "pulse_response", "control_map_audit", "delay_pairs", "delay_consistency", "band_projection", "packet_validation",
         "koopman_spectral", "resdmd", "mpedmd", "hermitian_dmd", "tlsdmd", "multdmd", "stochastic_resdmd", "specrkhs",
-        "control_regression", "krom_extract", "koopman_validation", "observable_reconstruction",
+        "control_regression", "krom_extract", "rigged_measure", "koopman_validation", "observable_reconstruction",
         "echo_history_koopman", "history_basis", "history_projection", "history_control_regression", "input_map", "bilinear_certificate", "control_target", "derivative_benchmark", "mode_selection",
         "coordinate_transform", "sindy_dynamics", "dynamics_validation",
         "krom_recenter", "krom_readout", "reference_signal", "control_score", "figure_dataset", "bifurcation_points", "observable_spectrum_comparison", "io_delay_model", "animation",

@@ -10,6 +10,7 @@
 #include "ObjectPublishing.hpp"
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -176,6 +177,18 @@ DYNSYSLAB_POOLED_METHOD(runBifurcationPoints);  // BifurcationPoints.cpp
 DYNSYSLAB_POOLED_METHOD(runObservableSpectrumComparison);  // ObservableSpectrumComparison.cpp
 #undef DYNSYSLAB_POOLED_METHOD
 std::filesystem::path runKromExtraction(
+    const std::filesystem::path& source, const json::Value& settings,
+    const std::filesystem::path& root, const std::string& label);
+// Rigged DMD measures on a krom with a unitary spectral fit (RiggedMeasurePostprocess.cpp).
+// Orbit records against a system's known spectrum (BandProjectionPostprocess.cpp).
+// A one-stage job whose fit has settings "pool": true, rewritten as one pooled fit: the first source leads
+// and the rest join its settings "additional_sources" (PostprocessPooling.cpp); nullopt otherwise.
+std::optional<json::Value> pooledSourcesJob(const json::Value& job);
+std::filesystem::path runBandProjection(const std::vector<std::filesystem::path>& sources, const json::Value& settings,
+                                        const std::filesystem::path& root, const std::string& label);
+std::filesystem::path runPacketValidation(const std::vector<std::filesystem::path>& sources, const json::Value& settings,
+                                          const std::filesystem::path& root, const std::string& label);
+std::filesystem::path runRiggedMeasure(
     const std::filesystem::path& source, const json::Value& settings,
     const std::filesystem::path& root, const std::string& label);
 std::filesystem::path runKromValidation(

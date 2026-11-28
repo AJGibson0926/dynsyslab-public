@@ -73,9 +73,24 @@ std::string selectArchive(const std::string& leaf, const std::string& selector, 
     throw std::invalid_argument("job '" + leaf + "': unknown output selector '" + selector + "'");
 }
 
+// Every archive a finished job published (all trajectories of a family solve), for ${id.archives}.
+json::Value allArchives(const std::string& leaf, const std::map<std::string, Finished>& done) {
+    if (!done.count(leaf)) throw std::invalid_argument("reference to job '" + leaf + "', which has not finished");
+    json::Value::Array out;
+    for (const auto& path : done.at(leaf).archives) out.emplace_back(path.generic_u8string());
+    return json::Value(std::move(out));
+}
+
 json::Value resolveTokens(const json::Value& value, const std::map<std::string, Finished>& done,
                           json::Value::Object& resolutions) {
+    static const std::regex whole(R"(@\{([^|}]+)\|archives\})");
     if (const auto* text = std::get_if<std::string>(&value.storage())) {
+        std::smatch all;
+        if (std::regex_match(*text, all, whole)) {  // ${id.archives}: the list itself
+            auto list = allArchives(all[1].str(), done);
+            resolutions[*text] = list;
+            return list;
+        }
         static const std::regex pattern(R"(@\{([^|}]+)\|([^}]+)\})");
         std::string out; auto begin = text->cbegin(); std::smatch match;
         while (std::regex_search(begin, text->cend(), match, pattern)) {
@@ -92,7 +107,16 @@ json::Value resolveTokens(const json::Value& value, const std::map<std::string, 
     }
     if (const auto* array = std::get_if<json::Value::Array>(&value.storage())) {
         json::Value::Array out;
-        for (const auto& item : *array) out.push_back(resolveTokens(item, done, resolutions));
+        for (const auto& item : *array) {
+            const auto* text = std::get_if<std::string>(&item.storage());
+            std::smatch all;
+            if (text && std::regex_match(*text, all, whole)) {  // an archive list inside a list (sources): spliced in
+                const auto list = resolveTokens(item, done, resolutions);  // held: .array() refers into it
+                for (const auto& path : list.array()) out.push_back(path);
+                continue;
+            }
+            out.push_back(resolveTokens(item, done, resolutions));
+        }
         return json::Value(std::move(out));
     }
     if (const auto* object = std::get_if<json::Value::Object>(&value.storage())) {

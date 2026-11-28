@@ -42,7 +42,7 @@ void scalarPrediction(){
     for(const std::string method:{"edmd","resdmd","mpedmd"})for(const std::string storage:{"dense","streaming_qr"}){
         c::KoopmanSpectralOptions options;options.method=method;options.sampleInterval=dt;options.acknowledgeMeasurePreserving=true;
         const auto model=c::fitPeriodicDelayModel(bank,{0},{0},32,options,true,storage);
-        const auto prediction=c::rolloutSpectralKrom(model,"coordinates",{2},5);
+        const auto prediction=c::rolloutCompression(*model.compression(),"coordinates",{2},5);
         for(std::size_t k=0;k<prediction.size();++k)
             check(std::abs(prediction[k]-2*std::pow(method=="mpedmd"?1:correlation,double(k)))<1e-12,
                 "Independent weighted cosine regression versus unitary scalar fit");
@@ -75,20 +75,22 @@ void periodic(){
     for(const auto&offsets:std::vector<std::vector<double>>{{-.34,-.17,0,.17,.34},{-.41,-.113,0,.207,.419}}){
         const auto dense=c::fitPeriodicDelaySpectrum(bank,{0,1},offsets,64,options,true,"dense");
         const auto stream=c::fitPeriodicDelaySpectrum(bank,{0,1},offsets,64,options,true,"streaming_qr");
-        check(stream.samples==192&&stream.rank==dense.rank,"Original sample count and retained rank");
-        const auto contract=c::json::parse(stream.coordinateContract);check(contract.at("fit_rows").number()<=20,"Bounded fitting rows");
+        check(stream.compression()->samples==192&&stream.compression()->rank==dense.compression()->rank,"Original sample count and retained rank");
+        const auto contract=c::json::parse(stream.compression()->coordinateContract);check(contract.at("fit_rows").number()<=20,"Bounded fitting rows");
         const auto ref=c::periodicSpectralReference(bank,bank,0,.17,{-.7,-.2,0,.17,.4},{.1,.3},.08,4);
         const auto a=c::comparePeriodicDelaySpectrum(dense,{0,1},offsets,bank,ref);
         const auto b=c::comparePeriodicDelaySpectrum(stream,{0,1},offsets,bank,ref);
         check(relative(a.density,b.density)<2e-9&&relative(a.packetRms,b.packetRms)<2e-9,"Dense/QR spectral agreement");
         check(relative(a.packetErrorRms,b.packetErrorRms)<2e-8,"Dense/QR full complex error agreement");
-        auto ar=dense.spectral.residuals.eigenpair,br=stream.spectral.residuals.eigenpair;
+        const auto residuals=[](const c::KoopmanModel& model){std::vector<double> out;
+            for(std::size_t j=0;j<model.spectrum().size();++j)out.push_back(model.spectrum().residual(j)->value);return out;};
+        auto ar=residuals(dense),br=residuals(stream);
         std::sort(ar.begin(),ar.end());std::sort(br.begin(),br.end());check(relative(ar,br)<2e-8,"Training residual equivalence");
         const auto sampled=m::periodicSnapshotPairs(bank,64,offsets,.17);
         const auto x=m::periodicDelaySamples(bank.front().channels,64,offsets);
         check(std::equal(x.begin(),x.end(),sampled.x.begin()),"Streaming sampler and dense sampler agree");
         const std::vector<double> initial(x.begin(),x.begin()+10);
-        check(relative(c::rolloutSpectralKrom(dense,"coordinates",initial,30),c::rolloutSpectralKrom(stream,"coordinates",initial,30))<1e-8,"Dense/QR free rollout equivalence");
+        check(relative(c::rolloutCompression(*dense.compression(),"coordinates",initial,30),c::rolloutCompression(*stream.compression(),"coordinates",initial,30))<1e-8,"Dense/QR free rollout equivalence");
         const auto forecast=c::auditPeriodicDelayForecast(stream,bank,{5,5,5});
         const std::vector<std::vector<std::size_t>> selectedSteps{{0,1,5,19,69},{0,2,69},{0,7,35}};
         const auto sparseForecast=c::auditPeriodicDelayForecast(stream,bank,{69,69,35},selectedSteps);
@@ -107,7 +109,7 @@ void periodic(){
         const auto latest=std::size_t(std::max_element(offsets.begin(),offsets.end())-offsets.begin());
         for(std::size_t orbit=0;orbit<bank.size();++orbit){
             const auto histories=m::periodicDelaySamples(bank[orbit].channels,64,past);
-            const auto predictions=c::rolloutSpectralKromBatch(stream,"coordinates",histories,5);
+            const auto predictions=c::rolloutCompressionBatch(*stream.compression(),"coordinates",histories,5);
             std::vector<double> sampledError(12),sampledPower(12);
             for(std::size_t phase=0;phase<64;++phase)for(std::size_t k=0;k<6;++k)for(std::size_t ch=0;ch<2;++ch){
                 const double theta=2*std::acos(-1.)*phase/64+bank[orbit].channels[ch].angularFrequency*.17*k;

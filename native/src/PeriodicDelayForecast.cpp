@@ -8,9 +8,11 @@
 // Fourier translation and Parseval: Katznelson, Introduction to Harmonic
 // Analysis, Ch. I. Finite Koopman propagation uses the existing spectral API.
 namespace dynsyslab::core {
-std::vector<PeriodicDelayForecastAudit> auditPeriodicDelayForecast(const SpectralKROM&model,
+std::vector<PeriodicDelayForecastAudit> auditPeriodicDelayForecast(const KoopmanModel&krom,
     const std::vector<math::PeriodicSnapshotOrbit>&bank,const std::vector<std::size_t>&steps,
     const std::vector<std::vector<std::size_t>>&evaluationSteps){
+    if(!krom.compression())throw std::invalid_argument("Forecast audit needs a periodic-delay krom with its compressed operator");
+    const auto&model=*krom.compression();
     model.validate();math::auditPeriodicQuadrature(bank,{});
     if(steps.size()!=bank.size())throw std::invalid_argument("One forecast step count per orbit required");
     const auto contract=json::parse(model.coordinateContract);
@@ -47,7 +49,7 @@ std::vector<PeriodicDelayForecastAudit> auditPeriodicDelayForecast(const Spectra
         throw std::invalid_argument("Forecast coefficient workspace exceeds fifty million entries");
     const auto latest=std::size_t(std::max_element(offsets.begin(),offsets.end())-offsets.begin());
     const double cutoff=offsets[latest];for(auto&v:offsets)v-=cutoff;
-    const auto&readout=model.reconstructions.at("coordinates");
+    const auto&readout=model.readouts.at("coordinates");
     if(readout.outputs!=n)throw std::invalid_argument("Expected coordinate readout");
     std::vector<double> target(n*nc);
     for(std::size_t i=0;i<n;++i)for(std::size_t c=0;c<nc;++c)

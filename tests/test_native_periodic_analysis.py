@@ -98,8 +98,8 @@ class PeriodicContracts(unittest.TestCase):
                     dictionary=dict(kind="linear",constant=False),
                     rigged_measures=[dict(name="projected",reconstruction=dict(name="coordinates",output=0),
                                           angles=[.195],bandwidth=.05,order=2)])))
-                self.assertEqual(result["model"]["rank"],2)
-                self.assertIn("explicitly selected",result["model"]["spectral"]["wave_packets"][0]["assumptions"])
+                self.assertEqual(result["rank"],2)
+                self.assertIn("explicitly selected",result["spectral"]["measures"][0]["assumptions"])
 
 
 if __name__=="__main__": unittest.main()

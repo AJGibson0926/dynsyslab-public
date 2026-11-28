@@ -1,0 +1,64 @@
+{
+ "schema": "dynsyslab.system-catalog/v1",
+ "system": "harmonic_oscillator",
+ "description": "Known Koopman eigenfunctions of this system, as data: exact expressions in its state, parameter and dimensionless-group names, with the conditions under which they hold.",
+ "references": {
+  "mezic_linear": "Mezic (2005), Nonlinear Dyn. 41:309-325"
+ },
+ "definitions": [
+  [
+   "a_lin",
+   "stiffness_n_m/mass_kg"
+  ],
+  [
+   "b_lin",
+   "damping_kg_s/mass_kg"
+  ]
+ ],
+ "eigenfunctions": [
+  {
+   "id": "mode",
+   "title": "Oscillatory mode (lambda = -b/2 + i w)",
+   "psi_imag": "sqrt(a_lin - b_lin^2/4)*position",
+   "eigenvalue_imag": "sqrt(a_lin - b_lin^2/4)",
+   "kind": "exact",
+   "psi": "b_lin/2*position + velocity",
+   "eigenvalue": "-b_lin/2",
+   "conditions": "Zero driver; underdamped (damping^2 < 4 mass stiffness)",
+   "derivation": "left eigenvectors of [[0, 1], [-k/m, -c/m]]: exact for the linear field",
+   "references": [
+    "mezic_linear"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude"
+    ],
+    "positive": [
+     "4*mass_kg*stiffness_n_m - damping_kg_s^2"
+    ]
+   }
+  },
+  {
+   "id": "mode_conjugate",
+   "title": "Conjugate oscillatory mode",
+   "psi_imag": "-sqrt(a_lin - b_lin^2/4)*position",
+   "eigenvalue_imag": "-sqrt(a_lin - b_lin^2/4)",
+   "kind": "exact",
+   "psi": "b_lin/2*position + velocity",
+   "eigenvalue": "-b_lin/2",
+   "conditions": "Zero driver; underdamped (damping^2 < 4 mass stiffness)",
+   "derivation": "left eigenvectors of [[0, 1], [-k/m, -c/m]]: exact for the linear field",
+   "references": [
+    "mezic_linear"
+   ],
+   "requires": {
+    "zero": [
+     "driver_amplitude"
+    ],
+    "positive": [
+     "4*mass_kg*stiffness_n_m - damping_kg_s^2"
+    ]
+   }
+  }
+ ]
+}

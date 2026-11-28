@@ -2,6 +2,7 @@
 // archive reference and complete figure settings.
 #include "ViewerFigureJob.hpp"
 
+#include <dynsyslab/core/LongPath.hpp>
 #include <dynsyslab/core/Text.hpp>
 
 #include <cmath>
@@ -124,8 +125,29 @@ std::string runViewer(const std::vector<std::string>&) {
 std::vector<std::string> viewerFigureArguments(const json::Value& job, const std::filesystem::path& output) {
     const auto& figure = job.at("figure");
     const auto view = figure.at("view").string("time-series");
-    if (view != "time-series") throw std::invalid_argument("viewer_figure: unsupported view: " + view);
     if (job.at("source").string().empty()) throw std::invalid_argument("viewer_figure needs a source archive");
+    if (view != "time-series") {  // an archive view: the Viewer's own route for the source (render --view)
+        std::vector<std::string> args{"render", "--source", job.at("source").string(), "--view", view,
+                                      "--output", output.u8string()};
+        if (!job.at("viewer_root").string().empty()) {  // the render's own data tree (executeViewerFigure)
+            const auto root = job.at("viewer_root").string();
+            args.insert(args.end(), {"--archives", root, "--cache", root + "/cache"});
+        }
+        numberOption(args, figure, "page", "--page");
+        numberOption(args, figure, "figure", "--figure");
+        textOption(args, figure, "panel", "--panel");
+        textOption(args, figure, "title", "--title");
+        textOption(args, figure, "scale", "--scale");                        // auto | linear | log | symlog
+        textOption(args, figure, "legend", "--legend");
+        textOption(args, figure, "coordinates", "--coordinates");
+        textOption(args, figure, "modes", "--modes");
+        textOption(args, figure, "complex_display", "--complex-display");
+        numberOption(args, figure, "width", "--width");
+        numberOption(args, figure, "height", "--height");
+        rangeOption(args, figure, "x_range", "--x-range");
+        rangeOption(args, figure, "y_range", "--y-range");
+        return args;
+    }
     if (figure.at("curves").array().empty()) throw std::invalid_argument("viewer_figure needs at least one curve");
     std::vector<std::string> args{view};
     if (!figure.at("style").at("font_scale").isNull()) {
@@ -171,7 +193,7 @@ std::vector<std::string> viewerFigureArguments(const json::Value& job, const std
 
 json::Value planViewerFigure(const json::Value& job) {
     (void)checkedOutputName(job);
-    if (job.at("figure").at("curves").array().empty()) throw std::invalid_argument("viewer_figure needs at least one curve");
+    if (job.at("figure").at("view").string("time-series") == "time-series" && job.at("figure").at("curves").array().empty()) throw std::invalid_argument("viewer_figure needs at least one curve");
     return json::Value(json::Value::Object{{"schema", json::Value("dynsyslab.workflow-plan/v1")},
                                            {"kind", json::Value("viewer_figure")}, {"status", json::Value("planned")},
                                            {"output", job.at("output")}});
@@ -200,12 +222,27 @@ RunResult executeViewerFigure(const json::Value& job, const std::filesystem::pat
         resolved.at("figure").at("x_range") = json::Value(json::Value::Array{axis.at("x_min"), axis.at("x_max")});
         resolved.at("figure").at("y_range") = json::Value(json::Value::Array{axis.at("y_min"), axis.at("y_max")});
     }
+    // An archive view renders the source in a data tree of its own: a hard link to it (a copy across
+    // volumes), indexed there and removed afterwards, so nothing is written beside the archives.
+    const auto tree = directory / std::filesystem::u8path(name + ".viewer");
+    if (resolved.at("figure").at("view").string("time-series") != "time-series") {
+        std::filesystem::remove_all(core::extendedLengthPath(tree), ignored);
+        std::filesystem::create_directories(tree);
+        const auto from = std::filesystem::u8path(resolved.at("source").string());
+        const auto linked = tree / from.filename();
+        std::error_code failed;
+        std::filesystem::create_hard_link(core::extendedLengthPath(from), core::extendedLengthPath(linked), failed);
+        if (failed) std::filesystem::copy_file(core::extendedLengthPath(from), core::extendedLengthPath(linked));
+        resolved.at("source") = json::Value(linked.generic_u8string());
+        resolved.at("viewer_root") = json::Value(tree.generic_u8string());
+    }
     const auto scratch = directory / std::filesystem::u8path(name + ".curves.npz");
     if (hasCurveSources(resolved)) resolved = assembleCurveSources(resolved, scratch);
     resolved = fitOrdinate(resolved);
     try { (void)runViewer(viewerFigureArguments(resolved, output)); }
-    catch (...) { std::filesystem::remove(scratch, ignored); throw; }
+    catch (...) { std::filesystem::remove(scratch, ignored); std::filesystem::remove_all(core::extendedLengthPath(tree), ignored); throw; }
     std::filesystem::remove(scratch, ignored);
+    std::filesystem::remove_all(core::extendedLengthPath(tree), ignored);
     if (!std::filesystem::is_regular_file(output)) throw std::runtime_error("viewer_figure: no PNG was written");
     return {"viewer_figure", L"Figure written:\r\n" + output.wstring(), {output}, {}, {"viewer_figure"}};
 }
